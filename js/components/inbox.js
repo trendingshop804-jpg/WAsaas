@@ -11,11 +11,73 @@ class InboxComponent {
 
   init() {
     this.bindEvents();
+    this.setupScrollListeners();
     this.render();
 
-    window.appState.on('messageSent', () => this.render());
-    window.appState.on('inboundReceived', () => this.render());
+    window.appState.on('messageSent', () => {
+      this.render();
+      this.scrollToBottom(true);
+    });
+    window.appState.on('inboundReceived', () => {
+      const messagesScroll = document.getElementById('chat-messages-scroll');
+      let isNearBottom = true;
+      if (messagesScroll) {
+        const distFromBottom = messagesScroll.scrollHeight - messagesScroll.scrollTop - messagesScroll.clientHeight;
+        isNearBottom = distFromBottom < 160;
+      }
+      this.render();
+      if (isNearBottom) {
+        this.scrollToBottom(true);
+      } else {
+        this.showScrollBottomButton(true);
+      }
+    });
     window.appState.on('conversations', () => this.render());
+  }
+
+  setupScrollListeners() {
+    const messagesScroll = document.getElementById('chat-messages-scroll');
+    const scrollBtn = document.getElementById('inbox-scroll-bottom-btn');
+
+    if (messagesScroll) {
+      messagesScroll.addEventListener('scroll', () => {
+        const distFromBottom = messagesScroll.scrollHeight - messagesScroll.scrollTop - messagesScroll.clientHeight;
+        if (distFromBottom > 140) {
+          if (scrollBtn) scrollBtn.classList.add('visible');
+        } else {
+          if (scrollBtn) {
+            scrollBtn.classList.remove('visible');
+            const badge = document.getElementById('inbox-scroll-unread-badge');
+            if (badge) badge.style.display = 'none';
+          }
+        }
+      });
+    }
+
+    if (scrollBtn) {
+      scrollBtn.addEventListener('click', () => {
+        this.scrollToBottom(true);
+        const badge = document.getElementById('inbox-scroll-unread-badge');
+        if (badge) badge.style.display = 'none';
+      });
+    }
+  }
+
+  showScrollBottomButton(hasNewMsg = false) {
+    const scrollBtn = document.getElementById('inbox-scroll-bottom-btn');
+    const badge = document.getElementById('inbox-scroll-unread-badge');
+    if (scrollBtn) scrollBtn.classList.add('visible');
+    if (badge && hasNewMsg) badge.style.display = 'block';
+  }
+
+  scrollToBottom(smooth = true) {
+    const messagesScroll = document.getElementById('chat-messages-scroll');
+    if (messagesScroll) {
+      messagesScroll.scrollTo({
+        top: messagesScroll.scrollHeight,
+        behavior: smooth ? 'smooth' : 'auto'
+      });
+    }
   }
 
   bindEvents() {
@@ -68,6 +130,7 @@ class InboxComponent {
     if (conv) conv.unreadCount = 0;
     window.appState.saveState();
     this.render();
+    setTimeout(() => this.scrollToBottom(true), 50);
   }
 
   selectConversationByLeadId(leadId) {

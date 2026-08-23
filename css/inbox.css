@@ -372,3 +372,86 @@
   flex-direction: column;
   gap: 18px;
 }
+
+/* ==========================================================================
+   WhatsApp Custom Scrollbars & Live Scroll Features
+   ========================================================================== */
+.chat-messages-scroll::-webkit-scrollbar,
+.conversation-items-scroll::-webkit-scrollbar,
+.inbox-lead-details::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.chat-messages-scroll::-webkit-scrollbar-track,
+.conversation-items-scroll::-webkit-scrollbar-track,
+.inbox-lead-details::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.chat-messages-scroll::-webkit-scrollbar-thumb,
+.conversation-items-scroll::-webkit-scrollbar-thumb,
+.inbox-lead-details::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+}
+
+.chat-messages-scroll::-webkit-scrollbar-thumb:hover,
+.conversation-items-scroll::-webkit-scrollbar-thumb:hover,
+.inbox-lead-details::-webkit-scrollbar-thumb:hover {
+  background: rgba(37, 211, 102, 0.5);
+}
+
+/* Floating Scroll to Bottom Action Button */
+.inbox-scroll-bottom-btn {
+  position: absolute;
+  bottom: 95px;
+  right: 25px;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: #111b21;
+  color: #25d366;
+  border: 1px solid rgba(37, 211, 102, 0.4);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 20;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(12px) scale(0.9);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.inbox-scroll-bottom-btn.visible {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0) scale(1);
+}
+
+.inbox-scroll-bottom-btn:hover {
+  background: #25d366;
+  color: #0b111e;
+  box-shadow: 0 6px 20px rgba(37, 211, 102, 0.4);
+  transform: translateY(-2px) scale(1.05);
+}
+
+.inbox-scroll-bottom-btn .new-msg-badge {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 12px;
+  height: 12px;
+  background: #25d366;
+  border-radius: 50%;
+  box-shadow: 0 0 10px #25d366;
+  animation: pulse-badge 1.5s infinite;
+}
+
+@keyframes pulse-badge {
+  0% { transform: scale(0.95); opacity: 0.8; }
+  50% { transform: scale(1.3); opacity: 1; }
+  100% { transform: scale(0.95); opacity: 0.8; }
+}
