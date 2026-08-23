@@ -1,0 +1,70 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "NexusLead AI — WhatsApp Sales Automation Platform API",
+    "description": "RESTful API specification for multi-tenant lead generation, AI qualification, Meta WhatsApp Cloud API webhooks, and visual workflow automation.",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/api/v1/health": {
+      "get": {
+        "summary": "Service Health Check",
+        "responses": {
+          "200": { "description": "Operational Status" }
+        }
+      }
+    },
+    "/api/v1/discovery": {
+      "get": {
+        "summary": "Compliant B2B Lead Discovery Search",
+        "parameters": [
+          { "name": "category", "in": "query", "required": true, "schema": { "type": "string" } },
+          { "name": "location", "in": "query", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "List of discovered lead candidates" }
+        }
+      }
+    },
+    "/api/v1/leads": {
+      "post": {
+        "summary": "Ingest and Score Lead",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "company_name": { "type": "string" },
+                  "contact_name": { "type": "string" },
+                  "phone": { "type": "string" },
+                  "email": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Lead created with AI Score" }
+        }
+      }
+    },
+    "/webhooks/meta": {
+      "get": {
+        "summary": "Meta Webhook Verification Challenge",
+        "responses": { "200": { "description": "Verification Challenge Echo" } }
+      },
+      "post": {
+        "summary": "Meta Webhook Inbound Message Events",
+        "responses": { "200": { "description": "Acknowledged" } }
+      }
+    },
+    "/api/v1/system/kill-switch": {
+      "post": {
+        "summary": "Global Emergency Pause All Automations",
+        "responses": { "200": { "description": "State Updated" } }
+      }
+    }
+  }
+}

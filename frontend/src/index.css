@@ -1,0 +1,20 @@
+/* src/index.css */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom styles for dark mode and animations */
+body {
+  @apply bg-gray-100 text-gray-900 dark:bg-gray-900 dark:text-gray-100;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Green dot for connection status */
+.status-dot {
+  @apply w-3 h-3 rounded-full bg-green-500 animate-pulse;
+}
+
+/* Log window styling */
+.log-window {
+  @apply h-48 overflow-y-auto bg-white dark:bg-gray-800 p-2 rounded border border-gray-300 dark:border-gray-600 font-mono text-sm;
+}

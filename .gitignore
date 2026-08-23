@@ -1,0 +1,17 @@
+# Node.js / React
+node_modules/
+build/
+# Python / FastAPI
+__pycache__/
+*.pyc
+.venv/
+.env
+# Logs
+*.log
+# OS files
+.DS_Store
+Thumbs.db
+# Misc
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

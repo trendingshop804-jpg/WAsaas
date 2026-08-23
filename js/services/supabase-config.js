@@ -1,0 +1,81 @@
+/* ==========================================================================
+   NexusLead AI — Supabase Client Configuration
+   Provides a lightweight wrapper around the Supabase edge-function URL and
+   the anon key so that front-end components can make authenticated requests
+   without bundling the full Supabase SDK.
+
+   ┌──────────────────────────────────────────────────────────────────────┐
+   │  IMPORTANT: Replace the placeholder values below with your real      │
+   │  Supabase project URL and anon key before deploying to production.   │
+   │  These are the public anon credentials — safe to ship to the client. │
+   └──────────────────────────────────────────────────────────────────────┘
+   ========================================================================== */
+
+const SUPABASE_CONFIG = {
+  /**
+   * Your Supabase project URL.
+   * Example: "https://abcdefghij.supabase.co"
+   */
+  projectUrl: '',
+
+  /**
+   * Your Supabase anon (public) key.
+   * Safe to expose in front-end code — Row-Level Security enforces auth.
+   */
+  anonKey: '',
+
+  /**
+   * The Edge Function name that handles integration-key CRUD.
+   * Deployed at: <projectUrl>/functions/v1/<functionName>
+   */
+  integrationsFunctionName: 'manage-integration-keys',
+};
+
+/**
+ * Returns the base URL for a named Edge Function.
+ * @param {string} fnName
+ * @returns {string}
+ */
+function getEdgeFunctionUrl(fnName) {
+  if (!SUPABASE_CONFIG.projectUrl) return null;
+  return `${SUPABASE_CONFIG.projectUrl}/functions/v1/${fnName}`;
+}
+
+/**
+ * Returns default Authorization headers using the currently cached JWT.
+ * Falls back to anon key if no user session is found.
+ * @returns {Object}
+ */
+function getAuthHeaders() {
+  const session = (() => {
+    try {
+      // Look for a Supabase session stored by the official JS client
+      const raw = localStorage.getItem('sb-session') ||
+                  Object.keys(localStorage)
+                    .filter(k => k.startsWith('sb-') && k.endsWith('-auth-token'))
+                    .map(k => localStorage.getItem(k))[0];
+      return raw ? JSON.parse(raw) : null;
+    } catch (_) { return null; }
+  })();
+
+  const token = session?.access_token || SUPABASE_CONFIG.anonKey || '';
+  return {
+    'Authorization': token ? `Bearer ${token}` : '',
+    'Content-Type':  'application/json',
+    'apikey':        SUPABASE_CONFIG.anonKey || '',
+  };
+}
+
+/**
+ * Returns true when both project URL and anon key are configured.
+ */
+function isSupabaseConfigured() {
+  return Boolean(SUPABASE_CONFIG.projectUrl && SUPABASE_CONFIG.anonKey);
+}
+
+window.supabaseConfig = {
+  ...SUPABASE_CONFIG,
+  getEdgeFunctionUrl,
+  getAuthHeaders,
+  isSupabaseConfigured,
+};

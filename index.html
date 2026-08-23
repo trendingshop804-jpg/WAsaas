@@ -1,0 +1,1642 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NexusLead AI — AI Lead Generation & WhatsApp Sales Automation Operating System</title>
+  <meta name="description" content="Production-ready AI Lead Generation & WhatsApp Sales Automation SaaS platform with compliant discovery, CRM pipelines, visual workflows, and intelligent AI sales agents.">
+
+  <!-- Core Stylesheets -->
+  <link rel="stylesheet" href="css/index.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/dashboard.css">
+  <link rel="stylesheet" href="css/crm.css">
+  <link rel="stylesheet" href="css/workflow.css">
+  <link rel="stylesheet" href="css/inbox.css">
+  <link rel="stylesheet" href="css/settings.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Ambient Background Glows -->
+    <div class="ambient-glow-1"></div>
+    <div class="ambient-glow-2"></div>
+
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <a href="#" class="brand-logo">
+          <div class="brand-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
+            </svg>
+          </div>
+          <span>NexusLead</span>
+        </a>
+        <span class="brand-badge">SaaS</span>
+      </div>
+
+      <!-- Organization Selector -->
+      <div class="sidebar-org-select" id="sidebar-org-btn" title="Switch Workspace / Organization">
+        <div class="flex items-center" style="overflow: hidden;">
+          <div class="org-avatar">N</div>
+          <div class="org-info">
+            <span class="org-name" id="current-org-name">Nexus Growth Labs</span>
+            <span class="org-plan" id="current-org-plan">Scale Plan</span>
+          </div>
+        </div>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--text-muted);"><polyline points="6 9 12 15 18 9"></polyline></svg>
+      </div>
+
+      <!-- Navigation Menu -->
+      <nav class="sidebar-nav">
+        <div class="nav-section-title">Core Operating System</div>
+        
+        <a href="#dashboard" class="nav-item active" data-view="dashboard">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+          <span>Dashboard</span>
+        </a>
+
+        <a href="#discovery" class="nav-item" data-view="discovery">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+          <span>Lead Discovery</span>
+          <span class="nav-pill pulse-green">AI Search</span>
+        </a>
+
+        <a href="#import" class="nav-item" data-view="import">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+          <span>Import Leads</span>
+        </a>
+
+        <a href="#crm" class="nav-item" data-view="crm">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+          <span>Lead CRM & Pipeline</span>
+        </a>
+
+        <div class="nav-section-title">WhatsApp Automation</div>
+
+        <a href="#campaigns" class="nav-item" data-view="campaigns">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+          <span>Campaigns</span>
+        </a>
+
+        <a href="#inbox" class="nav-item" data-view="inbox">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+          <span>Live Inbox</span>
+          <span class="nav-pill pulse-green">Active</span>
+        </a>
+
+        <a href="#ai-generator" class="nav-item" data-view="ai-generator">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+          <span>AI Message Composer</span>
+        </a>
+
+        <a href="#followups" class="nav-item" data-view="followups">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+          <span>Follow-Up Sequences</span>
+        </a>
+
+        <a href="#ai-agent" class="nav-item" data-view="ai-agent">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a8 8 0 0 0-8 8v12l3-3 2.5 2.5L12 19l2.5 2.5L17 19l3 3V10a8 8 0 0 0-8-8z"></path></svg>
+          <span>AI Sales Agent</span>
+        </a>
+
+        <a href="#workflows" class="nav-item" data-view="workflows">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+          <span>Workflow Builder</span>
+          <span class="nav-pill">Visual</span>
+        </a>
+
+        <a href="#whatsapp-connect" class="nav-item" data-view="whatsapp-connect">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+          <span>WhatsApp Connect</span>
+        </a>
+
+        <a href="#templates" class="nav-item" data-view="templates">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+          <span>Templates</span>
+        </a>
+
+        <div class="nav-section-title">Organization & Management</div>
+
+        <a href="#analytics" class="nav-item" data-view="analytics">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+          <span>Analytics & ROI</span>
+        </a>
+
+        <a href="#team" class="nav-item" data-view="team">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+          <span>Team & RBAC</span>
+        </a>
+
+        <a href="#billing" class="nav-item" data-view="billing">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect><line x1="1" y1="10" x2="23" y2="10"></line></svg>
+          <span>Billing & Usage</span>
+        </a>
+
+        <a href="#settings" class="nav-item" data-view="settings">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+          <span>Settings & Audit</span>
+        </a>
+      </nav>
+
+      <!-- Sidebar Footer -->
+      <div class="sidebar-footer">
+        <div class="user-profile-widget">
+          <div class="user-avatar">KR</div>
+          <div class="user-meta">
+            <span class="user-name">Karthik Raja</span>
+            <span class="user-role">Owner & Admin</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Wrapper -->
+    <div class="main-wrapper">
+      <!-- Emergency Kill Switch Banner (When Paused) -->
+      <div id="kill-switch-banner" class="kill-switch-active-banner" style="display: none;">
+        <div class="flex items-center gap-2">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+          <span>EMERGENCY KILL-SWITCH ENGAGED: All outbound campaigns and automated WhatsApp sequences are frozen.</span>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="window.appState.toggleKillSwitch()">Resume Outbound</button>
+      </div>
+
+      <!-- Topbar Header -->
+      <header class="topbar">
+        <div class="topbar-left">
+          <div class="topbar-search">
+            <svg class="search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            <input type="text" id="global-search-input" placeholder="Search leads, companies, phone, campaigns (Press Enter)...">
+          </div>
+        </div>
+
+        <div class="topbar-right">
+          <!-- Emergency Kill-Switch Button -->
+          <button id="global-kill-switch-btn" class="btn btn-killswitch">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
+            PAUSE ALL AUTOMATIONS
+          </button>
+
+          <!-- Guided Setup Wizard Button -->
+          <button id="start-onboarding-wizard-btn" class="btn btn-cyber btn-sm">
+            🚀 Guided Setup
+          </button>
+
+          <!-- Dark/Light Theme Toggle -->
+          <button id="theme-toggle-btn" class="btn btn-secondary btn-icon" title="Toggle Theme">
+            <span id="theme-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+            </span>
+          </button>
+        </div>
+      </header>
+
+      <!-- Viewport Area for Modular Views -->
+      <main class="content-viewport">
+        
+        <!-- 1. DASHBOARD VIEW -->
+        <section id="view-dashboard" class="view-panel active">
+          <div class="flex items-center justify-between" style="margin-bottom: 24px;">
+            <div>
+              <h2>Executive Revenue & Sales Dashboard</h2>
+              <p style="color: var(--text-secondary); font-size: 13.5px;">Real-time overview of your automated B2B lead generation and WhatsApp conversions.</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <button class="btn btn-secondary btn-sm" data-action="quick-discover">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                Find Leads
+              </button>
+              <button class="btn btn-primary btn-sm" data-action="quick-campaign">
+                + Launch Campaign
+              </button>
+            </div>
+          </div>
+
+          <!-- KPI Metric Cards -->
+          <div class="dashboard-grid">
+            <div class="kpi-card">
+              <div class="kpi-top">
+                <span class="kpi-label">Total Leads Discovered</span>
+                <div class="kpi-icon-wrap">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle></svg>
+                </div>
+              </div>
+              <div class="kpi-value" id="kpi-total-leads">1,284</div>
+              <div class="kpi-trend trend-up">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline><polyline points="17 6 23 6 23 12"></polyline></svg>
+                <span>+18.4%</span>
+                <span class="trend-subtext">vs last week</span>
+              </div>
+            </div>
+
+            <div class="kpi-card">
+              <div class="kpi-top">
+                <span class="kpi-label">Contacted on WhatsApp</span>
+                <div class="kpi-icon-wrap" style="color: #3b82f6;">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon></svg>
+                </div>
+              </div>
+              <div class="kpi-value" id="kpi-contacted">842</div>
+              <div class="kpi-trend trend-up">
+                <span style="color: var(--brand-whatsapp);">98.2% Delivery Rate</span>
+              </div>
+            </div>
+
+            <div class="kpi-card">
+              <div class="kpi-top">
+                <span class="kpi-label">Replies & Engagement</span>
+                <div class="kpi-icon-wrap" style="color: #8b5cf6;">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                </div>
+              </div>
+              <div class="kpi-value" id="kpi-replies">248</div>
+              <div class="kpi-trend trend-up">
+                <span id="kpi-response-rate" style="color: var(--brand-whatsapp); font-weight:700;">29.4%</span>
+                <span class="trend-subtext">response rate</span>
+              </div>
+            </div>
+
+            <div class="kpi-card">
+              <div class="kpi-top">
+                <span class="kpi-label">AI Qualified & Won Deals</span>
+                <div class="kpi-icon-wrap" style="color: #10b981;">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                </div>
+              </div>
+              <div class="kpi-value" id="kpi-won">18 Deals</div>
+              <div class="kpi-trend trend-up">
+                <span id="kpi-conversion-rate" style="color: var(--status-success); font-weight:700;">14.2%</span>
+                <span class="trend-subtext">overall conversion</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Middle Section: Funnel Visualizer + Live Activity -->
+          <div class="dashboard-middle-grid">
+            <div class="card chart-card">
+              <div class="card-header">
+                <div>
+                  <div class="card-title">Automated Sales Conversion Funnel</div>
+                  <div class="card-subtitle">End-to-end progression from raw discovery to closed deals</div>
+                </div>
+                <span class="badge badge-whatsapp">Live Telemetry</span>
+              </div>
+              
+              <div class="chart-canvas-wrap">
+                <div class="funnel-bar-group">
+                  <div class="funnel-bar" id="funnel-bar-total" style="height: 100%;" data-val="1284"></div>
+                  <div class="funnel-label">Total Leads</div>
+                </div>
+                <div class="funnel-bar-group">
+                  <div class="funnel-bar" id="funnel-bar-contacted" style="height: 70%;" data-val="842"></div>
+                  <div class="funnel-label">Contacted</div>
+                </div>
+                <div class="funnel-bar-group">
+                  <div class="funnel-bar" id="funnel-bar-replied" style="height: 40%;" data-val="248"></div>
+                  <div class="funnel-label">Replied</div>
+                </div>
+                <div class="funnel-bar-group">
+                  <div class="funnel-bar" id="funnel-bar-qualified" style="height: 25%;" data-val="94"></div>
+                  <div class="funnel-label">AI Qualified</div>
+                </div>
+                <div class="funnel-bar-group">
+                  <div class="funnel-bar" id="funnel-bar-won" style="height: 15%; background: linear-gradient(180deg, #10b981, #059669);" data-val="18"></div>
+                  <div class="funnel-label">Won Deals</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title">Live Audit Stream</div>
+                <button class="btn btn-secondary btn-sm" onclick="window.navigationComponent.switchView('settings')">View All</button>
+              </div>
+              <div class="activity-feed-list" id="dashboard-activity-list">
+                <!-- Populated dynamically -->
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 2. LEAD DISCOVERY VIEW -->
+        <section id="view-discovery" class="view-panel">
+          <div class="flex items-center justify-between" style="margin-bottom: 20px;">
+            <div>
+              <h2>Compliant B2B Lead Discovery</h2>
+              <p style="color: var(--text-secondary); font-size: 13.5px;">Search verified public B2B directories and local registries with legal compliance controls.</p>
+            </div>
+          </div>
+
+          <!-- Discovery Search Card -->
+          <div class="card" style="margin-bottom: 24px;">
+            <div style="font-weight: 700; margin-bottom: 12px; font-size: 14px;">Quick Industry Presets:</div>
+            <div class="flex items-center gap-2" style="flex-wrap: wrap; margin-bottom: 20px;">
+              <button type="button" class="btn btn-secondary btn-sm discovery-preset-btn" data-preset="dentists_kerala">
+                🦷 Dentists in Kerala
+              </button>
+              <button type="button" class="btn btn-secondary btn-sm discovery-preset-btn" data-preset="restaurants_bangalore">
+                🍽️ Restaurants in Bangalore
+              </button>
+              <button type="button" class="btn btn-secondary btn-sm discovery-preset-btn" data-preset="agencies_chennai">
+                🚀 Digital Agencies in Chennai
+              </button>
+              <button type="button" class="btn btn-secondary btn-sm discovery-preset-btn" data-preset="resorts_munnar">
+                🌴 Ayurvedic Resorts in Munnar
+              </button>
+            </div>
+
+            <form id="lead-discovery-form">
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 16px;">
+                <div class="form-group" style="margin-bottom: 0;">
+                  <label class="form-label">Business Category / Niche</label>
+                  <input type="text" id="disc-category" class="form-input" value="Dental Clinics & Surgeons" required>
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                  <label class="form-label">Location (City, State, Country)</label>
+                  <input type="text" id="disc-location" class="form-input" value="Kochi, Kerala, India" required>
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                  <label class="form-label">Target Keywords</label>
+                  <input type="text" id="disc-keywords" class="form-input" value="Implantology, Clinic, Healthcare">
+                </div>
+              </div>
+
+              <div class="flex items-center justify-between">
+                <div id="discovery-status" style="font-size: 12.5px; color: var(--text-muted);">
+                  Ready to scan verified public business registries.
+                </div>
+                <button type="submit" class="btn btn-primary">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                  Search & Discover Leads
+                </button>
+              </div>
+            </form>
+          </div>
+
+          <!-- Results Table -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">Discovered Prospects (<span id="discovered-count">0</span>)</div>
+              <button id="import-discovered-btn" class="btn btn-primary btn-sm" disabled>
+                Import Selected Leads to CRM
+              </button>
+            </div>
+
+            <div class="table-container">
+              <table class="data-table" id="discovery-results-table">
+                <thead>
+                  <tr>
+                    <th style="width: 40px;"><input type="checkbox" id="select-all-discovered" checked></th>
+                    <th>Contact / Owner</th>
+                    <th>Company & Website</th>
+                    <th>Phone (WhatsApp)</th>
+                    <th>Location</th>
+                    <th>AI Score</th>
+                  </tr>
+                </thead>
+                <tbody id="discovery-results-tbody">
+                  <tr>
+                    <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 30px;">
+                      No active search run yet. Select a preset above or enter criteria to discover leads.
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- 3. IMPORT LEADS VIEW -->
+        <section id="view-import" class="view-panel">
+          <div class="flex items-center justify-between" style="margin-bottom: 20px;">
+            <div>
+              <h2>Lead Scraping & Bulk Data Ingestion</h2>
+              <p style="color: var(--text-secondary); font-size: 13.5px;">Upload CSV/Excel sheets or connect direct API endpoints. Automatically deduplicates & normalizes phone formats.</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <button id="download-sample-csv-btn" class="btn btn-secondary btn-sm">
+                Download Sample CSV
+              </button>
+              <button class="btn btn-primary btn-sm" onclick="document.getElementById('manual-lead-modal').classList.add('active')">
+                + Manual Lead Entry
+              </button>
+            </div>
+          </div>
+
+          <div class="card" style="margin-bottom: 24px;">
+            <div id="import-dropzone" style="border: 2px dashed var(--border-medium); border-radius: var(--radius-lg); padding: 40px 20px; text-align: center; background: var(--bg-tertiary); cursor: pointer;" onclick="document.getElementById('csv-file-input').click()">
+              <input type="file" id="csv-file-input" accept=".csv" style="display: none;">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--brand-whatsapp)" stroke-width="2" style="margin: 0 auto 12px; display: block;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+              <h3 style="margin-bottom: 6px;">Click or Drag & Drop CSV Lead File</h3>
+              <p style="color: var(--text-secondary); font-size: 13px;">Supports columns: Company Name, Contact Name, Phone, Email, Industry, Location, Website</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- 4. CRM & PIPELINE VIEW -->
+        <section id="view-crm" class="view-panel">
+          <div class="crm-header-actions">
+            <div>
+              <h2>Omnichannel Lead CRM</h2>
+              <p style="color: var(--text-secondary); font-size: 13.5px;">Manage pipeline velocity, AI qualification scores, and WhatsApp conversations.</p>
+            </div>
+
+            <div class="flex items-center gap-3">
+              <!-- View Mode Switcher -->
+              <div class="crm-view-switch">
+                <button class="crm-view-btn active" data-mode="table">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+                  Table
+                </button>
+                <button class="crm-view-btn" data-mode="kanban">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="18"></rect><rect x="14" y="3" width="7" height="10"></rect></svg>
+                  Kanban
+                </button>
+                <button class="crm-view-btn" data-mode="pipeline">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+                  Pipeline
+                </button>
+              </div>
+
+              <button class="btn btn-primary btn-sm" onclick="document.getElementById('manual-lead-modal').classList.add('active')">
+                + Add Lead
+              </button>
+            </div>
+          </div>
+
+          <!-- CRM Filter & Search Bar -->
+          <div class="card" style="padding: 12px 18px; margin-bottom: 18px;">
+            <div class="flex items-center justify-between" style="flex-wrap: wrap; gap: 12px;">
+              <div class="flex items-center gap-3">
+                <input type="text" id="crm-search-filter" class="form-input" style="width: 240px; padding: 6px 12px; font-size: 13px;" placeholder="Filter by name, phone, city...">
+                <div class="flex items-center gap-1">
+                  <button class="badge crm-score-filter-pill active" data-category="all" style="cursor: pointer; border: 1px solid var(--border-medium);">All</button>
+                  <button class="badge badge-hot crm-score-filter-pill" data-category="hot" style="cursor: pointer;">🔥 Hot</button>
+                  <button class="badge badge-warm crm-score-filter-pill" data-category="warm" style="cursor: pointer;">🟠 Warm</button>
+                  <button class="badge badge-cold crm-score-filter-pill" data-category="cold" style="cursor: pointer;">🔵 Cold</button>
+                </div>
+              </div>
+
+              <!-- Bulk Action Bar -->
+              <div id="crm-bulk-actions-bar" class="flex items-center gap-2" style="display: none;">
+                <span style="font-size: 12px; font-weight: 600; color: var(--brand-whatsapp);"><span id="selected-leads-count">0</span> Selected</span>
+                <button id="bulk-send-msg-btn" class="btn btn-primary btn-sm">Launch Campaign</button>
+                <button id="bulk-delete-btn" class="btn btn-outline btn-sm" style="color: var(--status-danger); border-color: var(--border-medium);">Delete</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- CRM Views Containers -->
+          <div id="crm-table-view-container" class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th style="width: 35px;"><input type="checkbox" id="select-all-leads-cb"></th>
+                  <th>Lead Name & Role</th>
+                  <th>Company & Industry</th>
+                  <th>Phone & WhatsApp</th>
+                  <th>Location</th>
+                  <th>AI Score</th>
+                  <th>Pipeline Stage</th>
+                  <th>Last Contact</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="crm-leads-tbody">
+                <!-- Dynamically Rendered -->
+              </tbody>
+            </table>
+          </div>
+
+          <div id="crm-kanban-view-container" class="kanban-board" style="display: none;">
+            <!-- Dynamically Rendered Kanban Columns -->
+          </div>
+
+          <div id="crm-pipeline-view-container" style="display: none;">
+            <!-- Dynamically Rendered Pipeline Stats -->
+          </div>
+        </section>
+
+        <!-- 5. CAMPAIGNS VIEW -->
+        <section id="view-campaigns" class="view-panel">
+          <div class="flex items-center justify-between" style="margin-bottom: 20px;">
+            <div>
+              <h2>WhatsApp Message Campaigns</h2>
+              <p style="color: var(--text-secondary); font-size: 13.5px;">Automated outreach sequences with safe delivery jitter and rate-limiting.</p>
+            </div>
+            <button id="new-campaign-btn" class="btn btn-primary btn-sm">
+              + Create New Campaign
+            </button>
+          </div>
+
+          <div id="campaigns-list-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 18px;">
+            <!-- Rendered Dynamically -->
+          </div>
+        </section>
+
+        <!-- 6. LIVE INBOX VIEW -->
+        <section id="view-inbox" class="view-panel">
+          <div class="inbox-layout">
+            <!-- Left: Conversations List -->
+            <div class="inbox-conversations-list">
+              <div class="inbox-search-header">
+                <input type="text" id="inbox-search-input" class="form-input" style="padding: 7px 10px; font-size: 12.5px;" placeholder="Search chats...">
+                <div class="inbox-filter-chips">
+                  <span class="filter-chip inbox-filter-chip active" data-filter="all">All</span>
+                  <span class="filter-chip inbox-filter-chip" data-filter="ai">🤖 AI Active</span>
+                  <span class="filter-chip inbox-filter-chip" data-filter="human">👤 Human Active</span>
+                  <span class="filter-chip inbox-filter-chip" data-filter="unread">Unread</span>
+                </div>
+              </div>
+
+              <div class="conversation-items-scroll" id="inbox-conversations-scroll">
+                <!-- Rendered dynamically -->
+              </div>
+            </div>
+
+            <!-- Middle: Active Chat Pane -->
+            <div class="inbox-chat-pane">
+              <div class="chat-header">
+                <div class="chat-header-info">
+                  <div style="font-weight: 700; font-size: 14px;" id="chat-lead-name">Dr. Jacob Mathew</div>
+                  <span style="font-size: 12px; color: var(--text-muted);" id="chat-lead-company">Jacob Dental · +91 94470 12345</span>
+                </div>
+
+                <div class="chat-actions">
+                  <div class="chat-mode-toggle">
+                    <button id="mode-toggle-ai" class="mode-btn active ai">🤖 AI Bot</button>
+                    <button id="mode-toggle-human" class="mode-btn">👤 Human</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Message Stream -->
+              <div class="chat-messages-scroll" id="chat-messages-scroll">
+                <!-- Rendered dynamically -->
+              </div>
+
+              <!-- AI Suggestions Bar -->
+              <div class="ai-suggest-bar" id="chat-ai-suggestions-bar">
+                <!-- Rendered dynamically -->
+              </div>
+
+              <!-- Chat Input Area -->
+              <form id="chat-send-form" class="chat-input-area">
+                <textarea id="chat-message-input" class="chat-textarea" placeholder="Type WhatsApp reply (or select AI suggestion above)..."></textarea>
+                <button type="submit" class="btn btn-primary" style="height: 42px;">
+                  Send
+                </button>
+              </form>
+
+              <!-- Simulator for incoming customer text -->
+              <form id="simulate-customer-reply-form" style="padding: 6px 18px; background: var(--bg-tertiary); border-top: 1px solid var(--border-subtle); display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 11px; font-weight: 700; color: #f59e0b; white-space: nowrap;">🧪 Simulate Prospect Reply:</span>
+                <input type="text" id="sim-customer-inbound-text" class="form-input" style="padding: 4px 8px; font-size: 11.5px; height: 28px;" placeholder="e.g. Yes send demo link / STOP">
+                <button type="submit" class="btn btn-secondary btn-sm" style="padding: 3px 8px; font-size: 11px;">Simulate Inbound</button>
+              </form>
+            </div>
+
+            <!-- Right: Lead Details Sidebar -->
+            <div class="inbox-lead-details">
+              <div style="font-weight: 700; font-size: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--border-subtle);">
+                Prospect Overview
+              </div>
+              
+              <div>
+                <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase;">Contact & Company</div>
+                <div style="font-weight: 700; color: var(--text-primary);" id="inbox-sidebar-contact">Dr. Jacob Mathew</div>
+                <div style="font-size: 12px; color: var(--text-secondary);" id="inbox-sidebar-company">Dr. Jacob Dental & Implant Center</div>
+              </div>
+
+              <div>
+                <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase;">WhatsApp Number</div>
+                <div class="badge badge-whatsapp font-mono" id="inbox-sidebar-phone">+91 94470 12345</div>
+              </div>
+
+              <div>
+                <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase;">AI Lead Score</div>
+                <div class="badge badge-hot" id="inbox-sidebar-score">Score: 94/100 (HOT)</div>
+              </div>
+
+              <div style="padding: 12px; background: var(--bg-tertiary); border-radius: 8px;">
+                <div style="font-weight: 700; font-size: 11.5px; color: #a78bfa; margin-bottom: 4px;">AI Executive Briefing</div>
+                <div style="font-size: 12px; color: var(--text-secondary); line-height: 1.4;" id="inbox-sidebar-ai-summary">
+                  Chief surgeon wants automated recall booking system. High budget indicated in conversation.
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 7. AI MESSAGE GENERATOR VIEW -->
+        <section id="view-ai-generator" class="view-panel">
+          <div class="flex items-center justify-between" style="margin-bottom: 20px;">
+            <div>
+              <h2>Multilingual AI Message Composer</h2>
+              <p style="color: var(--text-secondary); font-size: 13.5px;">Generate high-converting 4-touch WhatsApp sequences in English, Tamil, Malayalam, Hindi, Kannada, Telugu.</p>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1.5fr; gap: 20px;">
+            <!-- Inputs -->
+            <div class="card">
+              <h3 style="margin-bottom: 14px;">Campaign Parameters</h3>
+              <form id="ai-msg-generator-form">
+                <div class="form-group">
+                  <label class="form-label">Product / Service Offering</label>
+                  <input type="text" id="ai-input-product" class="form-input" value="Automated WhatsApp Recall System for Dental Clinics">
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">Target Industry / Niche</label>
+                  <input type="text" id="ai-input-industry" class="form-input" value="Healthcare & Dental Clinics">
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">Language</label>
+                  <select id="ai-input-language" class="form-select">
+                    <option value="English" selected>English</option>
+                    <option value="Tamil">Tamil (தமிழ்)</option>
+                    <option value="Malayalam">Malayalam (മലയാളം)</option>
+                    <option value="Hindi">Hindi (हिन्दी)</option>
+                    <option value="Kannada">Kannada (ಕನ್ನಡ)</option>
+                    <option value="Telugu">Telugu (తెలుగు)</option>
+                  </select>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">Message Tone</label>
+                  <select id="ai-input-tone" class="form-select">
+                    <option value="Professional" selected>Professional & Authority</option>
+                    <option value="Friendly">Friendly & Approachable</option>
+                    <option value="Short">Short & Direct</option>
+                    <option value="Premium">Premium & High-Ticket Concierge</option>
+                    <option value="Casual">Casual & Peer-to-Peer</option>
+                    <option value="Consultative">Consultative & Diagnostic</option>
+                  </select>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">Call To Action (CTA)</label>
+                  <input type="text" id="ai-input-cta" class="form-input" value="Reply DEMO for a 5-min live walkthrough">
+                </div>
+
+                <button type="submit" class="btn btn-cyber w-full">
+                  ✨ Generate 4-Step WhatsApp Sequence
+                </button>
+              </form>
+            </div>
+
+            <!-- Outputs -->
+            <div>
+              <div class="flex items-center justify-between" style="margin-bottom: 12px;">
+                <div id="ai-gen-status" style="font-size: 13px; color: var(--text-secondary);">
+                  Ready to compose tailored sequence.
+                </div>
+                <button id="ai-save-as-template-btn" class="btn btn-primary btn-sm">
+                  Save as Approved Template
+                </button>
+              </div>
+
+              <div id="ai-generated-sequence-output">
+                <div class="card" style="text-align: center; color: var(--text-muted); padding: 40px;">
+                  Click "Generate 4-Step WhatsApp Sequence" to preview personalized message variations.
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 8. FOLLOW-UP SEQUENCES VIEW -->
+        <section id="view-followups" class="view-panel">
+          <div class="flex items-center justify-between" style="margin-bottom: 20px;">
+            <div>
+              <h2>Automated Follow-up Engine</h2>
+              <p style="color: var(--text-secondary); font-size: 13.5px;">Visual multi-touch follow-up rules with instant cancellation on reply or opt-out.</p>
+            </div>
+          </div>
+
+          <div id="followup-sequence-visual-tree" style="max-width: 700px; margin: 0 auto;">
+            <!-- Rendered dynamically -->
+          </div>
+        </section>
+
+        <!-- 9. AI SALES AGENT VIEW -->
+        <section id="view-ai-agent" class="view-panel">
+          <div class="flex items-center justify-between" style="margin-bottom: 20px;">
+            <div>
+              <h2>AI Sales Agent Knowledge Base & Rules</h2>
+              <p style="color: var(--text-secondary); font-size: 13.5px;">Train the conversational AI on verified pricing, FAQs, qualification rules, and anti-hallucination guardrails.</p>
+            </div>
+          </div>
+
+          <form id="ai-agent-config-form">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+              <div class="card">
+                <h3 style="margin-bottom: 14px;">Business & Pricing Knowledge</h3>
+                
+                <div class="form-group">
+                  <label class="form-label">Business Name</label>
+                  <input type="text" id="ai-agent-biz-name" class="form-input" value="Nexus Growth Labs">
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">Core Industry</label>
+                  <input type="text" id="ai-agent-industry" class="form-input" value="B2B Sales Automation & WhatsApp CRM">
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">Verified Pricing Rules (AI Guardrail)</label>
+                  <textarea id="ai-agent-pricing" class="form-textarea">Starter: ₹1,999/mo (1,000 leads), Growth: ₹4,999/mo (5,000 leads + AI Agent), Scale: ₹9,999/mo (Unlimited + Custom Workflows). Do NOT give unapproved discounts.</textarea>
+                  <span class="input-hint">The AI strictly refuses to quote unverified prices or unauthorized discounts.</span>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">Agent Conversational Tone</label>
+                  <select id="ai-agent-tone-select" class="form-select">
+                    <option value="Professional & Consultative">Professional & Consultative</option>
+                    <option value="Friendly & Dynamic">Friendly & Dynamic</option>
+                    <option value="Direct & Efficient">Direct & Efficient</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <div class="card" style="margin-bottom: 16px;">
+                  <h3 style="margin-bottom: 10px;">Lead Qualification Questions</h3>
+                  <div id="ai-agent-questions-list">
+                    <!-- Rendered dynamically -->
+                  </div>
+                </div>
+
+                <div class="card">
+                  <div class="flex items-center justify-between" style="margin-bottom: 10px;">
+                    <h3>Verified FAQs & Knowledge</h3>
+                    <button type="button" id="add-faq-btn" class="btn btn-secondary btn-sm">+ Add FAQ</button>
+                  </div>
+                  <div id="ai-agent-faqs-list">
+                    <!-- Rendered dynamically -->
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="flex items-center justify-end" style="margin-top: 20px;">
+              <button type="submit" class="btn btn-primary btn-lg">
+                Save AI Sales Agent Configuration
+              </button>
+            </div>
+          </form>
+        </section>
+
+        <!-- 10. WORKFLOW BUILDER VIEW -->
+        <section id="view-workflows" class="view-panel">
+          <div class="flex items-center justify-between" style="margin-bottom: 14px;">
+            <div>
+              <h2>Visual Workflow Automation Builder</h2>
+              <p style="color: var(--text-secondary); font-size: 13.5px;">Drag and drop nodes to construct autonomous sales pipelines with condition routing.</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <button id="run-workflow-test-btn" class="btn btn-cyber btn-sm">
+                ▶ Test Run Workflow
+              </button>
+              <button id="save-workflow-btn" class="btn btn-primary btn-sm">
+                Save Changes
+              </button>
+            </div>
+          </div>
+
+          <div class="workflow-container">
+            <!-- Sidebar Node Palette -->
+            <div class="workflow-sidebar">
+              <div class="node-category-title">Triggers</div>
+              <div class="draggable-node-item trigger" data-node-type="trigger" data-node-title="New Lead Discovered">
+                ⚡ New Lead Discovered
+              </div>
+              <div class="draggable-node-item trigger" data-node-type="trigger" data-node-title="WhatsApp Reply Received">
+                💬 WhatsApp Reply Received
+              </div>
+
+              <div class="node-category-title">AI Actions</div>
+              <div class="draggable-node-item ai" data-node-type="ai" data-node-title="AI Lead Scoring (0-100)">
+                ✨ AI Lead Scoring
+              </div>
+              <div class="draggable-node-item ai" data-node-type="ai" data-node-title="AI Intent Classification">
+                🎯 Classify Intent
+              </div>
+              <div class="draggable-node-item ai" data-node-type="ai" data-node-title="AI Sales Bot Response">
+                🤖 AI Sales Bot Auto-Reply
+              </div>
+
+              <div class="node-category-title">Standard Actions</div>
+              <div class="draggable-node-item action" data-node-type="action" data-node-title="Send WhatsApp Template">
+                📤 Send WhatsApp Message
+              </div>
+              <div class="draggable-node-item action" data-node-type="action" data-node-title="Wait Timer (24h Delay)">
+                ⏳ Wait Timer Delay
+              </div>
+              <div class="draggable-node-item action" data-node-type="action" data-node-title="Assign Salesperson">
+                👤 Assign Salesperson
+              </div>
+
+              <div class="node-category-title">Conditions</div>
+              <div class="draggable-node-item condition" data-node-type="condition" data-node-title="Score >= 70 (Hot)?">
+                ◆ Check Lead Score
+              </div>
+              <div class="draggable-node-item condition" data-node-type="condition" data-node-title="Customer Opt-out?">
+                ◆ Opt-Out Detector
+              </div>
+            </div>
+
+            <!-- Canvas Grid -->
+            <div id="workflow-canvas" class="workflow-canvas-area">
+              <svg id="workflow-svg-lines" class="workflow-svg-layer"></svg>
+              <div id="workflow-canvas-nodes"></div>
+            </div>
+
+            <!-- Node Inspector -->
+            <div class="workflow-inspector">
+              <div class="workflow-inspector-header">
+                <div style="font-weight: 700;">Node Inspector</div>
+              </div>
+              <div id="workflow-node-inspector-content">
+                <!-- Rendered dynamically -->
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 11. WHATSAPP CONNECTIONS VIEW -->
+        <section id="view-whatsapp-connect" class="view-panel">
+          <div class="flex items-center justify-between" style="margin-bottom: 20px;">
+            <div>
+              <h2>WhatsApp Connection Architecture</h2>
+              <p style="color: var(--text-secondary); font-size: 13.5px;">Choose between Official Meta Cloud OAuth or authorized QR Code session gateway.</p>
+            </div>
+          </div>
+
+          <!-- Connection Status Banner -->
+          <div id="wa-global-status-banner" style="margin-bottom: 24px;"></div>
+
+          <!-- Tabs -->
+          <div class="tab-nav">
+            <button class="tab-btn wa-method-tab active" data-method="meta">Method A — Official Meta OAuth (Recommended)</button>
+            <button class="tab-btn wa-method-tab" data-method="qr">Method B — QR Code Connection Gateway</button>
+          </div>
+
+          <!-- Method A: Meta View -->
+          <div id="wa-method-meta-view" class="card">
+            <div class="flex items-center gap-3" style="margin-bottom: 16px;">
+              <div style="width: 44px; height: 44px; border-radius: 10px; background: #25d366; color: white; display: flex; align-items: center; justify-content: center;">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+              </div>
+              <div>
+                <h3 style="margin-bottom: 2px;">Meta WhatsApp Business Cloud API</h3>
+                <p style="font-size: 13px; color: var(--text-secondary);">Connect through official Facebook / Meta login with granular business permissions.</p>
+              </div>
+            </div>
+
+            <div style="background: var(--bg-tertiary); padding: 16px; border-radius: 8px; font-size: 13px; margin-bottom: 20px; line-height: 1.6;">
+              <strong>Official Security Guarantees:</strong><br>
+              • Zero access tokens exposed to browser/client-side.<br>
+              • Meta Verified green tick badge compatibility.<br>
+              • High throughput (up to 1,000 msgs/second) on Tier-3 WABA numbers.
+            </div>
+
+            <button id="connect-meta-oauth-btn" class="btn btn-primary btn-lg">
+              Connect WhatsApp Business via Meta OAuth
+            </button>
+          </div>
+
+          <!-- Method B: QR View -->
+          <div id="wa-method-qr-view" class="card" style="display: none;">
+            <h3 style="margin-bottom: 8px;">Authorized QR Code Gateway</h3>
+            <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 20px;">Pair an authorized phone device using QR scanning via an approved gateway provider.</p>
+
+            <div style="text-align: center; padding: 24px; background: var(--bg-tertiary); border-radius: 12px; max-width: 380px; margin: 0 auto 20px;">
+              <div id="qr-canvas-area" style="margin-bottom: 14px;">
+                <div style="color: var(--text-muted);">Click "Generate QR Code" to begin pairing session.</div>
+              </div>
+              <div id="qr-expiry-timer" style="font-size: 12px; color: var(--brand-whatsapp); font-weight: 700; margin-bottom: 12px;"></div>
+              
+              <div class="flex items-center justify-center gap-2">
+                <button id="generate-qr-btn" class="btn btn-primary btn-sm">Generate QR Code</button>
+                <button id="refresh-qr-btn" class="btn btn-secondary btn-sm">Refresh QR</button>
+                <button id="simulate-qr-scan-btn" class="btn btn-cyber btn-sm" style="display: none;">Simulate Scan Success</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 12. TEMPLATES VIEW -->
+        <section id="view-templates" class="view-panel">
+          <div class="flex items-center justify-between" style="margin-bottom: 20px;">
+            <div>
+              <h2>Approved WhatsApp Message Templates</h2>
+              <p style="color: var(--text-secondary); font-size: 13.5px;">Meta-compliant templates with dynamic variable tokens {{first_name}}, {{company_name}}.</p>
+            </div>
+            <button id="new-template-btn" class="btn btn-primary btn-sm">
+              + Register New Template
+            </button>
+          </div>
+
+          <div id="templates-grid-list" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 18px;">
+            <!-- Rendered dynamically -->
+          </div>
+        </section>
+
+        <!-- 13. ANALYTICS VIEW -->
+        <section id="view-analytics" class="view-panel">
+          <div class="flex items-center justify-between" style="margin-bottom: 20px;">
+            <div>
+              <h2>Campaign Analytics & ROI</h2>
+              <p style="color: var(--text-secondary); font-size: 13.5px;">Granular metrics on delivery rates, response sentiment, and customer acquisition cost.</p>
+            </div>
+          </div>
+
+          <div class="dashboard-grid" style="margin-bottom: 24px;">
+            <div class="kpi-card">
+              <div class="kpi-label">WhatsApp Delivery Rate</div>
+              <div class="kpi-value" id="analytics-delivery-rate" style="color: var(--status-success);">98.4%</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-label">Average Response Rate</div>
+              <div class="kpi-value" id="analytics-reply-rate" style="color: var(--brand-whatsapp);">31.2%</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-label">AI Qualification Ratio</div>
+              <div class="kpi-value" id="analytics-qual-rate" style="color: #a78bfa;">55.0%</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-label">Total Closed Deals</div>
+              <div class="kpi-value" id="analytics-won-deals" style="color: var(--status-success);">18</div>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3 style="margin-bottom: 14px;">Campaign Breakdown</h3>
+            <div class="table-container">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Campaign Name</th>
+                    <th>Target Leads</th>
+                    <th>Sent</th>
+                    <th>Delivered</th>
+                    <th>Replies</th>
+                    <th>Qualified</th>
+                    <th>Won Deals</th>
+                    <th>Conversion</th>
+                  </tr>
+                </thead>
+                <tbody id="analytics-campaign-tbody">
+                  <!-- Rendered dynamically -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- 14. TEAM VIEW -->
+        <section id="view-team" class="view-panel">
+          <div class="flex items-center justify-between" style="margin-bottom: 20px;">
+            <div>
+              <h2>Team & Role-Based Access Control (RBAC)</h2>
+              <p style="color: var(--text-secondary); font-size: 13.5px;">Manage users, sales agents, and granular workspace permissions (Owner, Admin, Manager, Agent, Viewer).</p>
+            </div>
+            <button id="invite-team-member-btn" class="btn btn-primary btn-sm">
+              + Invite Member
+            </button>
+          </div>
+
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>User</th>
+                  <th>Role</th>
+                  <th>Status</th>
+                  <th>Assigned Leads</th>
+                  <th>Last Active</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="team-members-tbody">
+                <!-- Rendered dynamically -->
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- 15. BILLING & USAGE VIEW -->
+        <section id="view-billing" class="view-panel">
+          <div class="flex items-center justify-between" style="margin-bottom: 20px;">
+            <div>
+              <h2>Subscription Billing & Metered Usage</h2>
+              <p style="color: var(--text-secondary); font-size: 13.5px;">Monitor monthly lead quotas, WhatsApp message credits, and upgrade subscription tier.</p>
+            </div>
+          </div>
+
+          <!-- Usage Meter Card -->
+          <div class="card" style="margin-bottom: 24px;">
+            <div class="flex items-center justify-between" style="margin-bottom: 14px;">
+              <h3>Live Metered Resource Usage</h3>
+              <span id="billing-current-plan-badge" class="badge badge-whatsapp">Scale Plan</span>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+              <div>
+                <div class="flex items-center justify-between" style="font-size: 12px; margin-bottom: 6px;">
+                  <span style="color: var(--text-secondary);">Lead Storage Quota</span>
+                  <span id="billing-lead-usage-text" style="font-weight: 700;">1,284 / 25,000</span>
+                </div>
+                <div style="width: 100%; height: 8px; background: var(--bg-tertiary); border-radius: var(--radius-full); overflow: hidden;">
+                  <div id="billing-lead-bar" style="width: 12%; height: 100%; background: var(--brand-whatsapp);"></div>
+                </div>
+              </div>
+
+              <div>
+                <div class="flex items-center justify-between" style="font-size: 12px; margin-bottom: 6px;">
+                  <span style="color: var(--text-secondary);">WhatsApp Message Credits</span>
+                  <span id="billing-msg-usage-text" style="font-weight: 700;">1,420 / 10,000</span>
+                </div>
+                <div style="width: 100%; height: 8px; background: var(--bg-tertiary); border-radius: var(--radius-full); overflow: hidden;">
+                  <div id="billing-msg-bar" style="width: 14%; height: 100%; background: #6366f1;"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Pricing Tiers Grid -->
+          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px;">
+            <!-- Starter Plan -->
+            <div class="card billing-plan-card" data-tier="starter">
+              <div style="font-weight: 700; font-size: 18px; margin-bottom: 4px;">Starter</div>
+              <div style="font-size: 26px; font-weight: 800; color: var(--text-primary); margin-bottom: 12px;">₹1,999 <span style="font-size: 13px; color: var(--text-muted); font-weight: 400;">/ month</span></div>
+              <ul style="list-style: none; padding: 0; font-size: 12.5px; color: var(--text-secondary); display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px;">
+                <li>✓ 1,000 Leads Quota</li>
+                <li>✓ 1 WhatsApp Connection</li>
+                <li>✓ Standard Follow-Up Sequences</li>
+                <li>✓ CSV/Excel Import</li>
+              </ul>
+              <button class="btn btn-primary w-full billing-upgrade-btn" data-tier="starter">Select Starter</button>
+            </div>
+
+            <!-- Growth Plan -->
+            <div class="card billing-plan-card" data-tier="growth">
+              <div style="font-weight: 700; font-size: 18px; margin-bottom: 4px; color: #a78bfa;">Growth</div>
+              <div style="font-size: 26px; font-weight: 800; color: var(--text-primary); margin-bottom: 12px;">₹4,999 <span style="font-size: 13px; color: var(--text-muted); font-weight: 400;">/ month</span></div>
+              <ul style="list-style: none; padding: 0; font-size: 12.5px; color: var(--text-secondary); display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px;">
+                <li>✓ 5,000 Leads Quota</li>
+                <li>✓ AI Sales Agent Auto-Replies</li>
+                <li>✓ Multilingual AI Message Composer</li>
+                <li>✓ Up to 5 Team Members</li>
+              </ul>
+              <button class="btn btn-primary w-full billing-upgrade-btn" data-tier="growth">Select Growth</button>
+            </div>
+
+            <!-- Scale Plan -->
+            <div class="card billing-plan-card" data-tier="scale" style="border-color: var(--brand-whatsapp);">
+              <div style="font-weight: 700; font-size: 18px; margin-bottom: 4px; color: var(--brand-whatsapp);">Scale</div>
+              <div style="font-size: 26px; font-weight: 800; color: var(--text-primary); margin-bottom: 12px;">₹9,999 <span style="font-size: 13px; color: var(--text-muted); font-weight: 400;">/ month</span></div>
+              <ul style="list-style: none; padding: 0; font-size: 12.5px; color: var(--text-secondary); display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px;">
+                <li>✓ 25,000 Leads Quota</li>
+                <li>✓ Visual Workflow Automation Builder</li>
+                <li>✓ Multiple WhatsApp WABA Numbers</li>
+                <li>✓ Unlimited Team Members & RBAC</li>
+                <li>✓ REST API & Webhooks</li>
+              </ul>
+              <button class="btn btn-secondary w-full billing-upgrade-btn" data-tier="scale" disabled>Current Active Plan</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- 16. SETTINGS & AUDIT LOGS VIEW -->
+        <section id="view-settings" class="view-panel">
+          <div class="flex items-center justify-between" style="margin-bottom: 20px;">
+            <div>
+              <h2>Organization Settings &amp; Configuration</h2>
+              <p style="color: var(--text-secondary); font-size: 13.5px;">Configure business metadata, secure integration credentials, export data backups, and inspect complete action logs.</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <button id="export-backup-btn" class="btn btn-secondary btn-sm">
+                💾 Export JSON Backup
+              </button>
+              <button id="reset-demo-data-btn" class="btn btn-outline btn-sm" style="color: var(--status-danger);">
+                Reset Demo Dataset
+              </button>
+            </div>
+          </div>
+
+          <!-- Tabs Row -->
+          <div class="settings-tabs">
+            <button class="settings-tab-btn active" data-tab="integrations">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2 2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+              Integrations &amp; API Keys
+            </button>
+            <button class="settings-tab-btn" data-tab="profile">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 1 0-16 0"/></svg>
+              Business Profile
+            </button>
+            <button class="settings-tab-btn" data-tab="audit">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              Audit Trail
+            </button>
+          </div>
+
+          <!-- TAB: Integrations (default active) -->
+          <div id="settings-tab-integrations" class="settings-tab-panel active">
+            <div id="integrations-server-banner" style="display:none;" class="integration-help-text" style="margin-bottom: 16px;"></div>
+            <div class="integrations-grid" id="integrations-cards-grid"></div>
+          </div>
+
+          <!-- TAB: Business Profile -->
+          <div id="settings-tab-profile" class="settings-tab-panel">
+            <div class="card" style="margin-bottom: 24px;">
+              <h3 style="margin-bottom: 14px;">Business Profile Details</h3>
+              <form id="settings-business-form">
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-bottom: 16px;">
+                  <div class="form-group" style="margin-bottom: 0;">
+                    <label class="form-label">Organization Name</label>
+                    <input type="text" id="settings-org-name" class="form-input">
+                  </div>
+                  <div class="form-group" style="margin-bottom: 0;">
+                    <label class="form-label">Industry</label>
+                    <input type="text" id="settings-org-industry" class="form-input">
+                  </div>
+                  <div class="form-group" style="margin-bottom: 0;">
+                    <label class="form-label">Website</label>
+                    <input type="text" id="settings-org-website" class="form-input">
+                  </div>
+                  <div class="form-group" style="margin-bottom: 0;">
+                    <label class="form-label">Location</label>
+                    <input type="text" id="settings-org-location" class="form-input">
+                  </div>
+                  <div class="form-group" style="margin-bottom: 0;">
+                    <label class="form-label">Timezone</label>
+                    <input type="text" id="settings-org-timezone" class="form-input">
+                  </div>
+                </div>
+                <button type="submit" class="btn btn-primary btn-sm">Save Profile Changes</button>
+              </form>
+            </div>
+          </div>
+
+          <!-- TAB: Audit Trail -->
+          <div id="settings-audit-tab-panel" class="settings-tab-panel">
+            <div class="card">
+              <h3 style="margin-bottom: 14px;">System Audit Trail &amp; Observability Logs</h3>
+              <div class="table-container">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Timestamp</th>
+                      <th>Action</th>
+                      <th>Entity / Target</th>
+                      <th>Actor</th>
+                      <th>Status</th>
+                      <th>Details</th>
+                    </tr>
+                  </thead>
+                  <tbody id="settings-audit-logs-tbody">
+                    <!-- Rendered dynamically -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
+
+      </main>
+    </div>
+
+    <!-- Slide-Over Lead Detail Drawer -->
+    <div id="lead-drawer-backdrop" class="drawer-backdrop"></div>
+    <div id="lead-detail-drawer" class="drawer-panel">
+      <div class="drawer-header">
+        <div>
+          <div style="font-size: 16px; font-weight: 700;" id="drawer-contact-name">Lead Name</div>
+          <div style="font-size: 12px; color: var(--text-muted);" id="drawer-job-title">Job Title</div>
+        </div>
+        <button id="close-lead-drawer-btn" class="btn btn-secondary btn-icon btn-sm">✕</button>
+      </div>
+
+      <div class="drawer-content">
+        <div class="card" style="margin-bottom: 16px;">
+          <div class="flex items-center justify-between" style="margin-bottom: 10px;">
+            <div style="font-weight: 700;" id="drawer-company">Company Name</div>
+            <span id="drawer-score-badge" class="badge badge-hot">Score: 94/100 (HOT)</span>
+          </div>
+          <div style="font-size: 12.5px; color: var(--text-secondary); display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+            <div>Phone: <strong id="drawer-phone" class="font-mono"></strong></div>
+            <div>Email: <strong id="drawer-email"></strong></div>
+            <div>Location: <strong id="drawer-location"></strong></div>
+            <div>Industry: <strong id="drawer-industry"></strong></div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-bottom: 16px; background: rgba(139, 92, 246, 0.06); border-color: rgba(139, 92, 246, 0.3);">
+          <div style="font-weight: 700; color: #a78bfa; margin-bottom: 4px; font-size: 12.5px;">AI Assessment & Strategy</div>
+          <div style="font-size: 13px; color: var(--text-primary);" id="drawer-ai-summary"></div>
+        </div>
+
+        <div class="form-group" style="margin-bottom: 16px;">
+          <label class="form-label">Pipeline Stage</label>
+          <select id="drawer-status-select" class="form-select"></select>
+        </div>
+
+        <div style="font-weight: 700; font-size: 13px; margin-bottom: 10px;">Interaction Timeline</div>
+        <div class="timeline-list" id="drawer-timeline-list" style="margin-bottom: 20px;"></div>
+
+        <div style="font-weight: 700; font-size: 13px; margin-bottom: 8px;">Notes & Observations</div>
+        <div id="drawer-notes-display" style="padding: 10px; background: var(--bg-tertiary); border-radius: 8px; font-size: 12px; color: var(--text-secondary); margin-bottom: 12px; white-space: pre-line;"></div>
+
+        <form id="drawer-add-note-form">
+          <textarea id="drawer-new-note-input" class="form-textarea" style="min-height: 60px;" placeholder="Add private note..."></textarea>
+          <button type="submit" class="btn btn-secondary btn-sm" style="margin-top: 6px;">Add Note</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Organization Switch Modal -->
+    <div id="org-switch-modal" class="modal-backdrop">
+      <div class="modal-dialog" style="max-width: 440px;">
+        <div class="modal-header">
+          <h3>Switch Workspace</h3>
+          <button class="btn btn-secondary btn-icon btn-sm" data-close-modal>✕</button>
+        </div>
+        <div class="modal-body">
+          <div style="display: flex; flex-direction: column; gap: 10px;">
+            <div class="card org-switch-item" data-org-id="org_nexus_01" style="cursor: pointer;">
+              <div style="font-weight: 700; color: var(--text-primary);">Nexus Growth Labs</div>
+              <div style="font-size: 12px; color: var(--brand-whatsapp);">Scale Plan · Chennai (Primary)</div>
+            </div>
+            <div class="card org-switch-item" data-org-id="org_kerala_dental" style="cursor: pointer;">
+              <div style="font-weight: 700; color: var(--text-primary);">Malabar Dental Network</div>
+              <div style="font-size: 12px; color: #a78bfa;">Growth Plan · Kochi, Kerala</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- New Campaign Modal -->
+    <div id="new-campaign-modal" class="modal-backdrop">
+      <div class="modal-dialog">
+        <div class="modal-header">
+          <h3>Create WhatsApp Campaign</h3>
+          <button class="btn btn-secondary btn-icon btn-sm" data-close-modal>✕</button>
+        </div>
+        <form id="new-campaign-form">
+          <div class="modal-body">
+            <div class="form-group">
+              <label class="form-label">Campaign Name</label>
+              <input type="text" id="camp-name-input" class="form-input" value="Kerala Clinics WhatsApp Outreach" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Approved WhatsApp Template</label>
+              <select id="camp-template-select" class="form-select"></select>
+            </div>
+            <div id="camp-template-preview-box" style="margin-bottom: 14px;"></div>
+            <div class="form-group">
+              <label class="form-label">Safe Daily Sending Limit (Compliance Rule)</label>
+              <input type="number" id="camp-daily-limit" class="form-input" value="150">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Sending Hours Window</label>
+              <input type="text" id="camp-window-hours" class="form-input" value="09:30 AM - 06:30 PM IST">
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-close-modal>Cancel</button>
+            <button type="submit" class="btn btn-primary">Queue & Launch Campaign</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Manual Lead Creation Modal -->
+    <div id="manual-lead-modal" class="modal-backdrop">
+      <div class="modal-dialog">
+        <div class="modal-header">
+          <h3>Create Lead Manually</h3>
+          <button class="btn btn-secondary btn-icon btn-sm" data-close-modal>✕</button>
+        </div>
+        <form id="manual-lead-form">
+          <div class="modal-body">
+            <div class="form-group">
+              <label class="form-label">Company Name *</label>
+              <input type="text" id="man-company" class="form-input" required placeholder="e.g. Apex Health Clinic">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Contact Name *</label>
+              <input type="text" id="man-name" class="form-input" required placeholder="e.g. Dr. Anil Kumar">
+            </div>
+            <div class="form-group">
+              <label class="form-label">WhatsApp Phone Number *</label>
+              <input type="text" id="man-phone" class="form-input" required placeholder="e.g. +91 98401 99887">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Email Address</label>
+              <input type="email" id="man-email" class="form-input" placeholder="e.g. anil@apexhealth.com">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Industry</label>
+              <input type="text" id="man-industry" class="form-input" value="Healthcare & Dental">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Location</label>
+              <input type="text" id="man-location" class="form-input" value="Kochi, Kerala, India">
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-close-modal>Cancel</button>
+            <button type="submit" class="btn btn-primary">Score & Add Lead</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Meta OAuth Modal -->
+    <div id="meta-oauth-modal" class="modal-backdrop">
+      <div class="modal-dialog" style="max-width: 520px;">
+        <div class="modal-header">
+          <div class="flex items-center gap-2">
+            <div style="width: 28px; height: 28px; background: #1877f2; border-radius: 6px; color: white; display: flex; align-items: center; justify-content: center; font-weight: 800;">f</div>
+            <h3>Meta WhatsApp Business Connection</h3>
+          </div>
+          <button class="btn btn-secondary btn-icon btn-sm" data-close-modal>✕</button>
+        </div>
+        <div class="modal-body">
+          <!-- Connection Mode Switcher -->
+          <div class="settings-tabs" style="margin-bottom: 16px; width: 100%; display: flex; background: var(--bg-tertiary); padding: 4px; border-radius: var(--radius-md);">
+            <button type="button" class="settings-tab-btn active" id="meta-btn-mode-token" style="flex: 1; justify-content: center; padding: 6px 10px; font-size: 11.5px;">
+              🔑 Permanent Token
+            </button>
+            <button type="button" class="settings-tab-btn" id="meta-btn-mode-real" style="flex: 1; justify-content: center; padding: 6px 10px; font-size: 11.5px;">
+              🌐 FB Login Popup
+            </button>
+            <button type="button" class="settings-tab-btn" id="meta-btn-mode-sim" style="flex: 1; justify-content: center; padding: 6px 10px; font-size: 11.5px;">
+              🧪 Simulation
+            </button>
+          </div>
+
+          <!-- Section A: Permanent System User Access Token (Recommended) -->
+          <div id="meta-section-token">
+            <div style="padding: 10px 12px; background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: var(--radius-md); font-size: 12px; color: var(--text-secondary); margin-bottom: 14px;">
+              💡 <strong>Recommended for Cloud API</strong>: Generate a permanent System User token from <a href="https://business.facebook.com/settings/system-users" target="_blank" rel="noopener" style="color: var(--brand-whatsapp); font-weight: 600;">Meta Business Manager →</a>. Bypasses browser HTTPS/domain restrictions.
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Meta Permanent Access Token (or Test Token) *</label>
+              <input type="password" id="meta-token-input" class="form-input" placeholder="EAAG..." autocomplete="off">
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">WhatsApp Phone Number ID *</label>
+              <input type="text" id="meta-phone-id-input" class="form-input" placeholder="e.g. 104829104829104">
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">WhatsApp Business Account (WABA) ID (Optional)</label>
+              <input type="text" id="meta-waba-id-input" class="form-input" placeholder="e.g. 294810482910482">
+            </div>
+
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="form-label">Display Phone Number</label>
+              <input type="text" id="meta-display-phone-input" class="form-input" placeholder="e.g. +91 98401 23456">
+            </div>
+
+            <div id="meta-token-status-msg" style="font-size: 12px; color: var(--text-muted); text-align: center; margin-top: 10px; font-weight: 600; display: none;"></div>
+          </div>
+
+          <!-- Section B: Real FB Login Popup OAuth -->
+          <div id="meta-section-real" style="display: none;">
+            <p style="font-size: 12.5px; color: var(--text-secondary); margin-bottom: 12px;">
+              Requires an HTTPS domain registered in your Meta App settings under <strong>App Domains</strong> &amp; <strong>OAuth Redirect URIs</strong>.
+            </p>
+            
+            <div class="form-group">
+              <label class="form-label">Meta App ID (Client ID) *</label>
+              <input type="text" id="meta-real-app-id" class="form-input" placeholder="e.g. 1480548923617105" value="1480548923617105">
+            </div>
+
+            <!-- Login with Facebook button -->
+            <button type="button" id="meta-real-login-btn" class="btn btn-primary w-full" style="background: #1877f2; border-color: #1877f2; display: flex; align-items: center; justify-content: center; gap: 8px; font-weight: 700; margin-bottom: 14px;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+              Log in with Facebook
+            </button>
+
+            <!-- Real accounts and phone selectors (hidden until authorized) -->
+            <div id="meta-real-details-container" style="display: none;">
+              <div class="form-group">
+                <label class="form-label">Select Business Account</label>
+                <select id="meta-real-business-select" class="form-select">
+                  <option value="">-- Choose Business Account --</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Select WhatsApp Business Account (WABA)</label>
+                <select id="meta-real-waba-select" class="form-select">
+                  <option value="">-- Choose WABA Account --</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Select Verified Phone Number</label>
+                <select id="meta-real-phone-select" class="form-select">
+                  <option value="">-- Choose Phone Number --</option>
+                </select>
+              </div>
+            </div>
+            <div id="meta-real-status-msg" style="font-size: 12px; color: var(--text-muted); text-align: center; margin-top: 8px; font-weight: 600; display: none;"></div>
+          </div>
+
+          <!-- Section C: Simulated -->
+          <div id="meta-section-simulated" style="display: none;">
+            <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 14px;">
+              Select a pre-configured mock WABA to test campaigns and triggers immediately in the local sandbox:
+            </p>
+            <div class="form-group">
+              <label class="form-label">Mock Business Portfolio</label>
+              <select id="meta-waba-select" class="form-select">
+                <option value="Nexus Growth Labs Portfolio (Verified)">Nexus Growth Labs Portfolio (Verified)</option>
+                <option value="Malabar Health Enterprises">Malabar Health Enterprises</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Mock Phone Number</label>
+              <select id="meta-phone-select" class="form-select">
+                <option value="+91 98401 23456">+91 98401 23456 (Tier-3 Approved · 1,000 msg/s)</option>
+                <option value="+91 94471 88990">+91 94471 88990 (Tier-2 Approved)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-close-modal>Cancel</button>
+          <button type="button" id="meta-oauth-submit-btn" class="btn btn-primary">Connect &amp; Authorize</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Import Summary Modal -->
+    <div id="import-summary-modal" class="modal-backdrop">
+      <div class="modal-dialog">
+        <div class="modal-header">
+          <h3>Lead Import & Deduplication Summary</h3>
+          <button class="btn btn-secondary btn-icon btn-sm" data-close-modal>✕</button>
+        </div>
+        <div class="modal-body" id="import-summary-content"></div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-close-modal>Cancel</button>
+          <button type="button" id="confirm-import-btn" class="btn btn-primary">Confirm & Import to CRM</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Workflow Execution Log Modal -->
+    <div id="workflow-execution-modal" class="modal-backdrop">
+      <div class="modal-dialog">
+        <div class="modal-header">
+          <h3>Workflow Live Execution Tracer</h3>
+          <button class="btn btn-secondary btn-icon btn-sm" data-close-modal>✕</button>
+        </div>
+        <div class="modal-body" id="workflow-execution-log-body"></div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-close-modal>Close</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 7-Step Onboarding Wizard Modal -->
+    <div id="onboarding-wizard-modal" class="modal-backdrop">
+      <div class="modal-dialog" style="max-width: 620px;">
+        <div class="modal-header">
+          <div>
+            <h3 id="onboarding-step-title">Step 1: Set Up Business Profile</h3>
+            <div id="onboarding-step-count" style="font-size: 11px; color: var(--brand-whatsapp); font-weight: 700;">Step 1 of 7</div>
+          </div>
+          <button class="btn btn-secondary btn-icon btn-sm" data-close-modal>✕</button>
+        </div>
+        <div style="height: 4px; background: var(--bg-tertiary); width: 100%;">
+          <div id="onboarding-progress-bar" style="height: 100%; width: 14%; background: var(--brand-whatsapp); transition: width 0.3s ease;"></div>
+        </div>
+        <div class="modal-body">
+          <p id="onboarding-step-desc" style="font-size: 13px; color: var(--text-secondary); margin-bottom: 16px;"></p>
+          <div id="onboarding-step-body"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" id="onboarding-prev-btn" class="btn btn-secondary" style="display: none;">← Previous</button>
+          <button type="button" id="onboarding-next-btn" class="btn btn-primary">Next Step →</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- New Template Modal -->
+    <div id="new-template-modal" class="modal-backdrop">
+      <div class="modal-dialog">
+        <div class="modal-header">
+          <h3>Register WhatsApp Template</h3>
+          <button class="btn btn-secondary btn-icon btn-sm" data-close-modal>✕</button>
+        </div>
+        <form id="new-template-form">
+          <div class="modal-body">
+            <div class="form-group">
+              <label class="form-label">Template Name (Lowercase & Underscores)</label>
+              <input type="text" id="new-tmpl-name" class="form-input" value="special_hospitality_promo_v1" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Category</label>
+              <select id="new-tmpl-category" class="form-select">
+                <option value="MARKETING">MARKETING</option>
+                <option value="UTILITY">UTILITY</option>
+                <option value="AUTHENTICATION">AUTHENTICATION</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Language</label>
+              <input type="text" id="new-tmpl-language" class="form-input" value="English (en_US)">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Message Body with Tokens (e.g. {{first_name}}, {{company_name}})</label>
+              <textarea id="new-tmpl-body" class="form-textarea">Hi {{first_name}}, noticed {{company_name}}! Would you like to automate direct customer bookings on WhatsApp?</textarea>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-close-modal>Cancel</button>
+            <button type="submit" class="btn btn-primary">Submit for Meta Approval</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Invite Team Member Modal -->
+    <div id="invite-member-modal" class="modal-backdrop">
+      <div class="modal-dialog" style="max-width: 460px;">
+        <div class="modal-header">
+          <h3>Invite Team Member</h3>
+          <button class="btn btn-secondary btn-icon btn-sm" data-close-modal>✕</button>
+        </div>
+        <form id="invite-member-form">
+          <div class="modal-body">
+            <div class="form-group">
+              <label class="form-label">Full Name</label>
+              <input type="text" id="invite-member-name" class="form-input" required placeholder="e.g. Rohith Sharma">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Email Address</label>
+              <input type="email" id="invite-member-email" class="form-input" required placeholder="e.g. rohith@company.io">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Role</label>
+              <select id="invite-member-role" class="form-select">
+                <option value="Admin">Admin (Full Control)</option>
+                <option value="Manager">Manager (Campaigns & CRM)</option>
+                <option value="Sales Agent" selected>Sales Agent (Inbox & Leads)</option>
+                <option value="Viewer">Viewer (Read-Only Analytics)</option>
+              </select>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-close-modal>Cancel</button>
+            <button type="submit" class="btn btn-primary">Send Invitation</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Scripts -->
+  <script src="js/demo-data.js"></script>
+  <script src="js/state.js"></script>
+  <script src="js/services/supabase-config.js"></script>
+  <script src="js/services/ai-service.js"></script>
+  <script src="js/services/whatsapp-service.js"></script>
+  <script src="js/services/automation-engine.js"></script>
+  <script src="js/services/storage.js"></script>
+  
+  <script src="js/components/navigation.js"></script>
+  <script src="js/components/dashboard.js"></script>
+  <script src="js/components/discovery.js"></script>
+  <script src="js/components/lead-import.js"></script>
+  <script src="js/components/crm.js"></script>
+  <script src="js/components/whatsapp-connect.js"></script>
+  <script src="js/components/campaigns.js"></script>
+  <script src="js/components/ai-generator.js"></script>
+  <script src="js/components/followups.js"></script>
+  <script src="js/components/ai-agent.js"></script>
+  <script src="js/components/workflow-builder.js"></script>
+  <script src="js/components/inbox.js"></script>
+  <script src="js/components/templates.js"></script>
+  <script src="js/components/analytics.js"></script>
+  <script src="js/components/team.js"></script>
+  <script src="js/components/settings.js"></script>
+  <script src="js/components/settings-integrations.js"></script>
+  <script src="js/components/billing.js"></script>
+  <script src="js/components/onboarding.js"></script>
+  
+  <script src="js/app.js"></script>
+</body>
+</html>
