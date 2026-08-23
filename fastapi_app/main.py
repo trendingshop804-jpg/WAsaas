@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -34,6 +34,10 @@ def get_db():
         yield db
     finally:
         db.close()
+
+@app.post("/api/github-webhook")
+async def github_webhook(request: Request):
+    return {"status": "ok"}
 
 @app.get("/health-report")
 def health_report(db: Session = Depends(get_db)):
