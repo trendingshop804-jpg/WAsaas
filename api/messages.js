@@ -18,7 +18,7 @@ export default async function handler(req, res) {
   try {
     const { data, error } = await supabase
       .from('messages')
-      .select('id, sender_number, content, message_type, direction, payload, received_at')
+      .select('id, sender_number, content, message_type, direction, received_at')
       .order('received_at', { ascending: false })
       .limit(50);
 

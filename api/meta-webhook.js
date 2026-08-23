@@ -45,7 +45,6 @@ export default async function handler(req, res) {
             content: bodyText || 'Inbound message',
             message_type: msg.type || 'text',
             direction: 'inbound',
-            payload: payload,
             received_at: new Date().toISOString(),
           });
 
