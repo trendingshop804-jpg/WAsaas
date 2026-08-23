@@ -25,6 +25,11 @@ document.addEventListener('DOMContentLoaded', () => {
   if (window.billingComponent) window.billingComponent.init();
   if (window.onboardingComponent) window.onboardingComponent.init();
 
+  // Start real-time inbound message synchronization from Supabase
+  if (window.whatsappService && window.whatsappService.startInboundPolling) {
+    window.whatsappService.startInboundPolling(4000);
+  }
+
   // Generic modal close handlers
   document.querySelectorAll('.modal-backdrop').forEach(modal => {
     modal.addEventListener('click', (e) => {

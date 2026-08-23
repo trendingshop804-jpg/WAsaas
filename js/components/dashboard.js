@@ -12,6 +12,7 @@ class DashboardComponent {
     window.appState.on('*', () => {
       this.renderMetrics();
       this.renderFunnel();
+      this.renderActivityStream();
     });
   }
 

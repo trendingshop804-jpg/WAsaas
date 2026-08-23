@@ -304,6 +304,123 @@ class WhatsAppService {
     window.appState.saveState();
     window.appState.emit('inboundReceived', { message: inMsg, leadId });
   }
+
+  // Real-time Supabase Inbound Message Synchronization
+  async syncInboundMessagesFromSupabase() {
+    try {
+      const res = await fetch('/api/messages');
+      if (!res.ok) return;
+      const data = await res.json();
+      if (!data.messages || !Array.isArray(data.messages)) return;
+
+      const leads = window.appState.get('leads') || [];
+      const conversations = window.appState.get('conversations') || [];
+      let stateChanged = false;
+
+      if (!this.processedMsgIds) {
+        this.processedMsgIds = new Set();
+      }
+
+      for (const msg of data.messages) {
+        const msgId = msg.id || `${msg.sender_number}_${msg.received_at}`;
+        if (this.processedMsgIds.has(msgId)) continue;
+        this.processedMsgIds.add(msgId);
+
+        const senderRaw = String(msg.sender_number || '');
+        const senderClean = senderRaw.replace(/[^0-9]/g, '');
+        if (!senderClean) continue;
+
+        const text = msg.content || '[Inbound WhatsApp Message]';
+
+        // Match existing lead by phone
+        let lead = leads.find(l => {
+          const lPhoneClean = String(l.phone || '').replace(/[^0-9]/g, '');
+          return lPhoneClean && (lPhoneClean.endsWith(senderClean) || senderClean.endsWith(lPhoneClean));
+        });
+
+        if (!lead) {
+          lead = {
+            id: 'lead_in_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+            contactName: `WhatsApp Contact (+${senderClean})`,
+            companyName: 'Inbound WhatsApp',
+            phone: senderRaw.startsWith('+') ? senderRaw : `+${senderClean}`,
+            email: '',
+            location: 'WhatsApp Webhook',
+            status: 'Replied',
+            score: 75,
+            scoreCategory: 'warm',
+            source: 'Meta Webhook',
+            lastContacted: msg.received_at || new Date().toISOString(),
+            aiSummary: 'Received real inbound message via WhatsApp webhook.'
+          };
+          leads.unshift(lead);
+          window.appState.set('leads', leads);
+        } else {
+          if (lead.status === 'New' || lead.status === 'Contacted') {
+            lead.status = 'Replied';
+          }
+          lead.lastContacted = msg.received_at || new Date().toISOString();
+        }
+
+        let conv = conversations.find(c => c.leadId === lead.id);
+        const formattedTime = new Date(msg.received_at || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+        const inMsg = {
+          id: 'm_sb_' + msgId,
+          sender: msg.direction === 'outbound' ? 'outbound' : 'inbound',
+          text,
+          timestamp: formattedTime
+        };
+
+        if (!conv) {
+          conv = {
+            id: 'conv_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+            leadId: lead.id,
+            leadName: lead.contactName,
+            company: lead.companyName,
+            phone: lead.phone,
+            unreadCount: 1,
+            mode: 'AI',
+            status: 'AI Active',
+            lastMessage: text,
+            lastTimestamp: formattedTime,
+            messages: [inMsg],
+            aiSuggestions: window.aiService ? window.aiService.suggestReplies({ messages: [inMsg] }) : []
+          };
+          conversations.unshift(conv);
+        } else {
+          if (!conv.messages.some(m => m.id === inMsg.id || (m.text === text && m.timestamp === formattedTime))) {
+            conv.messages.push(inMsg);
+            conv.lastMessage = text;
+            conv.lastTimestamp = formattedTime;
+            if (msg.direction !== 'outbound') {
+              conv.unreadCount = (conv.unreadCount || 0) + 1;
+            }
+          }
+        }
+
+        stateChanged = true;
+        window.appState.addAuditLog('Inbound Webhook Synced', lead.contactName, text, 'Success');
+      }
+
+      if (stateChanged) {
+        window.appState.saveState();
+        window.appState.emit('inboundReceived', {});
+        window.appState.emit('leads', leads);
+        window.appState.emit('conversations', conversations);
+        window.appState.emit('*', { key: 'inboundSync' });
+      }
+    } catch (err) {
+      console.warn('Failed syncing Supabase inbound messages:', err);
+    }
+  }
+
+  startInboundPolling(intervalMs = 4000) {
+    this.syncInboundMessagesFromSupabase();
+    if (!this.pollingInterval) {
+      this.pollingInterval = setInterval(() => this.syncInboundMessagesFromSupabase(), intervalMs);
+    }
+  }
 }
 
 window.whatsappService = new WhatsAppService();

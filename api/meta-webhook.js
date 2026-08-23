@@ -29,9 +29,20 @@ export default async function handler(req, res) {
 
       if (messages && messages.length > 0) {
         for (const msg of messages) {
+          let bodyText = msg.text?.body;
+          if (!bodyText && msg.interactive) {
+            bodyText = msg.interactive.button_reply?.title || msg.interactive.list_reply?.title;
+          }
+          if (!bodyText && msg.button) {
+            bodyText = msg.button.text;
+          }
+          if (!bodyText && msg.type) {
+            bodyText = `[${msg.type.toUpperCase()} message]`;
+          }
+
           const { error } = await supabase.from('messages').insert({
             sender_number: msg.from,
-            content: msg.text?.body || null,
+            content: bodyText || 'Inbound message',
             message_type: msg.type || 'text',
             direction: 'inbound',
             payload: payload,
