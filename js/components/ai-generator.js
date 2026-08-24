@@ -5,6 +5,7 @@
 class AIGeneratorComponent {
   init() {
     this.bindEvents();
+    this.bindPromptStudio();
   }
 
   bindEvents() {
@@ -22,6 +23,89 @@ class AIGeneratorComponent {
       copyBtn.addEventListener('click', () => this.saveGeneratedAsTemplate());
     }
   }
+
+  bindPromptStudio() {
+    const studioForm = document.getElementById('prompt-studio-form');
+    if (!studioForm) return;
+
+    studioForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      this.generateCustomSystemPrompt();
+    });
+
+    const copyBtn = document.getElementById('prompt-studio-copy-btn');
+    if (copyBtn) {
+      copyBtn.addEventListener('click', () => {
+        const code = document.getElementById('prompt-studio-code')?.textContent || '';
+        navigator.clipboard.writeText(code);
+        alert('Copied System Prompt to clipboard!');
+      });
+    }
+
+    const deployBtn = document.getElementById('prompt-studio-deploy-btn');
+    if (deployBtn) {
+      deployBtn.addEventListener('click', () => {
+        const code = document.getElementById('prompt-studio-code')?.textContent || '';
+        if (window.aiService) {
+          window.aiService.systemPrompt = code;
+          alert('Successfully deployed as Active System Prompt for OpenRouter AI Agent!');
+        }
+      });
+    }
+  }
+
+  generateCustomSystemPrompt() {
+    const biz = document.getElementById('studio-input-biz')?.value || 'Apex IT Services - Software & Tech';
+    const services = document.getElementById('studio-input-services')?.value || 'Websites, Custom SaaS, Cloud Infra, AI Automation';
+    const pricing = document.getElementById('studio-input-pricing')?.value || 'Scope-based Custom Pricing';
+    const lang = document.getElementById('studio-input-lang')?.value || 'English, Tamil, Malayalam';
+    const goal = document.getElementById('studio-input-goal')?.value || 'Book Google Meet & Collect Advance Payment';
+
+    const serviceList = services.split(',').map(s => `- ${s.trim()}: [${pricing}]`).join('\n');
+
+    const promptText = `SYSTEM_PROMPT = """
+=== 1. ROLE & IDENTITY ===
+You are a Senior Technical Sales Executive representing ${biz}.
+Your sole mission is to understand client requirements, demonstrate maximum business value, handle objections with precision, and CLOSE deals fast on WhatsApp.
+
+OUR SERVICES & OFFERINGS:
+${serviceList}
+
+=== 2. THINKING FRAMEWORK (INTERNAL EXECUTION) ===
+For every inbound customer message, process your response internally through these 3 steps:
+
+STEP A: UNDERSTAND
+- Identify client needs across services (${services}).
+- Detect customer language (${lang}) and respond in the EXACT same language naturally.
+
+STEP B: HANDLE OBJECTIONS
+- If "Costly": Position software & automation as a 24/7 asset that cuts operational costs and boosts revenue, not an expense.
+- If "Need Time": Offer a free demo / quick 5-min video, or create urgency with limited availability.
+
+STEP C: CLOSE
+- Primary Goal (${goal}):
+  1. Early Stage: Ask 1 qualifying question to capture project requirements.
+  2. Warm Stage: Propose a quick 15-minute Google Meet consultation call.
+  3. Hot Stage: Share booking link or advance invoice payment link to lock in the project.
+
+=== 3. STRICT OUTPUT CONSTRAINTS ===
+- Length: STRICTLY under 3 sentences (50 words max).
+- Tone: Professional, authoritative, and direct.
+- Formatting: Clean WhatsApp text with *bolding* on key metrics.
+- Closing CTA: ALWAYS end with a direct question.
+
+OUTPUT ONLY THE FINAL WHATSAPP MESSAGE TO THE CLIENT.
+"""`;
+
+    const codeEl = document.getElementById('prompt-studio-code');
+    const container = document.getElementById('prompt-studio-output');
+    if (codeEl && container) {
+      codeEl.textContent = promptText;
+      container.style.display = 'block';
+      container.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }
+
 
   async generateMessages() {
     const product = document.getElementById('ai-input-product')?.value || 'WhatsApp Sales Automation';
