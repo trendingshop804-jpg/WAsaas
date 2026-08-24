@@ -26,6 +26,9 @@ class StateStore {
             existing.wabaId = primaryOrg.wabaId;
           }
         }
+        if (parsed.leads && Array.isArray(parsed.leads)) {
+          parsed.leads = parsed.leads.filter(l => !l.id.startsWith('lead_00'));
+        }
         return { ...window.DEMO_DATA, ...parsed };
       } catch (e) {
         console.warn('Could not parse saved state, using demo data', e);
