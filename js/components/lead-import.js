@@ -48,6 +48,15 @@ class LeadImportComponent {
         this.handleManualLeadSubmit();
       });
     }
+
+    // CSV Mapping form submit button
+    const mappingForm = document.getElementById('csv-mapping-form');
+    if (mappingForm) {
+      mappingForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        this.submitMappedCSVImport();
+      });
+    }
   }
 
   handleFileSelected(e) {
@@ -61,38 +70,115 @@ class LeadImportComponent {
     const reader = new FileReader();
     reader.onload = (e) => {
       const text = e.target.result;
-      this.parseAndValidateCSV(text);
+      this.openCSVMappingModal(text);
     };
     reader.readAsText(file);
   }
 
-  parseAndValidateCSV(csvText) {
+  openCSVMappingModal(csvText) {
     const lines = csvText.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
     if (lines.length <= 1) {
       alert('CSV file appears to be empty or missing headers.');
       return;
     }
 
-    const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/['"]/g, ''));
+    const rawHeaders = lines[0].split(',').map(h => h.trim().replace(/^["'\r]+|["'\r]+$/g, ''));
     const rows = lines.slice(1);
 
-    // Smart column index detection with collision avoidance
-    const companyIdx = headers.findIndex(h => h.includes('company') || h.includes('business') || h.includes('org'));
-    const nameIdx = headers.findIndex(h => !h.includes('company') && !h.includes('business') && (h.includes('contact') || h.includes('name') || h.includes('owner') || h.includes('person')));
-    const phoneIdx = headers.findIndex(h => h.includes('phone') || h.includes('mobile') || h.includes('whatsapp') || h.includes('number') || h.includes('cell') || h.includes('tel'));
-    const emailIdx = headers.findIndex(h => h.includes('email') || h.includes('mail'));
-    const industryIdx = headers.findIndex(h => h.includes('industry') || h.includes('category') || h.includes('niche') || h.includes('vertical'));
-    const locationIdx = headers.findIndex(h => h.includes('location') || h.includes('city') || h.includes('state') || h.includes('address'));
-    const websiteIdx = headers.findIndex(h => h.includes('website') || h.includes('url') || h.includes('site') || h.includes('domain'));
+    this.currentCsvHeaders = rawHeaders;
+    this.currentCsvRows = rows;
 
-    const finalCompanyIdx = companyIdx !== -1 ? companyIdx : 0;
-    const finalNameIdx = nameIdx !== -1 ? nameIdx : 1;
-    const finalPhoneIdx = phoneIdx !== -1 ? phoneIdx : 2;
-    const finalEmailIdx = emailIdx !== -1 ? emailIdx : 3;
-    const finalIndustryIdx = industryIdx !== -1 ? industryIdx : 4;
-    const finalLocationIdx = locationIdx !== -1 ? locationIdx : 5;
-    const finalWebsiteIdx = websiteIdx !== -1 ? websiteIdx : 6;
+    const lowerHeaders = rawHeaders.map(h => h.toLowerCase());
 
+    // Auto-detect default indices
+    const companyIdx = lowerHeaders.findIndex(h => h.includes('company') || h.includes('business') || h.includes('org'));
+    const nameIdx = lowerHeaders.findIndex(h => !h.includes('company') && !h.includes('business') && (h.includes('contact') || h.includes('name') || h.includes('owner') || h.includes('person')));
+    const phoneIdx = lowerHeaders.findIndex(h => h.includes('phone') || h.includes('mobile') || h.includes('whatsapp') || h.includes('number') || h.includes('cell') || h.includes('tel'));
+    const emailIdx = lowerHeaders.findIndex(h => h.includes('email') || h.includes('mail'));
+    const industryIdx = lowerHeaders.findIndex(h => h.includes('industry') || h.includes('category') || h.includes('niche') || h.includes('vertical'));
+    const locationIdx = lowerHeaders.findIndex(h => h.includes('location') || h.includes('city') || h.includes('state') || h.includes('address'));
+    const websiteIdx = lowerHeaders.findIndex(h => h.includes('website') || h.includes('url') || h.includes('site') || h.includes('domain'));
+
+    const buildOptionsHtml = (selectedIdx) => {
+      let html = `<option value="-1">-- Ignore / None --</option>`;
+      rawHeaders.forEach((h, idx) => {
+        html += `<option value="${idx}" ${idx === selectedIdx ? 'selected' : ''}>Column ${idx + 1}: ${this.escapeHtml(h)}</option>`;
+      });
+      return html;
+    };
+
+    document.getElementById('map-col-company').innerHTML = buildOptionsHtml(companyIdx !== -1 ? companyIdx : 0);
+    document.getElementById('map-col-name').innerHTML = buildOptionsHtml(nameIdx !== -1 ? nameIdx : 1);
+    document.getElementById('map-col-phone').innerHTML = buildOptionsHtml(phoneIdx !== -1 ? phoneIdx : 2);
+    document.getElementById('map-col-email').innerHTML = buildOptionsHtml(emailIdx !== -1 ? emailIdx : 3);
+    document.getElementById('map-col-industry').innerHTML = buildOptionsHtml(industryIdx !== -1 ? industryIdx : 4);
+    document.getElementById('map-col-location').innerHTML = buildOptionsHtml(locationIdx !== -1 ? locationIdx : 5);
+    document.getElementById('map-col-website').innerHTML = buildOptionsHtml(websiteIdx !== -1 ? websiteIdx : 6);
+
+    const countEl = document.getElementById('csv-mapping-row-count');
+    if (countEl) countEl.textContent = `Total ${rows.length} rows detected`;
+
+    // Listen for select changes to update live preview
+    document.querySelectorAll('.csv-map-select').forEach(select => {
+      select.onchange = () => this.updateMappingPreview();
+    });
+
+    this.updateMappingPreview();
+
+    const modal = document.getElementById('csv-mapping-modal');
+    if (modal) modal.classList.add('active');
+  }
+
+  updateMappingPreview() {
+    const companyIdx = parseInt(document.getElementById('map-col-company')?.value ?? '0');
+    const nameIdx = parseInt(document.getElementById('map-col-name')?.value ?? '1');
+    const phoneIdx = parseInt(document.getElementById('map-col-phone')?.value ?? '2');
+    const emailIdx = parseInt(document.getElementById('map-col-email')?.value ?? '3');
+    const industryIdx = parseInt(document.getElementById('map-col-industry')?.value ?? '4');
+
+    const previewTbody = document.getElementById('csv-mapping-preview-tbody');
+    if (!previewTbody || !this.currentCsvRows) return;
+
+    const sampleRows = this.currentCsvRows.slice(0, 3);
+    previewTbody.innerHTML = sampleRows.map(row => {
+      const cols = row.split(',').map(c => c.trim().replace(/^["'\r]+|["'\r]+$/g, ''));
+      return `
+        <tr>
+          <td>${this.escapeHtml(companyIdx >= 0 ? cols[companyIdx] || '—' : '—')}</td>
+          <td>${this.escapeHtml(nameIdx >= 0 ? cols[nameIdx] || '—' : '—')}</td>
+          <td>${this.escapeHtml(phoneIdx >= 0 ? cols[phoneIdx] || '—' : '—')}</td>
+          <td>${this.escapeHtml(emailIdx >= 0 ? cols[emailIdx] || '—' : '—')}</td>
+          <td>${this.escapeHtml(industryIdx >= 0 ? cols[industryIdx] || '—' : '—')}</td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  submitMappedCSVImport() {
+    const modal = document.getElementById('csv-mapping-modal');
+    if (modal) modal.classList.remove('active');
+
+    const companyIdx = parseInt(document.getElementById('map-col-company')?.value ?? '0');
+    const nameIdx = parseInt(document.getElementById('map-col-name')?.value ?? '1');
+    const phoneIdx = parseInt(document.getElementById('map-col-phone')?.value ?? '2');
+    const emailIdx = parseInt(document.getElementById('map-col-email')?.value ?? '3');
+    const industryIdx = parseInt(document.getElementById('map-col-industry')?.value ?? '4');
+    const locationIdx = parseInt(document.getElementById('map-col-location')?.value ?? '5');
+    const websiteIdx = parseInt(document.getElementById('map-col-website')?.value ?? '6');
+
+    this.parseAndValidateCSVWithMapping({
+      companyIdx,
+      nameIdx,
+      phoneIdx,
+      emailIdx,
+      industryIdx,
+      locationIdx,
+      websiteIdx
+    });
+  }
+
+  parseAndValidateCSVWithMapping({ companyIdx, nameIdx, phoneIdx, emailIdx, industryIdx, locationIdx, websiteIdx }) {
+    const rows = this.currentCsvRows || [];
     const existingLeads = window.appState.get('leads') || [];
     const existingPhones = new Set(existingLeads.map(l => l.phone ? l.phone.replace(/\D/g, '') : ''));
     const existingEmails = new Set(existingLeads.map(l => (l.email || '').toLowerCase()));
@@ -105,18 +191,18 @@ class LeadImportComponent {
 
     rows.forEach(row => {
       const cols = row.split(',').map(c => c.trim().replace(/^["'\r]+|["'\r]+$/g, ''));
-      if (cols.length < 2) {
+      if (cols.length < 1) {
         invalid++;
         return;
       }
 
-      const companyName = cols[finalCompanyIdx] || cols[0] || 'Unknown Business';
-      const contactName = cols[finalNameIdx] || cols[1] || 'Owner';
-      let rawPhone = cols[finalPhoneIdx] || cols[2] || '';
-      const email = cols[finalEmailIdx] || cols[3] || '';
-      const industry = cols[finalIndustryIdx] || cols[4] || 'General';
-      const location = cols[finalLocationIdx] || cols[5] || 'India';
-      const website = cols[finalWebsiteIdx] || cols[6] || '';
+      const companyName = companyIdx >= 0 ? cols[companyIdx] || 'Unknown Business' : 'Unknown Business';
+      const contactName = nameIdx >= 0 ? cols[nameIdx] || 'Owner' : 'Owner';
+      let rawPhone = phoneIdx >= 0 ? cols[phoneIdx] || '' : '';
+      const email = emailIdx >= 0 ? cols[emailIdx] || '' : '';
+      const industry = industryIdx >= 0 ? cols[industryIdx] || 'General' : 'General';
+      const location = locationIdx >= 0 ? cols[locationIdx] || 'India' : 'India';
+      const website = websiteIdx >= 0 ? cols[websiteIdx] || '' : '';
 
       // Phone normalization & auto-detection across columns if needed
       let cleanPhoneDigits = rawPhone.replace(/\D/g, '');
