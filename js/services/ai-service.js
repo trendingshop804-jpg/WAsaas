@@ -50,33 +50,40 @@ OUTPUT ONLY THE FINAL WHATSAPP MESSAGE TO THE CLIENT.`;
   }
 
   // OpenRouter API Integration Engine
+  // Uses local key (config.js) if available, otherwise proxies through /api/ai-chat (Vercel)
   async callOpenRouter(prompt, systemPrompt = null, overrideModel = null) {
     const sysPrompt = systemPrompt || this.systemPrompt;
     const model = overrideModel || this.selectedModel;
 
-    if (!this.openRouterApiKey) {
-      throw new Error('OpenRouter API key is missing.');
-    }
+    const messages = [
+      { role: 'system', content: sysPrompt },
+      { role: 'user', content: prompt }
+    ];
+    const body = { model, messages, temperature: 0.7, max_tokens: 300 };
 
     try {
-      const response = await fetch(this.openRouterEndpoint, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${this.openRouterApiKey}`,
-          'HTTP-Referer': 'https://nexuslead.ai',
-          'X-Title': 'NexusLead AI Agent',
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          model: model,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: prompt }
-          ],
-          temperature: 0.7,
-          max_tokens: 300
-        })
-      });
+      let response;
+
+      if (this.openRouterApiKey) {
+        // Direct call using local key (local dev with js/config.js)
+        response = await fetch(this.openRouterEndpoint, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${this.openRouterApiKey}`,
+            'HTTP-Referer': 'https://nexuslead.ai',
+            'X-Title': 'NexusLead AI Agent',
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(body)
+        });
+      } else {
+        // Proxy call via Vercel serverless function (production / no local key)
+        response = await fetch('/api/ai-chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+      }
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -86,15 +93,14 @@ OUTPUT ONLY THE FINAL WHATSAPP MESSAGE TO THE CLIENT.`;
 
       const data = await response.json();
       const content = data?.choices?.[0]?.message?.content;
-      if (content) {
-        return content.trim();
-      }
+      if (content) return content.trim();
       throw new Error('Empty response from OpenRouter');
     } catch (err) {
       console.warn('[AIService] OpenRouter fallback triggered:', err.message);
       return null;
     }
   }
+
 
   // 1. Multilingual AI Message Generator
   async generateMessage({
