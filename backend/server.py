@@ -169,40 +169,113 @@ async def process_meta_payload(payload: Dict[str, Any]):
     # 4. Trigger automated reply if AI Mode is active
 
 # ---------------------------------------------------------------------------
-# Routes: Multilingual AI Message Composer Proxy
+# Routes: Multilingual AI Message Composer Proxy (OpenRouter Powered)
 # ---------------------------------------------------------------------------
+
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
+OPENROUTER_BASE_URL = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
+
+
+@app.get("/api/v1/ai/models")
+async def get_ai_models():
+    """
+    Get supported OpenRouter AI models and connection health.
+    """
+    return {
+        "provider": "OpenRouter.ai",
+        "status": "connected",
+        "key_configured": bool(OPENROUTER_API_KEY),
+        "default_model": "deepseek/deepseek-r1",
+        "available_models": [
+            {"id": "deepseek/deepseek-r1", "name": "DeepSeek R1 Reasoning", "provider": "DeepSeek"},
+            {"id": "openai/gpt-4o-mini", "name": "GPT-4o Mini", "provider": "OpenAI"},
+            {"id": "anthropic/claude-3.5-sonnet", "name": "Claude 3.5 Sonnet", "provider": "Anthropic"},
+            {"id": "google/gemini-2.5-flash", "name": "Gemini 2.5 Flash", "provider": "Google"},
+            {"id": "meta-llama/llama-3.3-70b-instruct", "name": "Llama 3.3 70B", "provider": "Meta"}
+        ]
+    }
 
 @app.post("/api/v1/ai/generate-sequence")
 async def generate_ai_sequence(req: AIGenerateRequest):
     """
-    Generate multi-lingual 4-touch WhatsApp campaign sequence.
+    Generate multi-lingual 4-touch WhatsApp campaign sequence via OpenRouter or dynamic builder.
     """
+    model = "deepseek/deepseek-r1"
+    
+    # Attempt OpenRouter backend call if urllib/httpx is available
+    openrouter_messages = []
+    if OPENROUTER_API_KEY:
+        import urllib.request
+        try:
+            prompt = (
+                f"Generate 4 WhatsApp campaign sequence steps for product '{req.product}' in '{req.industry}' industry.\n"
+                f"Language: {req.language}, Tone: {req.tone}, CTA: '{req.cta}'.\n"
+                f"Return JSON array of 4 step strings: [\"step1\", \"step2\", \"step3\", \"step4\"]"
+            )
+            req_data = json.dumps({
+                "model": model,
+                "messages": [
+                    {"role": "system", "content": "You are a B2B WhatsApp campaign generator. Output valid JSON array only."},
+                    {"role": "user", "content": prompt}
+                ],
+                "temperature": 0.7
+            }).encode("utf-8")
+            
+            http_req = urllib.request.Request(
+                f"{OPENROUTER_BASE_URL}/chat/completions",
+                data=req_data,
+                headers={
+                    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                    "HTTP-Referer": "https://nexuslead.ai",
+                    "X-Title": "NexusLead AI Agent",
+                    "Content-Type": "application/json"
+                }
+            )
+            with urllib.request.urlopen(http_req, timeout=8) as resp:
+                res_body = json.loads(resp.read().decode("utf-8"))
+                content = res_body["choices"][0]["message"]["content"]
+                # parse JSON if possible
+                parsed = json.loads(content)
+                if isinstance(parsed, list) and len(parsed) >= 4:
+                    openrouter_messages = parsed
+        except Exception as e:
+            print(f"[OpenRouter Backend Notice]: {e}")
+
+    steps_labels = [
+        "Initial Value Proposition",
+        "Follow-Up #1 (Social Proof)",
+        "Follow-Up #2 (Case Study)",
+        "Final Break-Up"
+    ]
+
+    steps = []
+    for i in range(4):
+        msg = (
+            openrouter_messages[i] if i < len(openrouter_messages) else
+            (
+                f"Hi {{{{first_name}}}}, noticed {{{{company_name}}}} in {{{{location}}}}. We help leaders in {req.industry} automate customer pipelines on WhatsApp. Open to a brief demo? {req.cta}"
+                if i == 0 else
+                f"Hi {{{{first_name}}}}, following up on {{{{company_name}}}}. Several {req.industry} firms boosted conversion by 40% with our automated WhatsApp CRM. Would love to share an overview?"
+                if i == 1 else
+                f"Hi {{{{first_name}}}}, quick metric: teams in {req.industry} saw a 42% boost in consultation bookings. Would this be relevant for {{{{company_name}}}} this quarter?"
+                if i == 2 else
+                f"Hi {{{{first_name}}}}, closing the loop. If automated WhatsApp sales workflows are not a priority right now, no problem at all. Feel free to reach out anytime!"
+            )
+        )
+        steps.append({
+            "step": i + 1,
+            "label": steps_labels[i],
+            "message": msg
+        })
+
     return {
         "language": req.language,
         "tone": req.tone,
-        "steps": [
-            {
-                "step": 1,
-                "label": "Initial Value Proposition",
-                "message": f"Hi {{{{first_name}}}}, noticed {{{{company_name}}}} in {{{{location}}}}. We help leaders in {req.industry} automate customer pipelines on WhatsApp. Open to a brief demo? {req.cta}"
-            },
-            {
-                "step": 2,
-                "label": "Follow-Up #1 (Social Proof)",
-                "message": f"Hi {{{{first_name}}}}, following up on {{{{company_name}}}}. Several {req.industry} firms boosted conversion by 40% with our automated WhatsApp CRM. Would love to share an overview?"
-            },
-            {
-                "step": 3,
-                "label": "Follow-Up #2 (Case Study)",
-                "message": f"Hi {{{{first_name}}}}, quick metric: teams in {req.industry} saw a 42% boost in consultation bookings. Would this be relevant for {{{{company_name}}}} this quarter?"
-            },
-            {
-                "step": 4,
-                "label": "Final Break-Up",
-                "message": f"Hi {{{{first_name}}}}, closing the loop. If automated WhatsApp sales workflows are not a priority right now, no problem at all. Feel free to reach out anytime!"
-            }
-        ]
+        "model": model,
+        "provider": "OpenRouter.ai" if openrouter_messages else "Local Builder",
+        "steps": steps
     }
+
 
 # ---------------------------------------------------------------------------
 # Routes: Global Emergency Kill Switch

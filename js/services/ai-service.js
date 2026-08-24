@@ -5,8 +5,62 @@
 
 class AIService {
   constructor() {
-    this.models = ['gemini-3.7-flash', 'gpt-4o-mini', 'claude-3-5-sonnet', 'deepseek-v3'];
-    this.selectedModel = 'gemini-3.7-flash';
+    this.openRouterApiKey = window.OPENROUTER_API_KEY || (typeof process !== 'undefined' && process.env ? process.env.OPENROUTER_API_KEY : '');
+    this.openRouterEndpoint = 'https://openrouter.ai/api/v1/chat/completions';
+
+    this.models = [
+      'deepseek/deepseek-r1',
+      'openai/gpt-4o-mini',
+      'anthropic/claude-3.5-sonnet',
+      'google/gemini-2.5-flash',
+      'meta-llama/llama-3.3-70b-instruct'
+    ];
+    this.selectedModel = 'deepseek/deepseek-r1';
+  }
+
+  // OpenRouter API Integration Engine
+  async callOpenRouter(prompt, systemPrompt = 'You are NexusLead AI agent, an expert B2B WhatsApp sales messaging strategist.', overrideModel = null) {
+    const model = overrideModel || this.selectedModel;
+    if (!this.openRouterApiKey) {
+      throw new Error('OpenRouter API key is missing.');
+    }
+
+    try {
+      const response = await fetch(this.openRouterEndpoint, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.openRouterApiKey}`,
+          'HTTP-Referer': 'https://nexuslead.ai',
+          'X-Title': 'NexusLead AI Agent',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: prompt }
+          ],
+          temperature: 0.7,
+          max_tokens: 300
+        })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.warn(`[OpenRouter API Warning ${response.status}]: ${errorText}`);
+        throw new Error(`OpenRouter API error ${response.status}`);
+      }
+
+      const data = await response.json();
+      const content = data?.choices?.[0]?.message?.content;
+      if (content) {
+        return content.trim();
+      }
+      throw new Error('Empty response from OpenRouter');
+    } catch (err) {
+      console.warn('[AIService] OpenRouter fallback triggered:', err.message);
+      return null;
+    }
   }
 
   // 1. Multilingual AI Message Generator
@@ -23,6 +77,47 @@ class AIService {
     const company = lead.companyName || 'your company';
     const location = lead.location ? ` in ${lead.location}` : '';
     const industry = lead.industry || 'your industry';
+
+    // Step labels for prompt context
+    const stepNames = [
+      'Initial Hook & Value Proposition',
+      'Follow-Up #1 (24h later - Social Proof)',
+      'Follow-Up #2 (48h later - Case Study / Metric)',
+      'Final Break-up / Opt-in Check'
+    ];
+    const stepLabel = stepNames[sequenceStep] || stepNames[0];
+
+    // Try OpenRouter AI Generation first
+    const prompt = `Write a high-converting WhatsApp message for a B2B sales sequence.
+Product/Service: ${product}
+Target Lead Name: ${name}
+Company Name: ${company} ${location}
+Industry: ${industry}
+Tone: ${tone}
+Target Language: ${language}
+Call To Action (CTA): ${cta}
+Sequence Step: Step ${sequenceStep + 1} (${stepLabel})
+
+Requirements:
+1. Write concise, engaging WhatsApp text in ${language} matching the ${tone} tone.
+2. Include variables like ${name} and ${company} naturally.
+3. Keep it under 60 words, tailored for WhatsApp formatting (use *bold* for key terms).
+4. End with the CTA: "${cta}".
+5. Output ONLY the message text without quotes or explanations.`;
+
+    const openRouterText = await this.callOpenRouter(prompt);
+    if (openRouterText) {
+      return {
+        message: openRouterText,
+        language,
+        tone,
+        sequenceStep: sequenceStep + 1,
+        modelUsed: this.selectedModel,
+        provider: 'OpenRouter.ai',
+        tokensEstimate: Math.round(openRouterText.length / 4)
+      };
+    }
+
 
     const templates = {
       English: {
