@@ -77,10 +77,11 @@ class AutomationEngine {
       
       // Step 4: WhatsApp Message
       const aiMsg = await window.aiService.generateMessage({ lead, sequenceStep: 0 });
+      const msgText = (aiMsg && typeof aiMsg === 'object') ? (aiMsg.message || aiMsg.text || '') : String(aiMsg || '');
       executionLog.push({ step: 'Action', node: 'Send WhatsApp Intro Template', result: `Dispatched message to ${lead.phone}`, status: 'Completed', timestamp: new Date().toLocaleTimeString() });
 
-      if (org.whatsappConnected) {
-        await window.whatsappService.sendMessage({ leadId: lead.id, text: aiMsg.message, isAI: true });
+      if (org.whatsappConnected && msgText) {
+        await window.whatsappService.sendMessage({ leadId: lead.id, text: msgText, isAI: true });
       }
     } else {
       executionLog.push({ step: 'Condition Branch', node: 'Score < 60', result: 'Routed to Nurture Bucket', status: 'Completed', timestamp: new Date().toLocaleTimeString() });
