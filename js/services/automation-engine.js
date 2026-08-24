@@ -47,7 +47,20 @@ class AutomationEngine {
     const workflow = window.appState.get('workflows').find(w => w.id === workflowId);
     if (!workflow) throw new Error('Workflow not found');
 
-    const lead = window.appState.get('leads').find(l => l.id === leadId) || window.appState.get('leads')[0];
+    const leadsList = window.appState.get('leads') || [];
+    const lead = (leadId ? leadsList.find(l => l.id === leadId) : null)
+      || leadsList[0]
+      || {
+        id: 'test_prospect_01',
+        contactName: 'Sample Prospect',
+        companyName: 'Test Business',
+        phone: '+91 98765 43210',
+        email: 'prospect@example.com',
+        industry: 'Technology',
+        location: 'Kochi, Kerala',
+        score: 75,
+        scoreCategory: 'warm'
+      };
 
     const executionLog = [];
     executionLog.push({ step: 'Trigger', node: workflow.nodes[0]?.title, status: 'Completed', timestamp: new Date().toLocaleTimeString() });
