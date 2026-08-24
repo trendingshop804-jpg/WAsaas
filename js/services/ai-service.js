@@ -257,7 +257,47 @@ Requirements:
       modelUsed: this.selectedModel,
       tokensEstimate: 65
     };
+  // 1b. Multi-Day Automated Tanglish Follow-up Prompt Generator (Day 1, Day 2, Day 4, Day 7)
+  async generateMultiDayFollowup({ lead = {}, step = 1 }) {
+    const name = lead.contactName || 'there';
+    const company = lead.companyName || 'your business';
+
+    const prompts = {
+      1: `Generate a warm, friendly WhatsApp welcome message in Tanglish for a new SaaS lead (${name} from ${company}). Briefly explain how our CRM automates WhatsApp business, and invite them to test our demo.`,
+      2: `Draft a persuasive, non-pushy WhatsApp follow-up message in Tanglish. Mention that our clients saved 50% of their sales team's manual time using our automation tools, and ask if they had time to check the product.`,
+      4: `Create a quick 2-line WhatsApp check-in message in Tanglish asking if the user has any questions or would like a 10-minute live screen share demo.`,
+      7: `Draft a conversion-focused WhatsApp message in Tanglish offering a 20% discount on the first month SaaS subscription if they sign up this week.`
+    };
+
+    const fallbacks = {
+      1: `Vanakkam ${name}! Welcome to NexusLead AI SaaS 🚀 Namma CRM moolama unga WhatsApp business leads, automated replies & follow-ups 24/7 autopilot-la run pannalam. Free 5-min live demo kedaikka reply DEMO!`,
+      2: `Hi ${name}! Quick follow-up from NexusLead AI. Namma client sales teams manual time-ah 50% save panni WhatsApp response speed-ah 3X adhigarithurukanga. Product-ah check panna time kedachadha? Let me know if you have any questions! 😊`,
+      4: `Hey ${name}! Quick check-in from our side. Ungalukku edhavadhu doubts irukkaa, or 10-minute live screen share demo book பண்ணலாமா?`,
+      7: `Hi ${name}! Special offer alert 🎁 Indha week unga first month SaaS subscription sign up panna 20% flat discount kedaikkum! Offer limited to first 10 businesses this week. Claim panna reply YES!`
+    };
+
+    const stepKey = [1, 2, 4, 7].includes(Number(step)) ? Number(step) : 1;
+    const promptText = prompts[stepKey];
+
+    const openRouterText = await this.callOpenRouter(promptText);
+    if (openRouterText) {
+      return {
+        message: openRouterText,
+        step: stepKey,
+        provider: 'OpenRouter.ai',
+        language: 'Tanglish'
+      };
+    }
+
+    return {
+      message: fallbacks[stepKey],
+      step: stepKey,
+      provider: 'Local Tanglish Builder',
+      language: 'Tanglish'
+    };
   }
+
+
 
   // 2. AI Lead Scoring Engine (0 - 100)
   analyzeLead(lead) {

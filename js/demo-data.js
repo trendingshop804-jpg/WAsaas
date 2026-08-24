@@ -407,74 +407,54 @@ window.DEMO_DATA = {
         {
           id: 'node_1',
           type: 'trigger',
-          title: 'Trigger: New / Discovered Lead',
-          desc: 'Fires when a new lead is added via Discovery or CSV import',
-          x: 60,
-          y: 80,
-          config: { event: 'lead.created', deduplicate: true }
+          title: 'Day 1 Trigger: New Inbound Lead',
+          desc: 'Fires instantly on lead creation / webhook event',
+          x: 40,
+          y: 60,
+          config: { event: 'lead.created' }
         },
         {
           id: 'node_2',
           type: 'ai',
-          title: 'AI Action: Lead Scoring & Validation',
-          desc: 'Evaluates website, industry match & phone format. Scores 0-100.',
-          x: 380,
-          y: 80,
-          config: { model: 'gemini-3.7-flash', minScore: 60 }
+          title: 'Day 1: Welcome & Demo Link',
+          desc: 'Tanglish AI: Welcome greeting + 5-min demo invitation',
+          x: 340,
+          y: 60,
+          config: { step: 1, lang: 'Tanglish' }
         },
         {
           id: 'node_3',
-          type: 'condition',
-          title: 'Condition: Lead Score >= 70 (Hot/Warm)?',
-          desc: 'Routes high-intent prospects to priority campaign sequence',
-          x: 700,
-          y: 80,
-          config: { threshold: 70 }
+          type: 'ai',
+          title: 'Day 2: Social Proof & Case Study',
+          desc: 'Tanglish AI: 50% sales team time saved metric (If no reply)',
+          x: 640,
+          y: 60,
+          config: { step: 2, lang: 'Tanglish', delay: '24h' }
         },
         {
           id: 'node_4',
-          type: 'action',
-          title: 'Action: Send WhatsApp Intro Template',
-          desc: 'Dispatches Meta approved template with {{first_name}} personalization',
-          x: 700,
-          y: 260,
-          config: { template: 'tmpl_001', rateLimit: '1 msg / 4 sec' }
+          type: 'ai',
+          title: 'Day 4: Soft Screen Share Reminder',
+          desc: 'Tanglish AI: 2-line check-in asking for 10-min live demo call',
+          x: 340,
+          y: 250,
+          config: { step: 4, lang: 'Tanglish', delay: '48h' }
         },
         {
           id: 'node_5',
-          type: 'action',
-          title: 'Action: Wait Timer (24 Hours)',
-          desc: 'Delays execution to allow organic customer reply',
-          x: 380,
-          y: 260,
-          config: { duration: '24h', respectWorkingHours: true }
-        },
-        {
-          id: 'node_6',
-          type: 'condition',
-          title: 'Condition: Did Customer Reply?',
-          desc: 'Checks if incoming WhatsApp message was received',
-          x: 60,
-          y: 260,
-          config: { event: 'message.received' }
-        },
-        {
-          id: 'node_7',
           type: 'ai',
-          title: 'AI Sales Agent: Intent & Qualification',
-          desc: 'Answers FAQs, detects budget & triggers Human Handoff if ready',
-          x: 60,
-          y: 440,
-          config: { autoQualify: true, assignTo: 'Sales Agent' }
+          title: 'Day 7: Limited Scarcity Offer',
+          desc: 'Tanglish AI: 20% discount on 1st month subscription offer',
+          x: 640,
+          y: 250,
+          config: { step: 7, lang: 'Tanglish', delay: '72h' }
         }
       ],
       connections: [
         { from: 'node_1', to: 'node_2' },
         { from: 'node_2', to: 'node_3' },
-        { from: 'node_3', to: 'node_4', condition: 'true' },
-        { from: 'node_4', to: 'node_5' },
-        { from: 'node_5', to: 'node_6' },
-        { from: 'node_6', to: 'node_7', condition: 'yes' }
+        { from: 'node_3', to: 'node_4' },
+        { from: 'node_4', to: 'node_5' }
       ]
     }
   ],
