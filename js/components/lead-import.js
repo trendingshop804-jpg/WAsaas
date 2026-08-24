@@ -75,6 +75,20 @@ class LeadImportComponent {
     const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/['"]/g, ''));
     const rows = lines.slice(1);
 
+    // Find column index dynamically from header names
+    const getColIndex = (keywords, defaultIdx) => {
+      const idx = headers.findIndex(h => keywords.some(k => h.includes(k)));
+      return idx !== -1 ? idx : defaultIdx;
+    };
+
+    const companyIdx = getColIndex(['company', 'business', 'org'], 0);
+    const nameIdx = getColIndex(['name', 'contact', 'owner', 'person'], 1);
+    const phoneIdx = getColIndex(['phone', 'mobile', 'whatsapp', 'number', 'cell', 'tel'], 2);
+    const emailIdx = getColIndex(['email', 'mail'], 3);
+    const industryIdx = getColIndex(['industry', 'category', 'vertical', 'niche'], 4);
+    const locationIdx = getColIndex(['location', 'city', 'state', 'address'], 5);
+    const websiteIdx = getColIndex(['website', 'url', 'site', 'domain'], 6);
+
     const existingLeads = window.appState.get('leads') || [];
     const existingPhones = new Set(existingLeads.map(l => l.phone ? l.phone.replace(/\D/g, '') : ''));
     const existingEmails = new Set(existingLeads.map(l => (l.email || '').toLowerCase()));
@@ -86,18 +100,19 @@ class LeadImportComponent {
     const leadsToAdd = [];
 
     rows.forEach(row => {
-      const cols = row.split(',').map(c => c.trim().replace(/['"]/g, ''));
+      const cols = row.split(',').map(c => c.trim().replace(/^["']|["']$/g, ''));
       if (cols.length < 2) {
         invalid++;
         return;
       }
 
-      const companyName = cols[0] || 'Unknown Business';
-      const contactName = cols[1] || 'Owner';
-      const rawPhone = cols[2] || '';
-      const email = cols[3] || '';
-      const industry = cols[4] || 'General';
-      const location = cols[5] || 'India';
+      const companyName = cols[companyIdx] || cols[0] || 'Unknown Business';
+      const contactName = cols[nameIdx] || cols[1] || 'Owner';
+      const rawPhone = cols[phoneIdx] || cols[2] || '';
+      const email = cols[emailIdx] || cols[3] || '';
+      const industry = cols[industryIdx] || cols[4] || 'General';
+      const location = cols[locationIdx] || cols[5] || 'India';
+      const website = cols[websiteIdx] || cols[6] || '';
 
       // Phone normalization
       const cleanPhoneDigits = rawPhone.replace(/\D/g, '');
@@ -126,7 +141,7 @@ class LeadImportComponent {
         phone: formattedPhone,
         whatsappStatus: 'Available',
         email,
-        website: cols[6] || `https://${companyName.toLowerCase().replace(/[^a-z0-9]/g, '')}.com`,
+        website: website || `https://${companyName.toLowerCase().replace(/[^a-z0-9]/g, '')}.com`,
         industry,
         location,
         source: 'CSV Upload',

@@ -1566,6 +1566,58 @@
       </div>
     </div>
 
+    <!-- Manual Lead Entry Modal -->
+    <div id="manual-lead-modal" class="modal-backdrop">
+      <div class="modal-dialog">
+        <div class="modal-header">
+          <h3>Add New Lead to CRM</h3>
+          <button class="btn btn-secondary btn-icon btn-sm" data-close-modal>✕</button>
+        </div>
+        <form id="manual-lead-form">
+          <div class="modal-body">
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px;">
+              <div class="form-group">
+                <label class="form-label">Company / Business Name *</label>
+                <input type="text" id="man-company" class="form-input" placeholder="e.g. Apex Tech Solutions" required>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Contact Person Name *</label>
+                <input type="text" id="man-name" class="form-input" placeholder="e.g. Rajesh Kumar" required>
+              </div>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px;">
+              <div class="form-group">
+                <label class="form-label">WhatsApp Phone Number *</label>
+                <input type="text" id="man-phone" class="form-input" placeholder="e.g. +91 98401 23456" required>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Email Address</label>
+                <input type="email" id="man-email" class="form-input" placeholder="e.g. rajesh@apextech.in">
+              </div>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px;">
+              <div class="form-group">
+                <label class="form-label">Industry / Vertical</label>
+                <input type="text" id="man-industry" class="form-input" placeholder="e.g. Healthcare, Software, Retail" value="General">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Location (City, State)</label>
+                <input type="text" id="man-location" class="form-input" placeholder="e.g. Kochi, Kerala" value="India">
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Website URL</label>
+              <input type="url" id="man-website" class="form-input" placeholder="e.g. https://apextech.in">
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-close-modal>Cancel</button>
+            <button type="submit" class="btn btn-primary">Save Lead to CRM</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <!-- Import Summary Modal -->
     <div id="import-summary-modal" class="modal-backdrop">
       <div class="modal-dialog">
