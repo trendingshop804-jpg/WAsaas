@@ -254,13 +254,115 @@ class InboxComponent {
         }
 
         const isInbound = m.sender === 'inbound';
+        const msgType = m.type || 'text';
+
+        let contentHtml = '';
+
+        switch (msgType) {
+          case 'image':
+            contentHtml = `
+              <div class="msg-media msg-media-image">
+                <img src="${m.mediaUrl || ''}" alt="${this.escapeHtml(m.caption || 'Image')}" class="msg-img" onclick="window.inboxComponent.openMediaViewer('${m.mediaUrl || ''}', 'image')" />
+              </div>
+              ${m.caption ? `<div class="msg-media-caption">${this.escapeHtml(m.caption)}</div>` : ''}
+            `;
+            break;
+
+          case 'video':
+            contentHtml = `
+              <div class="msg-media msg-media-video">
+                <video src="${m.mediaUrl || ''}" class="msg-video" controls preload="metadata"></video>
+              </div>
+              ${m.caption ? `<div class="msg-media-caption">${this.escapeHtml(m.caption)}</div>` : ''}
+            `;
+            break;
+
+          case 'document':
+          case 'file':
+            const fileName = m.fileName || 'Document';
+            const fileSize = m.fileSize || '';
+            const fileIcon = this.getFileIcon(fileName);
+            contentHtml = `
+              <div class="msg-file-attachment">
+                <div class="msg-file-icon">${fileIcon}</div>
+                <div class="msg-file-info">
+                  <div class="msg-file-name">${this.escapeHtml(fileName)}</div>
+                  ${fileSize ? `<div class="msg-file-size">${this.escapeHtml(fileSize)}</div>` : ''}
+                </div>
+                ${m.mediaUrl ? `<a href="${m.mediaUrl}" target="_blank" class="msg-file-download" title="Download">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                </a>` : ''}
+              </div>
+              ${m.caption ? `<div class="msg-media-caption">${this.escapeHtml(m.caption)}</div>` : ''}
+            `;
+            break;
+
+          case 'sticker':
+            contentHtml = `
+              <div class="msg-sticker">
+                <img src="${m.mediaUrl || ''}" alt="Sticker" class="msg-sticker-img" />
+              </div>
+            `;
+            break;
+
+          case 'audio':
+            contentHtml = `
+              <div class="msg-audio">
+                <audio src="${m.mediaUrl || ''}" controls preload="metadata" class="msg-audio-player"></audio>
+              </div>
+            `;
+            break;
+
+          case 'location':
+            contentHtml = `
+              <div class="msg-location">
+                <div class="msg-location-icon">📍</div>
+                <div class="msg-location-info">
+                  <div class="msg-location-name">${this.escapeHtml(m.locationName || 'Shared Location')}</div>
+                  ${m.locationAddress ? `<div class="msg-location-address">${this.escapeHtml(m.locationAddress)}</div>` : ''}
+                </div>
+              </div>
+            `;
+            break;
+
+          case 'contact':
+            contentHtml = `
+              <div class="msg-contact-card">
+                <div class="msg-contact-icon">👤</div>
+                <div class="msg-contact-info">
+                  <div class="msg-contact-name">${this.escapeHtml(m.contactName || 'Contact')}</div>
+                  ${m.contactPhone ? `<div class="msg-contact-phone">${this.escapeHtml(m.contactPhone)}</div>` : ''}
+                </div>
+              </div>
+            `;
+            break;
+
+          case 'unknown':
+            contentHtml = `
+              <div class="msg-unknown">
+                <div class="msg-unknown-icon">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                </div>
+                <div class="msg-unknown-text">${this.escapeHtml(m.text || 'Unsupported message type')}</div>
+              </div>
+            `;
+            break;
+
+          default: // text
+            contentHtml = this.escapeHtml(m.text);
+            break;
+        }
+
+        const bubbleClass = msgType === 'sticker' ? 'msg-bubble msg-bubble-sticker' : 'msg-bubble';
+
         return `
           <div class="msg-bubble-wrap ${isInbound ? 'inbound' : 'outbound'}">
-            <div class="msg-bubble">
-              ${this.escapeHtml(m.text)}
+            <div class="${bubbleClass}">
+              ${contentHtml}
             </div>
             <div class="msg-footer">
               ${m.isAI ? '<span class="ai-tag-pill">AI AGENT</span>' : ''}
+              ${msgType !== 'text' && msgType !== 'unknown' ? `<span class="msg-type-tag">${this.getMsgTypeLabel(msgType)}</span>` : ''}
               <span>${m.timestamp}</span>
               ${!isInbound ? `<span>· ${m.status || 'DELIVERED'}</span>` : ''}
             </div>
@@ -372,6 +474,54 @@ class InboxComponent {
       leadId: conv.leadId,
       text
     });
+  }
+
+  getFileIcon(fileName) {
+    const ext = (fileName || '').split('.').pop().toLowerCase();
+    const iconMap = {
+      pdf: '📄', doc: '📝', docx: '📝', xls: '📊', xlsx: '📊',
+      ppt: '📑', pptx: '📑', csv: '📊', txt: '📃',
+      zip: '🗜️', rar: '🗜️', '7z': '🗜️',
+      jpg: '🖼️', jpeg: '🖼️', png: '🖼️', gif: '🖼️', webp: '🖼️',
+      mp4: '🎬', mov: '🎬', avi: '🎬', mkv: '🎬',
+      mp3: '🎵', wav: '🎵', ogg: '🎵', aac: '🎵',
+      apk: '📱', exe: '⚙️', dmg: '💿',
+    };
+    return iconMap[ext] || '📎';
+  }
+
+  getMsgTypeLabel(type) {
+    const labels = {
+      image: '📷 Photo', video: '🎥 Video', document: '📄 Document',
+      file: '📎 File', sticker: '🩷 Sticker', audio: '🎤 Audio',
+      location: '📍 Location', contact: '👤 Contact'
+    };
+    return labels[type] || type;
+  }
+
+  openMediaViewer(url, type) {
+    if (!url) return;
+    // Create fullscreen overlay
+    let overlay = document.getElementById('media-viewer-overlay');
+    if (overlay) overlay.remove();
+
+    overlay = document.createElement('div');
+    overlay.id = 'media-viewer-overlay';
+    overlay.className = 'media-viewer-overlay';
+    overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+
+    let mediaEl = '';
+    if (type === 'image') {
+      mediaEl = `<img src="${url}" class="media-viewer-content" alt="Full size image" />`;
+    } else if (type === 'video') {
+      mediaEl = `<video src="${url}" class="media-viewer-content" controls autoplay></video>`;
+    }
+
+    overlay.innerHTML = `
+      <button class="media-viewer-close" onclick="document.getElementById('media-viewer-overlay').remove()">✕</button>
+      ${mediaEl}
+    `;
+    document.body.appendChild(overlay);
   }
 
   escapeHtml(str) {

@@ -416,6 +416,63 @@ window.DEMO_DATA = {
           text: 'Sure Doctor Jacob! I can book a 15-min zoom walkthrough tomorrow at 11:30 AM or 3:00 PM. Which works best?',
           timestamp: 'Today, 2:32 PM',
           status: 'DELIVERED'
+        },
+        {
+          id: 'm7',
+          sender: 'inbound',
+          type: 'image',
+          mediaUrl: 'https://images.unsplash.com/photo-1629909615957-be38d48fbbe4?w=480&q=80',
+          caption: 'Our current clinic reception — you can see the paper-based reminder board 😅',
+          timestamp: 'Today, 2:35 PM'
+        },
+        {
+          id: 'm8',
+          sender: 'outbound',
+          type: 'document',
+          fileName: 'DentaFlow_Case_Study_Kerala.pdf',
+          fileSize: '2.4 MB',
+          mediaUrl: '#',
+          caption: 'Kerala Dental Case Study — 40% no-show reduction',
+          timestamp: 'Today, 2:37 PM',
+          status: 'READ'
+        },
+        {
+          id: 'm9',
+          sender: 'inbound',
+          type: 'audio',
+          mediaUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
+          timestamp: 'Today, 2:40 PM'
+        },
+        {
+          id: 'm10',
+          sender: 'inbound',
+          type: 'sticker',
+          mediaUrl: 'https://media.giphy.com/media/1n9ogS4ddPMzYULVmJ/giphy.gif',
+          timestamp: 'Today, 2:41 PM'
+        },
+        {
+          id: 'm11',
+          sender: 'inbound',
+          type: 'location',
+          locationName: 'Jacob Dental Clinic – Ernakulam',
+          locationAddress: 'MG Road, Near High Court Junction, Kerala 682016',
+          timestamp: 'Today, 2:43 PM'
+        },
+        {
+          id: 'm12',
+          sender: 'inbound',
+          type: 'contact',
+          contactName: 'Dr. Jacob Thomas',
+          contactPhone: '+91 94470 23456',
+          timestamp: 'Today, 2:44 PM'
+        },
+        {
+          id: 'm13',
+          sender: 'inbound',
+          type: 'video',
+          mediaUrl: 'https://www.w3schools.com/html/mov_bbb.mp4',
+          caption: 'Quick tour of our reception setup',
+          timestamp: 'Today, 2:46 PM'
         }
       ],
       aiSuggestions: [
