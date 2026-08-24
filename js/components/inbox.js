@@ -11,8 +11,8 @@ class InboxComponent {
 
   init() {
     this.bindEvents();
-    this.setupScrollListeners();
     this.render();
+    this.setupScrollListeners();
 
     window.appState.on('messageSent', () => {
       this.render();
@@ -171,6 +171,7 @@ class InboxComponent {
   render() {
     this.renderConversationList();
     this.renderActiveChat();
+    this.setupScrollListeners();
   }
 
   renderConversationList() {
@@ -242,6 +243,7 @@ class InboxComponent {
 
     // Message List
     const messagesScroll = document.getElementById('chat-messages-scroll');
+    if (messagesScroll) {
       messagesScroll.innerHTML = (conv.messages || []).map(m => {
         if (m.sender === 'system') {
           return `
