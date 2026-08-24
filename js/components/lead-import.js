@@ -53,6 +53,7 @@ class LeadImportComponent {
   handleFileSelected(e) {
     if (e.target.files && e.target.files[0]) {
       this.processCSVFile(e.target.files[0]);
+      e.target.value = ''; // Reset input so selecting the same file again triggers change event
     }
   }
 
@@ -66,7 +67,7 @@ class LeadImportComponent {
   }
 
   parseAndValidateCSV(csvText) {
-    const lines = csvText.split('\n').filter(l => l.trim().length > 0);
+    const lines = csvText.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
     if (lines.length <= 1) {
       alert('CSV file appears to be empty or missing headers.');
       return;
@@ -75,19 +76,22 @@ class LeadImportComponent {
     const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/['"]/g, ''));
     const rows = lines.slice(1);
 
-    // Find column index dynamically from header names
-    const getColIndex = (keywords, defaultIdx) => {
-      const idx = headers.findIndex(h => keywords.some(k => h.includes(k)));
-      return idx !== -1 ? idx : defaultIdx;
-    };
+    // Smart column index detection with collision avoidance
+    const companyIdx = headers.findIndex(h => h.includes('company') || h.includes('business') || h.includes('org'));
+    const nameIdx = headers.findIndex(h => !h.includes('company') && !h.includes('business') && (h.includes('contact') || h.includes('name') || h.includes('owner') || h.includes('person')));
+    const phoneIdx = headers.findIndex(h => h.includes('phone') || h.includes('mobile') || h.includes('whatsapp') || h.includes('number') || h.includes('cell') || h.includes('tel'));
+    const emailIdx = headers.findIndex(h => h.includes('email') || h.includes('mail'));
+    const industryIdx = headers.findIndex(h => h.includes('industry') || h.includes('category') || h.includes('niche') || h.includes('vertical'));
+    const locationIdx = headers.findIndex(h => h.includes('location') || h.includes('city') || h.includes('state') || h.includes('address'));
+    const websiteIdx = headers.findIndex(h => h.includes('website') || h.includes('url') || h.includes('site') || h.includes('domain'));
 
-    const companyIdx = getColIndex(['company', 'business', 'org'], 0);
-    const nameIdx = getColIndex(['name', 'contact', 'owner', 'person'], 1);
-    const phoneIdx = getColIndex(['phone', 'mobile', 'whatsapp', 'number', 'cell', 'tel'], 2);
-    const emailIdx = getColIndex(['email', 'mail'], 3);
-    const industryIdx = getColIndex(['industry', 'category', 'vertical', 'niche'], 4);
-    const locationIdx = getColIndex(['location', 'city', 'state', 'address'], 5);
-    const websiteIdx = getColIndex(['website', 'url', 'site', 'domain'], 6);
+    const finalCompanyIdx = companyIdx !== -1 ? companyIdx : 0;
+    const finalNameIdx = nameIdx !== -1 ? nameIdx : 1;
+    const finalPhoneIdx = phoneIdx !== -1 ? phoneIdx : 2;
+    const finalEmailIdx = emailIdx !== -1 ? emailIdx : 3;
+    const finalIndustryIdx = industryIdx !== -1 ? industryIdx : 4;
+    const finalLocationIdx = locationIdx !== -1 ? locationIdx : 5;
+    const finalWebsiteIdx = websiteIdx !== -1 ? websiteIdx : 6;
 
     const existingLeads = window.appState.get('leads') || [];
     const existingPhones = new Set(existingLeads.map(l => l.phone ? l.phone.replace(/\D/g, '') : ''));
@@ -100,25 +104,30 @@ class LeadImportComponent {
     const leadsToAdd = [];
 
     rows.forEach(row => {
-      const cols = row.split(',').map(c => c.trim().replace(/^["']|["']$/g, ''));
+      const cols = row.split(',').map(c => c.trim().replace(/^["'\r]+|["'\r]+$/g, ''));
       if (cols.length < 2) {
         invalid++;
         return;
       }
 
-      const companyName = cols[companyIdx] || cols[0] || 'Unknown Business';
-      const contactName = cols[nameIdx] || cols[1] || 'Owner';
-      const rawPhone = cols[phoneIdx] || cols[2] || '';
-      const email = cols[emailIdx] || cols[3] || '';
-      const industry = cols[industryIdx] || cols[4] || 'General';
-      const location = cols[locationIdx] || cols[5] || 'India';
-      const website = cols[websiteIdx] || cols[6] || '';
+      const companyName = cols[finalCompanyIdx] || cols[0] || 'Unknown Business';
+      const contactName = cols[finalNameIdx] || cols[1] || 'Owner';
+      let rawPhone = cols[finalPhoneIdx] || cols[2] || '';
+      const email = cols[finalEmailIdx] || cols[3] || '';
+      const industry = cols[finalIndustryIdx] || cols[4] || 'General';
+      const location = cols[finalLocationIdx] || cols[5] || 'India';
+      const website = cols[finalWebsiteIdx] || cols[6] || '';
 
-      // Phone normalization
-      const cleanPhoneDigits = rawPhone.replace(/\D/g, '');
-      if (cleanPhoneDigits.length < 10) {
-        invalid++;
-        return;
+      // Phone normalization & auto-detection across columns if needed
+      let cleanPhoneDigits = rawPhone.replace(/\D/g, '');
+      if (cleanPhoneDigits.length < 7) {
+        const foundPhoneCol = cols.find(c => c.replace(/\D/g, '').length >= 7);
+        if (foundPhoneCol) {
+          cleanPhoneDigits = foundPhoneCol.replace(/\D/g, '');
+        } else {
+          invalid++;
+          return;
+        }
       }
 
       // Check duplicates
