@@ -426,10 +426,10 @@
 
           <div class="card" style="margin-bottom: 24px;">
             <div id="import-dropzone" style="border: 2px dashed var(--border-medium); border-radius: var(--radius-lg); padding: 40px 20px; text-align: center; background: var(--bg-tertiary); cursor: pointer;" onclick="document.getElementById('csv-file-input').click()">
-              <input type="file" id="csv-file-input" accept=".csv" style="display: none;">
+              <input type="file" id="csv-file-input" accept=".csv, .xlsx, .xls" style="display: none;">
               <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--brand-whatsapp)" stroke-width="2" style="margin: 0 auto 12px; display: block;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-              <h3 style="margin-bottom: 6px;">Click or Drag & Drop CSV Lead File</h3>
-              <p style="color: var(--text-secondary); font-size: 13px;">Supports columns: Company Name, Contact Name, Phone, Email, Industry, Location, Website</p>
+              <h3 style="margin-bottom: 6px;">Click or Drag & Drop Excel (.xlsx, .xls) or CSV Lead File</h3>
+              <p style="color: var(--text-secondary); font-size: 13px;">Supports Google Places crawler exports, Apollo lists, CRM spreadsheets & CSV files</p>
             </div>
           </div>
         </section>
@@ -459,6 +459,9 @@
                 </button>
               </div>
 
+              <button class="btn btn-secondary btn-sm" onclick="window.navigationComponent.switchView('import')">
+                📤 Upload / Import Leads
+              </button>
               <button class="btn btn-primary btn-sm" onclick="document.getElementById('manual-lead-modal').classList.add('active')">
                 + Add Lead
               </button>
@@ -1836,6 +1839,8 @@
   <script src="js/components/navigation.js"></script>
   <script src="js/components/dashboard.js"></script>
   <script src="js/components/discovery.js"></script>
+  <!-- SheetJS Library for Excel XLSX/XLS parsing -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="js/components/lead-import.js"></script>
   <script src="js/components/crm.js"></script>
   <script src="js/components/whatsapp-connect.js"></script>

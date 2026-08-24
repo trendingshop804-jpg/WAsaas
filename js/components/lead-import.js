@@ -1,6 +1,6 @@
 /* ==========================================================================
    NexusLead AI - Data Import & Normalization Component
-   CSV, Excel, API Import, Deduplication & Validation Summary
+   CSV, Excel (.xlsx, .xls), API Import, Deduplication & Validation Summary
    ========================================================================== */
 
 class LeadImportComponent {
@@ -9,7 +9,7 @@ class LeadImportComponent {
   }
 
   bindEvents() {
-    // CSV file upload change
+    // CSV / Excel file upload change
     const fileInput = document.getElementById('csv-file-input');
     if (fileInput) {
       fileInput.addEventListener('change', (e) => this.handleFileSelected(e));
@@ -29,7 +29,7 @@ class LeadImportComponent {
         e.preventDefault();
         dropZone.style.borderColor = 'var(--border-medium)';
         if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-          this.processCSVFile(e.dataTransfer.files[0]);
+          this.processFile(e.dataTransfer.files[0]);
         }
       });
     }
@@ -49,7 +49,7 @@ class LeadImportComponent {
       });
     }
 
-    // CSV Mapping form submit button
+    // Mapping form submit button
     const mappingForm = document.getElementById('csv-mapping-form');
     if (mappingForm) {
       mappingForm.addEventListener('submit', (e) => {
@@ -61,43 +61,107 @@ class LeadImportComponent {
 
   handleFileSelected(e) {
     if (e.target.files && e.target.files[0]) {
-      this.processCSVFile(e.target.files[0]);
+      this.processFile(e.target.files[0]);
       e.target.value = ''; // Reset input so selecting the same file again triggers change event
     }
+  }
+
+  processFile(file) {
+    const filename = (file.name || '').toLowerCase();
+    const isExcel = filename.endsWith('.xlsx') || filename.endsWith('.xls');
+
+    if (isExcel) {
+      this.processExcelFile(file);
+    } else {
+      this.processCSVFile(file);
+    }
+  }
+
+  processExcelFile(file) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        if (typeof XLSX === 'undefined') {
+          alert('Excel parsing library (SheetJS) is loading. Please refresh or try again in a moment.');
+          return;
+        }
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        
+        // Convert sheet to matrix array of arrays
+        const rawJsonRows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
+
+        if (!rawJsonRows || rawJsonRows.length <= 1) {
+          alert('Excel sheet appears to be empty or missing headers.');
+          return;
+        }
+
+        const rawHeaders = rawJsonRows[0].map(h => String(h || '').trim());
+        const dataRows = rawJsonRows.slice(1).map(row => 
+          Array.isArray(row) ? row.map(cell => String(cell ?? '').trim()) : []
+        ).filter(row => row.some(cell => cell !== ''));
+
+        this.openMappingModalFromMatrix(rawHeaders, dataRows, file.name);
+      } catch (err) {
+        console.error('Error reading Excel file:', err);
+        alert('Failed to read Excel file. Please ensure it is a valid .xlsx or .xls document.');
+      }
+    };
+    reader.readAsArrayBuffer(file);
   }
 
   processCSVFile(file) {
     const reader = new FileReader();
     reader.onload = (e) => {
-      const text = e.target.result;
-      this.openCSVMappingModal(text);
+      const csvText = e.target.result;
+      const lines = csvText.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+      if (lines.length <= 1) {
+        alert('CSV file appears to be empty or missing headers.');
+        return;
+      }
+
+      const rawHeaders = lines[0].split(',').map(h => h.trim().replace(/^["'\r]+|["'\r]+$/g, ''));
+      const dataRows = lines.slice(1).map(line => 
+        line.split(',').map(c => c.trim().replace(/^["'\r]+|["'\r]+$/g, ''))
+      );
+
+      this.openMappingModalFromMatrix(rawHeaders, dataRows, file.name);
     };
     reader.readAsText(file);
   }
 
-  openCSVMappingModal(csvText) {
-    const lines = csvText.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
-    if (lines.length <= 1) {
-      alert('CSV file appears to be empty or missing headers.');
-      return;
-    }
-
-    const rawHeaders = lines[0].split(',').map(h => h.trim().replace(/^["'\r]+|["'\r]+$/g, ''));
-    const rows = lines.slice(1);
-
+  openMappingModalFromMatrix(rawHeaders, dataRows, filename) {
     this.currentCsvHeaders = rawHeaders;
-    this.currentCsvRows = rows;
+    this.currentCsvRows = dataRows;
+    this.currentFilename = filename || 'Uploaded File';
 
-    const lowerHeaders = rawHeaders.map(h => h.toLowerCase());
+    const lowerHeaders = rawHeaders.map(h => String(h).toLowerCase());
 
-    // Auto-detect default indices
-    const companyIdx = lowerHeaders.findIndex(h => h.includes('company') || h.includes('business') || h.includes('org'));
-    const nameIdx = lowerHeaders.findIndex(h => !h.includes('company') && !h.includes('business') && (h.includes('contact') || h.includes('name') || h.includes('owner') || h.includes('person')));
-    const phoneIdx = lowerHeaders.findIndex(h => h.includes('phone') || h.includes('mobile') || h.includes('whatsapp') || h.includes('number') || h.includes('cell') || h.includes('tel'));
-    const emailIdx = lowerHeaders.findIndex(h => h.includes('email') || h.includes('mail'));
-    const industryIdx = lowerHeaders.findIndex(h => h.includes('industry') || h.includes('category') || h.includes('niche') || h.includes('vertical'));
-    const locationIdx = lowerHeaders.findIndex(h => h.includes('location') || h.includes('city') || h.includes('state') || h.includes('address'));
-    const websiteIdx = lowerHeaders.findIndex(h => h.includes('website') || h.includes('url') || h.includes('site') || h.includes('domain'));
+    // Enhanced Auto-detect default indices for standard CSVs & Google Places / Apollo scraped datasets
+    const companyIdx = lowerHeaders.findIndex(h => 
+      h === 'title' || h.includes('company') || h.includes('business') || h.includes('org') || h === 'title'
+    );
+    const nameIdx = lowerHeaders.findIndex(h => 
+      !h.includes('company') && !h.includes('business') && 
+      (h.includes('contact') || h.includes('name') || h.includes('owner') || h.includes('person') || h.includes('subtitle'))
+    );
+    const phoneIdx = lowerHeaders.findIndex(h => 
+      h === 'phone' || h === 'phoneunformatted' || h.includes('phone') || h.includes('mobile') || h.includes('whatsapp') || h.includes('cell') || h.includes('tel')
+    );
+    const emailIdx = lowerHeaders.findIndex(h => 
+      h.includes('email') || h.includes('mail')
+    );
+    const industryIdx = lowerHeaders.findIndex(h => 
+      h === 'categoryname' || h.includes('category') || h.includes('industry') || h.includes('niche') || h.includes('vertical')
+    );
+    const locationIdx = lowerHeaders.findIndex(h => 
+      h === 'city' || h === 'state' || h === 'address' || h.includes('location') || h.includes('city') || h.includes('state') || h.includes('address')
+    );
+    const websiteIdx = lowerHeaders.findIndex(h => 
+      h === 'url' || h === 'website' || h.includes('website') || h.includes('site') || h.includes('domain') || h.includes('url')
+    );
 
     const buildOptionsHtml = (selectedIdx) => {
       let html = `<option value="-1">-- Ignore / None --</option>`;
@@ -107,16 +171,24 @@ class LeadImportComponent {
       return html;
     };
 
-    document.getElementById('map-col-company').innerHTML = buildOptionsHtml(companyIdx !== -1 ? companyIdx : 0);
-    document.getElementById('map-col-name').innerHTML = buildOptionsHtml(nameIdx !== -1 ? nameIdx : 1);
-    document.getElementById('map-col-phone').innerHTML = buildOptionsHtml(phoneIdx !== -1 ? phoneIdx : 2);
-    document.getElementById('map-col-email').innerHTML = buildOptionsHtml(emailIdx !== -1 ? emailIdx : 3);
-    document.getElementById('map-col-industry').innerHTML = buildOptionsHtml(industryIdx !== -1 ? industryIdx : 4);
-    document.getElementById('map-col-location').innerHTML = buildOptionsHtml(locationIdx !== -1 ? locationIdx : 5);
-    document.getElementById('map-col-website').innerHTML = buildOptionsHtml(websiteIdx !== -1 ? websiteIdx : 6);
+    const compSelect = document.getElementById('map-col-company');
+    const nameSelect = document.getElementById('map-col-name');
+    const phoneSelect = document.getElementById('map-col-phone');
+    const emailSelect = document.getElementById('map-col-email');
+    const indSelect = document.getElementById('map-col-industry');
+    const locSelect = document.getElementById('map-col-location');
+    const webSelect = document.getElementById('map-col-website');
+
+    if (compSelect) compSelect.innerHTML = buildOptionsHtml(companyIdx !== -1 ? companyIdx : 0);
+    if (nameSelect) nameSelect.innerHTML = buildOptionsHtml(nameIdx !== -1 ? nameIdx : (companyIdx !== -1 ? -1 : 1));
+    if (phoneSelect) phoneSelect.innerHTML = buildOptionsHtml(phoneIdx !== -1 ? phoneIdx : 2);
+    if (emailSelect) emailSelect.innerHTML = buildOptionsHtml(emailIdx !== -1 ? emailIdx : 3);
+    if (indSelect) indSelect.innerHTML = buildOptionsHtml(industryIdx !== -1 ? industryIdx : 4);
+    if (locSelect) locSelect.innerHTML = buildOptionsHtml(locationIdx !== -1 ? locationIdx : 5);
+    if (webSelect) webSelect.innerHTML = buildOptionsHtml(websiteIdx !== -1 ? websiteIdx : 6);
 
     const countEl = document.getElementById('csv-mapping-row-count');
-    if (countEl) countEl.textContent = `Total ${rows.length} rows detected`;
+    if (countEl) countEl.textContent = `Total ${dataRows.length} records detected from ${this.escapeHtml(filename)}`;
 
     // Listen for select changes to update live preview
     document.querySelectorAll('.csv-map-select').forEach(select => {
@@ -140,15 +212,18 @@ class LeadImportComponent {
     if (!previewTbody || !this.currentCsvRows) return;
 
     const sampleRows = this.currentCsvRows.slice(0, 3);
-    previewTbody.innerHTML = sampleRows.map(row => {
-      const cols = row.split(',').map(c => c.trim().replace(/^["'\r]+|["'\r]+$/g, ''));
+    previewTbody.innerHTML = sampleRows.map(cols => {
+      const getVal = (idx) => {
+        if (idx < 0 || !Array.isArray(cols)) return '—';
+        return cols[idx] ? String(cols[idx]).trim() || '—' : '—';
+      };
       return `
         <tr>
-          <td>${this.escapeHtml(companyIdx >= 0 ? cols[companyIdx] || '—' : '—')}</td>
-          <td>${this.escapeHtml(nameIdx >= 0 ? cols[nameIdx] || '—' : '—')}</td>
-          <td>${this.escapeHtml(phoneIdx >= 0 ? cols[phoneIdx] || '—' : '—')}</td>
-          <td>${this.escapeHtml(emailIdx >= 0 ? cols[emailIdx] || '—' : '—')}</td>
-          <td>${this.escapeHtml(industryIdx >= 0 ? cols[industryIdx] || '—' : '—')}</td>
+          <td>${this.escapeHtml(getVal(companyIdx))}</td>
+          <td>${this.escapeHtml(getVal(nameIdx))}</td>
+          <td>${this.escapeHtml(getVal(phoneIdx))}</td>
+          <td>${this.escapeHtml(getVal(emailIdx))}</td>
+          <td>${this.escapeHtml(getVal(industryIdx))}</td>
         </tr>
       `;
     }).join('');
@@ -190,26 +265,31 @@ class LeadImportComponent {
     const leadsToAdd = [];
 
     rows.forEach(row => {
-      const cols = row.split(',').map(c => c.trim().replace(/^["'\r]+|["'\r]+$/g, ''));
-      if (cols.length < 1) {
+      const cols = Array.isArray(row) 
+        ? row 
+        : String(row).split(',').map(c => c.trim().replace(/^["'\r]+|["'\r]+$/g, ''));
+        
+      if (!cols || cols.length < 1) {
         invalid++;
         return;
       }
 
-      const companyName = companyIdx >= 0 ? cols[companyIdx] || 'Unknown Business' : 'Unknown Business';
-      const contactName = nameIdx >= 0 ? cols[nameIdx] || 'Owner' : 'Owner';
-      let rawPhone = phoneIdx >= 0 ? cols[phoneIdx] || '' : '';
-      const email = emailIdx >= 0 ? cols[emailIdx] || '' : '';
-      const industry = industryIdx >= 0 ? cols[industryIdx] || 'General' : 'General';
-      const location = locationIdx >= 0 ? cols[locationIdx] || 'India' : 'India';
-      const website = websiteIdx >= 0 ? cols[websiteIdx] || '' : '';
+      const getColVal = (idx) => idx >= 0 && cols[idx] ? String(cols[idx]).trim() : '';
+
+      const companyName = getColVal(companyIdx) || 'Unknown Business';
+      const contactName = getColVal(nameIdx) || 'Decision Maker';
+      let rawPhone = getColVal(phoneIdx);
+      const email = getColVal(emailIdx);
+      const industry = getColVal(industryIdx) || 'General';
+      const location = getColVal(locationIdx) || 'India';
+      const website = getColVal(websiteIdx);
 
       // Phone normalization & auto-detection across columns if needed
       let cleanPhoneDigits = rawPhone.replace(/\D/g, '');
       if (cleanPhoneDigits.length < 7) {
-        const foundPhoneCol = cols.find(c => c.replace(/\D/g, '').length >= 7);
+        const foundPhoneCol = cols.find(c => String(c).replace(/\D/g, '').length >= 7);
         if (foundPhoneCol) {
-          cleanPhoneDigits = foundPhoneCol.replace(/\D/g, '');
+          cleanPhoneDigits = String(foundPhoneCol).replace(/\D/g, '');
         } else {
           invalid++;
           return;
@@ -229,7 +309,7 @@ class LeadImportComponent {
         : `+${cleanPhoneDigits}`;
 
       const leadObj = {
-        id: 'lead_csv_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+        id: 'lead_import_' + Date.now() + '_' + Math.floor(Math.random() * 10000),
         companyName,
         contactName,
         jobTitle: 'Decision Maker',
@@ -239,7 +319,7 @@ class LeadImportComponent {
         website: website || `https://${companyName.toLowerCase().replace(/[^a-z0-9]/g, '')}.com`,
         industry,
         location,
-        source: 'CSV Upload',
+        source: this.currentFilename ? `File: ${this.currentFilename}` : 'Spreadsheet Upload',
         sourceUrl: 'Uploaded File',
         score: 65,
         scoreCategory: 'warm',
@@ -247,7 +327,7 @@ class LeadImportComponent {
         assignedTo: 'Karthik Raja',
         optedOut: false,
         createdDate: new Date().toISOString(),
-        tags: ['CSV Import', industry]
+        tags: ['File Import', industry]
       };
 
       // Score lead with AI
@@ -293,7 +373,7 @@ class LeadImportComponent {
           </div>
         </div>
         <p style="font-size: 13px; color: var(--text-secondary);">
-          All ${valid} valid records have been normalized to E.164 phone formats and scored via the AI lead qualification rules.
+          All ${valid} valid records have been normalized to E.164 phone formats and scored via the AI lead qualification engine.
         </p>
       `;
     }
@@ -309,9 +389,9 @@ class LeadImportComponent {
         window.appState.set('leads', [...leadsToAdd, ...current]);
         modal.classList.remove('active');
         window.appState.addAuditLog(
-          'CSV Leads Ingested',
+          'Spreadsheet Ingested',
           `${valid} Valid Records Added`,
-          `Deduplicated ${duplicates} entries. Total CRM size: ${current.length + valid}.`,
+          `Ingested from ${this.currentFilename || 'File'}. Deduplicated ${duplicates} entries. CRM total: ${current.length + valid}.`,
           'Success'
         );
         alert(`Successfully imported ${valid} leads into CRM!`);
@@ -386,6 +466,15 @@ class LeadImportComponent {
     document.body.appendChild(link);
     link.click();
     link.remove();
+  }
+
+  escapeHtml(str) {
+    if (str === null || str === undefined) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
   }
 }
 
