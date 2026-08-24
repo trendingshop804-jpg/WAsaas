@@ -330,7 +330,33 @@ class WhatsAppService {
         const senderClean = senderRaw.replace(/[^0-9]/g, '');
         if (!senderClean) continue;
 
-        const text = msg.content || '[Inbound WhatsApp Message]';
+        // Robustly extract the actual message text from all possible field locations
+        const rawPayload = msg.raw || {};
+        const waMsg = rawPayload?.entry?.[0]?.changes?.[0]?.value?.messages?.[0] || {};
+        const text =
+          msg.content ||
+          msg.body ||
+          msg.text ||
+          waMsg?.text?.body ||
+          waMsg?.button?.text ||
+          waMsg?.interactive?.button_reply?.title ||
+          waMsg?.interactive?.list_reply?.title ||
+          waMsg?.image?.caption ||
+          waMsg?.video?.caption ||
+          waMsg?.document?.filename ||
+          waMsg?.audio?.id && '🎤 Audio message' ||
+          waMsg?.sticker?.id && '🩷 Sticker' ||
+          waMsg?.location && `📍 ${waMsg.location.name || 'Location'}` ||
+          waMsg?.contacts?.[0]?.name?.formatted_name && `👤 ${waMsg.contacts[0].name.formatted_name}` ||
+          null;
+
+        // Derive media type from Supabase field OR raw payload
+        const rawMsgType = msg.message_type || waMsg?.type || 'text';
+        const mediaTypeMap = { image: 'image', video: 'video', audio: 'audio', document: 'document', sticker: 'sticker', location: 'location', contacts: 'contact' };
+        const resolvedType = mediaTypeMap[rawMsgType] || (rawMsgType === 'text' ? 'text' : (text ? 'text' : 'unknown'));
+
+        // Build display text — never show placeholder if we have a type label
+        const displayText = text || (resolvedType !== 'text' && resolvedType !== 'unknown' ? null : null) || `📩 ${msg.sender_number || 'Unknown'} sent a message`;
 
         // Match existing lead by phone
         let lead = leads.find(l => {
@@ -368,7 +394,15 @@ class WhatsAppService {
         const inMsg = {
           id: 'm_sb_' + msgId,
           sender: msg.direction === 'outbound' ? 'outbound' : 'inbound',
-          text,
+          type: resolvedType,
+          text: resolvedType === 'text' || resolvedType === 'unknown' ? displayText : (text || undefined),
+          caption: resolvedType !== 'text' && resolvedType !== 'unknown' ? text : undefined,
+          mediaUrl: waMsg?.image?.url || waMsg?.video?.url || waMsg?.audio?.url || waMsg?.document?.url || waMsg?.sticker?.url || undefined,
+          locationName: waMsg?.location?.name,
+          locationAddress: waMsg?.location?.address,
+          contactName: waMsg?.contacts?.[0]?.name?.formatted_name,
+          contactPhone: waMsg?.contacts?.[0]?.phones?.[0]?.phone,
+          fileName: waMsg?.document?.filename,
           timestamp: formattedTime
         };
 
@@ -382,16 +416,16 @@ class WhatsAppService {
             unreadCount: 1,
             mode: 'AI',
             status: 'AI Active',
-            lastMessage: text,
+            lastMessage: displayText || text || '📩 New message',
             lastTimestamp: formattedTime,
             messages: [inMsg],
             aiSuggestions: window.aiService ? window.aiService.suggestReplies({ messages: [inMsg] }) : []
           };
           conversations.unshift(conv);
         } else {
-          if (!conv.messages.some(m => m.id === inMsg.id || (m.text === text && m.timestamp === formattedTime))) {
+          if (!conv.messages.some(m => m.id === inMsg.id || (m.text === inMsg.text && m.timestamp === formattedTime))) {
             conv.messages.push(inMsg);
-            conv.lastMessage = text;
+            conv.lastMessage = displayText || text || '📩 New message';
             conv.lastTimestamp = formattedTime;
             if (msg.direction !== 'outbound') {
               conv.unreadCount = (conv.unreadCount || 0) + 1;
