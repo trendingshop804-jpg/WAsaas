@@ -536,10 +536,10 @@
         </section>
 
         <!-- 6. LIVE INBOX VIEW -->
-        <section id="view-inbox" class="view-panel">
-          <div class="inbox-layout">
+        <section id="view-inbox" class="view-panel h-screen overflow-hidden">
+          <div class="inbox-layout h-full overflow-hidden">
             <!-- Left: Conversations List -->
-            <div class="inbox-conversations-list">
+            <div class="inbox-conversations-list flex flex-col h-full overflow-hidden">
               <div class="inbox-search-header">
                 <input type="text" id="inbox-search-input" class="form-input" style="padding: 7px 10px; font-size: 12.5px;" placeholder="Search chats...">
                 <div class="inbox-filter-chips">
@@ -550,13 +550,13 @@
                 </div>
               </div>
 
-              <div class="conversation-items-scroll" id="inbox-conversations-scroll">
+              <div class="conversation-items-scroll flex-1 overflow-y-auto min-h-0 custom-scrollbar" id="inbox-conversations-scroll">
                 <!-- Rendered dynamically -->
               </div>
             </div>
 
             <!-- Middle: Active Chat Pane -->
-            <div class="inbox-chat-pane">
+            <div class="inbox-chat-pane flex flex-col h-full overflow-hidden">
               <div class="chat-header">
                 <div class="chat-header-info">
                   <div style="font-weight: 700; font-size: 14px;" id="chat-lead-name">Dr. Jacob Mathew</div>
@@ -572,9 +572,10 @@
               </div>
 
               <!-- Message Stream -->
-              <div class="chat-messages-scroll" id="chat-messages-scroll">
+              <div class="chat-messages-scroll flex-1 overflow-y-auto p-4 space-y-4 min-h-0 custom-scrollbar" id="chat-messages-scroll">
                 <!-- Rendered dynamically -->
               </div>
+
 
               <!-- Floating Scroll to Bottom Button -->
               <button id="inbox-scroll-bottom-btn" class="inbox-scroll-bottom-btn" title="Scroll to latest message">

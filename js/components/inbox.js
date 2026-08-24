@@ -71,14 +71,18 @@ class InboxComponent {
   }
 
   scrollToBottom(smooth = true) {
+    const messagesEndRef = document.getElementById('messagesEndRef');
     const messagesScroll = document.getElementById('chat-messages-scroll');
-    if (messagesScroll) {
+    if (messagesEndRef) {
+      messagesEndRef.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto' });
+    } else if (messagesScroll) {
       messagesScroll.scrollTo({
         top: messagesScroll.scrollHeight,
         behavior: smooth ? 'smooth' : 'auto'
       });
     }
   }
+
 
   bindEvents() {
     // Search input
@@ -238,7 +242,6 @@ class InboxComponent {
 
     // Message List
     const messagesScroll = document.getElementById('chat-messages-scroll');
-    if (messagesScroll) {
       messagesScroll.innerHTML = (conv.messages || []).map(m => {
         if (m.sender === 'system') {
           return `
@@ -261,10 +264,16 @@ class InboxComponent {
             </div>
           </div>
         `;
-      }).join('');
+      }).join('') + '<div id="messagesEndRef"></div>';
 
-      messagesScroll.scrollTop = messagesScroll.scrollHeight;
+      const messagesEndRef = document.getElementById('messagesEndRef');
+      if (messagesEndRef) {
+        messagesEndRef.scrollIntoView({ behavior: 'smooth' });
+      } else {
+        messagesScroll.scrollTop = messagesScroll.scrollHeight;
+      }
     }
+
 
     // AI Suggestions Bar
     const aiBar = document.getElementById('chat-ai-suggestions-bar');
