@@ -454,7 +454,8 @@ class InboxComponent {
 
     container.innerHTML = convs.map(conv => {
       const isActive = conv.id === this.selectedConvId;
-      const initials = conv.contactName ? conv.contactName.split(' ').map(n=>n[0]).join('').substring(0,2).toUpperCase() : 'WC';
+      const displayName = conv.contactName || conv.leadName || conv.name || (conv.phone ? (conv.phone.startsWith('+') || conv.phone.startsWith('91') || conv.phone.length >= 10 ? `WhatsApp Contact (${conv.phone})` : conv.phone) : 'WhatsApp Contact');
+      const initials = displayName ? displayName.split(' ').map(n=>n[0]).filter(Boolean).join('').substring(0,2).toUpperCase() : 'WC';
       const statusClass = conv.mode === 'AI' ? 'status-ai-active' : 'status-human-active';
 
       return `
@@ -465,7 +466,7 @@ class InboxComponent {
           </div>
           <div class="conversation-meta">
             <div class="conv-top-row">
-              <span class="conv-name">${conv.contactName}</span>
+              <span class="conv-name">${displayName}</span>
               <span class="conv-time">${conv.lastTimestamp || ''}</span>
             </div>
             <div class="conv-snippet">${conv.lastMessage || 'No messages yet'}</div>
@@ -505,8 +506,9 @@ class InboxComponent {
       return;
     }
 
-    if (nameEl) nameEl.textContent = conv.contactName;
-    if (compEl) compEl.textContent = `${conv.company || 'Inbound WhatsApp'} · ${conv.phone}`;
+    const displayName = conv.contactName || conv.leadName || conv.name || (conv.phone ? (conv.phone.startsWith('+') || conv.phone.startsWith('91') || conv.phone.length >= 10 ? `WhatsApp Contact (${conv.phone})` : conv.phone) : 'WhatsApp Contact');
+    if (nameEl) nameEl.innerHTML = `<span style="font-weight: 700;">${displayName}</span> <span style="font-size: 13px; color: var(--text-muted); font-weight: 400; margin-left: 6px;">${conv.company ? conv.company + ' · ' : ''}${conv.phone || ''}</span>`;
+    if (compEl) compEl.style.display = 'none';
 
     if (resolveBtn) {
       resolveBtn.innerHTML = conv.status === 'RESOLVED' ? '🔄 Re-open Chat' : '✓ Mark Resolved';
@@ -637,7 +639,8 @@ class InboxComponent {
 
     if (!conv) return;
 
-    if (contactEl) contactEl.textContent = conv.contactName;
+    const displayName = conv.contactName || conv.leadName || conv.name || (conv.phone ? (conv.phone.startsWith('+') || conv.phone.startsWith('91') || conv.phone.length >= 10 ? `WhatsApp Contact (${conv.phone})` : conv.phone) : 'WhatsApp Contact');
+    if (contactEl) contactEl.textContent = displayName;
     if (compEl) compEl.textContent = conv.company || 'Inbound WhatsApp';
     if (phoneEl) phoneEl.textContent = conv.phone || '+91 94470 12345';
 
