@@ -252,7 +252,7 @@ class AuthComponent {
     if (appShell) appShell.style.display = 'flex';
 
     if (userProfileEl && user) {
-      userProfileEl.textContent = user.name || user.email?.split('@')[0] || 'User';
+      userProfileEl.textContent = user.profile?.name || user.name || user.email?.split('@')[0] || 'User';
     }
 
     if (window.navigationComponent && typeof window.navigationComponent.switchView === 'function') {

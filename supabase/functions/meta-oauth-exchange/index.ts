@@ -18,12 +18,12 @@ const SUPABASE_URL        = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const META_APP_ID         = Deno.env.get("META_APP_ID") || "";
 const META_APP_SECRET     = Deno.env.get("META_APP_SECRET") || "";
-const ENCRYPT_SECRET      = Deno.env.get("INTEGRATION_ENCRYPT_SECRET") ?? "nexuslead-meta-encrypt-secret-32b!";
+const ENCRYPT_SECRET      = Deno.env.get("INTEGRATION_ENCRYPT_SECRET");
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, apikey",
 };
 
 function jsonResponse(data: unknown, status = 200) {
@@ -37,6 +37,9 @@ function jsonResponse(data: unknown, status = 200) {
 // Helper: AES-GCM Token Encryption via SubtleCrypto
 // ---------------------------------------------------------------------------
 async function encryptToken(plaintext: string): Promise<string> {
+  if (!ENCRYPT_SECRET || ENCRYPT_SECRET.length < 32) {
+    throw new Error("INTEGRATION_ENCRYPT_SECRET must be set to a strong secret of at least 32 characters");
+  }
   const enc = new TextEncoder();
   const keyData = enc.encode(ENCRYPT_SECRET.padEnd(32, "0").slice(0, 32));
   const iv = crypto.getRandomValues(new Uint8Array(12));
@@ -99,7 +102,7 @@ serve(async (req: Request) => {
       .eq("organization_id", organizationId)
       .single();
 
-    if (profileErr || !userProfile) {
+    if (profileErr || !userProfile || !["OWNER", "ADMIN"].includes(userProfile.role)) {
       return jsonResponse({ error: "Forbidden: Organization access denied" }, 403);
     }
 

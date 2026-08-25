@@ -65,14 +65,6 @@ class AuthService {
       } catch (err) {
         console.warn('[AuthService] Session check error:', err);
       }
-    } else {
-      // Local demo mode session check
-      const localUser = localStorage.getItem('nexuslead_local_user');
-      if (localUser) {
-        try {
-          this.currentUser = JSON.parse(localUser);
-        } catch (_) {}
-      }
     }
   }
 
@@ -111,8 +103,7 @@ class AuthService {
     if (this.supabase) {
       return Boolean(this.currentSession || this.currentUser);
     }
-    // In local demo environment: return true if demo user is stored
-    return Boolean(localStorage.getItem('nexuslead_local_user') || localStorage.getItem('nexuslead_state_v1'));
+    return false;
   }
 
   async signUp({ email, password, fullName, workspaceName = 'My Workspace' }) {
@@ -135,17 +126,7 @@ class AuthService {
       return data;
     }
 
-    // Local fallback when Supabase keys not set
-    const mockUser = {
-      id: 'usr_' + Date.now(),
-      email,
-      name: fullName || email.split('@')[0],
-      role: 'OWNER',
-      workspaceName
-    };
-    this.currentUser = mockUser;
-    localStorage.setItem('nexuslead_local_user', JSON.stringify(mockUser));
-    return { user: mockUser, session: { access_token: 'mock_token_' + Date.now() } };
+    throw new Error('Authentication is not configured. Add your Supabase project URL and anon key before creating an account.');
   }
 
   async signIn({ email, password }) {
@@ -162,16 +143,7 @@ class AuthService {
       return data;
     }
 
-    // Local fallback
-    const mockUser = {
-      id: 'usr_local_demo',
-      email,
-      name: email.split('@')[0],
-      role: 'OWNER'
-    };
-    this.currentUser = mockUser;
-    localStorage.setItem('nexuslead_local_user', JSON.stringify(mockUser));
-    return { user: mockUser, session: { access_token: 'mock_token_' + Date.now() } };
+    throw new Error('Authentication is not configured. Add your Supabase project URL and anon key before signing in.');
   }
 
   async signOut() {
