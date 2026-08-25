@@ -30,6 +30,28 @@ const SUPABASE_CONFIG = {
    */
   integrationsFunctionName: 'manage-integration-keys',
 };
+/**
+ * Static sites do not receive Vercel environment variables directly. Fetch
+ * only the public Supabase URL and anon key at runtime; never expose a
+ * service-role key to the browser.
+ */
+async function loadPublicSupabaseConfig() {
+  try {
+    const response = await fetch('/api/public-config', { credentials: 'same-origin' });
+    if (!response.ok) return;
+    const config = await response.json();
+    if (config.projectUrl && config.anonKey) {
+      SUPABASE_CONFIG.projectUrl = config.projectUrl;
+      SUPABASE_CONFIG.anonKey = config.anonKey;
+      Object.assign(window.supabaseConfig, {
+        projectUrl: config.projectUrl,
+        anonKey: config.anonKey,
+      });
+    }
+  } catch (error) {
+    console.warn('[Supabase] Public configuration could not be loaded.', error);
+  }
+}
 
 /**
  * Returns the base URL for a named Edge Function.
@@ -79,3 +101,5 @@ window.supabaseConfig = {
   getAuthHeaders,
   isSupabaseConfigured,
 };
+
+window.supabaseConfig.ready = loadPublicSupabaseConfig();

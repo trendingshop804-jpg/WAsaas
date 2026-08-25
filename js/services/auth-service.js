@@ -38,6 +38,10 @@ class AuthService {
   }
 
   async init() {
+    if (window.supabaseConfig?.ready) {
+      await window.supabaseConfig.ready;
+    }
+
     if (!this.supabase && window.supabaseConfig && window.supabaseConfig.isSupabaseConfigured()) {
       this.initSupabaseClient();
     }
