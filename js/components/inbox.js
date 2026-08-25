@@ -121,6 +121,35 @@ class InboxComponent {
         this.handleSimulateInbound();
       });
     }
+
+    // Delete active conversation button
+    const deleteBtn = document.getElementById('chat-delete-btn');
+    if (deleteBtn) {
+      deleteBtn.addEventListener('click', () => {
+        const conv = this.getSelectedConversation();
+        if (conv) {
+          this.deleteConversation(conv.id);
+        }
+      });
+    }
+  }
+
+  deleteConversation(convId) {
+    let convs = window.appState.get('conversations') || [];
+    const conv = convs.find(c => c.id === convId);
+    if (!conv) return;
+
+    if (confirm(`Are you sure you want to delete the chat thread with ${conv.leadName || conv.phone}?`)) {
+      convs = convs.filter(c => c.id !== convId);
+      window.appState.set('conversations', convs);
+      window.appState.addAuditLog('Chat Thread Deleted', conv.leadName || conv.phone, 'Deleted conversation thread.', 'Success');
+      if (convs.length > 0) {
+        this.selectedConvId = convs[0].id;
+      } else {
+        this.selectedConvId = null;
+      }
+      this.render();
+    }
   }
 
   getSelectedConversation() {

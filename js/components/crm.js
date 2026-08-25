@@ -171,6 +171,9 @@ class CRMComponent {
             <button class="btn btn-primary btn-sm btn-icon" title="Open WhatsApp Chat" onclick="window.crmComponent.openWhatsAppChat('${lead.id}')">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
             </button>
+            <button class="btn btn-outline btn-sm btn-icon" style="color: #ef4444; border-color: rgba(239, 68, 68, 0.25);" title="Delete Contact & Chat" onclick="window.crmComponent.deleteLead('${lead.id}')">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+            </button>
           </div>
         </td>
       </tr>
@@ -401,12 +404,101 @@ class CRMComponent {
     alert(`Starting campaign wizard with ${count} pre-selected CRM leads!`);
   }
 
+  deleteLead(leadId) {
+    const leads = window.appState.get('leads') || [];
+    const lead = leads.find(l => l.id === leadId);
+    if (!lead) return;
+
+    if (confirm(`Are you sure you want to delete contact "${lead.contactName}" (${lead.phone})?`)) {
+      const normalizeDigits = (p) => String(p || '').replace(/[^0-9]/g, '').slice(-10);
+      const leadDigits = normalizeDigits(lead.phone);
+
+      const updatedLeads = leads.filter(l => l.id !== leadId);
+      window.appState.set('leads', updatedLeads);
+
+      // Clean up linked conversation
+      let convs = window.appState.get('conversations') || [];
+      convs = convs.filter(c => c.leadId !== leadId && (!leadDigits || normalizeDigits(c.phone) !== leadDigits));
+      window.appState.set('conversations', convs);
+
+      window.appState.addAuditLog('Lead Deleted', lead.contactName, `Deleted contact ${lead.phone}.`, 'Success');
+      this.closeLeadDrawer();
+      this.render();
+    }
+  }
+
+  cleanupDuplicateAccounts() {
+    const leads = window.appState.get('leads') || [];
+    const normalizeDigits = (p) => {
+      if (!p) return '';
+      const digits = String(p).replace(/[^0-9]/g, '');
+      return digits.length >= 10 ? digits.slice(-10) : digits;
+    };
+
+    const seenPhones = new Set();
+    const uniqueLeads = [];
+    let dupCount = 0;
+
+    for (const lead of leads) {
+      const pKey = normalizeDigits(lead.phone);
+      if (pKey) {
+        if (seenPhones.has(pKey)) {
+          dupCount++;
+          continue;
+        }
+        seenPhones.add(pKey);
+      }
+      uniqueLeads.push(lead);
+    }
+
+    if (dupCount > 0) {
+      window.appState.set('leads', uniqueLeads);
+
+      // Also clean up duplicate conversations
+      const convs = window.appState.get('conversations') || [];
+      const seenConvPhones = new Set();
+      const uniqueConvs = [];
+      for (const c of convs) {
+        const cKey = normalizeDigits(c.phone) || c.leadId || c.id;
+        if (cKey) {
+          if (seenConvPhones.has(cKey)) continue;
+          seenConvPhones.add(cKey);
+        }
+        uniqueConvs.push(c);
+      }
+      window.appState.set('conversations', uniqueConvs);
+
+      window.appState.addAuditLog('Duplicate Leads Cleaned', `${dupCount} duplicates removed`, 'Cleaned up duplicate accounts.', 'Success');
+      alert(`Cleaned up ${dupCount} duplicate lead accounts & conversations!`);
+      this.render();
+    } else {
+      alert('No duplicate accounts found. All phone numbers are unique.');
+    }
+  }
+
   handleBulkDelete() {
     const count = this.selectedLeadIds.size;
     if (confirm(`Are you sure you want to delete ${count} selected leads?`)) {
+      const normalizeDigits = (p) => String(p || '').replace(/[^0-9]/g, '').slice(-10);
       let leads = window.appState.get('leads') || [];
+      const selectedPhones = new Set();
+
+      for (const l of leads) {
+        if (this.selectedLeadIds.has(l.id)) {
+          const d = normalizeDigits(l.phone);
+          if (d) selectedPhones.add(d);
+        }
+      }
+
       leads = leads.filter(l => !this.selectedLeadIds.has(l.id));
       window.appState.set('leads', leads);
+
+      // Clean up linked conversations
+      let convs = window.appState.get('conversations') || [];
+      convs = convs.filter(c => !this.selectedLeadIds.has(c.leadId) && (!normalizeDigits(c.phone) || !selectedPhones.has(normalizeDigits(c.phone))));
+      window.appState.set('conversations', convs);
+
+      window.appState.addAuditLog('Bulk Leads Deleted', `${count} leads removed`, 'Deleted selected contacts.', 'Success');
       this.selectedLeadIds.clear();
       this.updateBulkActionBar();
       this.render();

@@ -462,6 +462,9 @@
               <button class="btn btn-secondary btn-sm" onclick="window.navigationComponent.switchView('import')">
                 📤 Upload / Import Leads
               </button>
+              <button class="btn btn-outline btn-sm" onclick="window.crmComponent.cleanupDuplicateAccounts()" title="Deduplicate any test or duplicate lead accounts by phone number">
+                🧹 Clean Duplicates
+              </button>
               <button class="btn btn-primary btn-sm" onclick="document.getElementById('manual-lead-modal').classList.add('active')">
                 + Add Lead
               </button>
@@ -566,11 +569,14 @@
                   <span style="font-size: 12px; color: var(--text-muted);" id="chat-lead-company">Jacob Dental · +91 94470 12345</span>
                 </div>
 
-                <div class="chat-actions">
+                <div class="chat-actions flex items-center gap-2">
                   <div class="chat-mode-toggle">
                     <button id="mode-toggle-ai" class="mode-btn active ai">🤖 AI Bot</button>
                     <button id="mode-toggle-human" class="mode-btn">👤 Human</button>
                   </div>
+                  <button id="chat-delete-btn" class="btn btn-outline" style="padding: 4px 10px; font-size: 12px; color: #ef4444; border-color: rgba(239, 68, 68, 0.3);" title="Delete this conversation thread">
+                    🗑️ Delete Chat
+                  </button>
                 </div>
               </div>
 
