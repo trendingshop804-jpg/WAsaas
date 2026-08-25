@@ -166,7 +166,7 @@
       <!-- Navigation Menu -->
       <nav class="sidebar-nav">
         <div class="nav-section-title">Core Operating System</div>
-        
+
         <a href="#dashboard" class="nav-item active" data-view="dashboard">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
           <span>Dashboard</span>
@@ -315,7 +315,7 @@
 
       <!-- Viewport Area for Modular Views -->
       <main class="content-viewport">
-        
+
         <!-- 1. DASHBOARD VIEW -->
         <section id="view-dashboard" class="view-panel active">
           <div class="flex items-center justify-between" style="margin-bottom: 24px;">
@@ -403,7 +403,7 @@
                 </div>
                 <span class="badge badge-whatsapp">Live Telemetry</span>
               </div>
-              
+
               <div class="chart-canvas-wrap">
                 <div class="funnel-bar-group">
                   <div class="funnel-bar" id="funnel-bar-total" style="height: 100%;" data-val="1284"></div>
@@ -684,22 +684,24 @@
 
             <!-- Middle: Active Chat Pane -->
             <div class="inbox-chat-pane flex flex-col h-full overflow-hidden">
-              <div class="chat-header">
+              <div class="chat-header whatsapp-chat-header">
                 <div class="chat-header-info">
-                  <div style="font-weight: 700; font-size: 14px;" id="chat-lead-name">Dr. Jacob Mathew</div>
-                  <span style="font-size: 12px; color: var(--text-muted);" id="chat-lead-company">Jacob Dental · +91 94470 12345</span>
+                  <div class="chat-contact-avatar" id="chat-contact-avatar">PN</div>
+                  <div>
+                    <div class="chat-contact-name" id="chat-lead-name">Dr. Jacob Mathew</div>
+                    <span class="chat-contact-presence" id="chat-lead-company">online · +91 94470 12345</span>
+                  </div>
                 </div>
-
                 <div class="chat-actions flex items-center gap-2">
                   <div class="chat-mode-toggle">
-                    <button id="mode-toggle-ai" class="mode-btn active ai">🤖 AI Bot</button>
-                    <button id="mode-toggle-human" class="mode-btn">👤 Human</button>
+                    <button id="mode-toggle-ai" class="mode-btn active ai">AI</button>
+                    <button id="mode-toggle-human" class="mode-btn">Human</button>
                   </div>
-                  <button id="chat-delete-btn" class="btn btn-outline" style="padding: 4px 10px; font-size: 12px; color: #ef4444; border-color: rgba(239, 68, 68, 0.3);" title="Delete this conversation thread">
-                    🗑️ Delete Chat
-                  </button>
+                  <button id="inbox-details-toggle" class="whatsapp-icon-btn" type="button" title="Contact details">ⓘ</button>
                 </div>
               </div>
+
+
 
               <!-- Message Stream -->
               <div class="chat-messages-scroll flex-1 overflow-y-auto p-4 space-y-4 min-h-0 custom-scrollbar" id="chat-messages-scroll">
@@ -721,11 +723,12 @@
               </div>
 
               <!-- Chat Input Area -->
-              <form id="chat-send-form" class="chat-input-area">
-                <textarea id="chat-message-input" class="chat-textarea" placeholder="Type WhatsApp reply (or select AI suggestion above)..."></textarea>
-                <button type="submit" class="btn btn-primary" style="height: 42px;">
-                  Send
-                </button>
+              <form id="chat-send-form" class="chat-input-area whatsapp-composer">
+                <button id="chat-emoji-btn" class="whatsapp-icon-btn" type="button" title="Emoji">☺</button>
+                <button id="chat-attachment-btn" class="whatsapp-icon-btn" type="button" title="Attach a file">⌕</button>
+                <input id="chat-file-input" type="file" hidden>
+                <textarea id="chat-message-input" class="chat-textarea" rows="1" placeholder="Type a message"></textarea>
+                <button id="chat-submit-btn" type="submit" class="whatsapp-send-btn" title="Send message">🎙</button>
               </form>
 
               <!-- Simulator for incoming customer text -->
@@ -737,11 +740,11 @@
             </div>
 
             <!-- Right: Lead Details Sidebar -->
-            <div class="inbox-lead-details">
+            <div class="inbox-lead-details" id="inbox-details-panel">
               <div style="font-weight: 700; font-size: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--border-subtle);">
                 Prospect Overview
               </div>
-              
+
               <div>
                 <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase;">Contact & Company</div>
                 <div style="font-weight: 700; color: var(--text-primary);" id="inbox-sidebar-contact">Dr. Jacob Mathew</div>
@@ -951,7 +954,7 @@
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
               <div class="card">
                 <h3 style="margin-bottom: 14px;">Business & Pricing Knowledge</h3>
-                
+
                 <div class="form-group">
                   <label class="form-label">Business Name</label>
                   <input type="text" id="ai-agent-biz-name" class="form-input" value="Nexus Growth Labs">
@@ -1135,7 +1138,7 @@
                 <div style="color: var(--text-muted);">Click "Generate QR Code" to begin pairing session.</div>
               </div>
               <div id="qr-expiry-timer" style="font-size: 12px; color: var(--brand-whatsapp); font-weight: 700; margin-bottom: 12px;"></div>
-              
+
               <div class="flex items-center justify-center gap-2">
                 <button id="generate-qr-btn" class="btn btn-primary btn-sm">Generate QR Code</button>
                 <button id="refresh-qr-btn" class="btn btn-secondary btn-sm">Refresh QR</button>
@@ -1632,7 +1635,7 @@
             <p style="font-size: 12.5px; color: var(--text-secondary); margin-bottom: 12px;">
               Requires an HTTPS domain registered in your Meta App settings under <strong>App Domains</strong> &amp; <strong>OAuth Redirect URIs</strong>.
             </p>
-            
+
             <div class="form-group">
               <label class="form-label">Meta App ID (Client ID) *</label>
               <input type="text" id="meta-real-app-id" class="form-input" placeholder="e.g. 1480548923617105" value="1480548923617105">
@@ -1963,7 +1966,7 @@
   <script src="js/services/whatsapp-service.js"></script>
   <script src="js/services/automation-engine.js"></script>
   <script src="js/services/storage.js"></script>
-  
+
   <script src="js/components/navigation.js"></script>
   <script src="js/components/dashboard.js"></script>
   <script src="js/components/discovery.js"></script>
@@ -1985,7 +1988,7 @@
   <script src="js/components/settings-integrations.js"></script>
   <script src="js/components/billing.js"></script>
   <script src="js/components/onboarding.js"></script>
-  
+
   <script src="js/app.js"></script>
 </body>
 </html>
