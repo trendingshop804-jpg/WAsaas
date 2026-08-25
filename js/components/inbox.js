@@ -429,14 +429,12 @@ class InboxComponent {
     // Filter Logic
     if (this.filterMode === 'unread') {
       convs = convs.filter(c => c.unreadCount > 0);
-    } else if (this.filterMode === 'assigned_me') {
-      convs = convs.filter(c => c.assignedAgent && c.assignedAgent.includes('You'));
-    } else if (this.filterMode === 'unassigned') {
-      convs = convs.filter(c => !c.assignedAgent || c.assignedAgent === 'Unassigned');
-    } else if (this.filterMode === 'resolved') {
-      convs = convs.filter(c => c.status === 'RESOLVED');
+    } else if (this.filterMode === 'ai_active') {
+      convs = convs.filter(c => c.mode === 'AI');
+    } else if (this.filterMode === 'human_active') {
+      convs = convs.filter(c => c.mode === 'HUMAN' || c.mode === 'MANUAL');
     } else {
-      // 'all': hide resolved unless explicitly filtered
+      // 'all': show all conversations
       convs = convs.filter(c => c.status !== 'RESOLVED');
     }
 
@@ -456,7 +454,7 @@ class InboxComponent {
 
     container.innerHTML = convs.map(conv => {
       const isActive = conv.id === this.selectedConvId;
-      const initials = conv.contactName ? conv.contactName.split(' ').map(n=>n[0]).join('').substring(0,2) : 'WA';
+      const initials = conv.contactName ? conv.contactName.split(' ').map(n=>n[0]).join('').substring(0,2).toUpperCase() : 'WC';
       const statusClass = conv.mode === 'AI' ? 'status-ai-active' : 'status-human-active';
 
       return `
@@ -508,7 +506,7 @@ class InboxComponent {
     }
 
     if (nameEl) nameEl.textContent = conv.contactName;
-    if (compEl) compEl.textContent = `${conv.company || 'Lead'} · ${conv.phone}`;
+    if (compEl) compEl.textContent = `${conv.company || 'Inbound WhatsApp'} · ${conv.phone}`;
 
     if (resolveBtn) {
       resolveBtn.innerHTML = conv.status === 'RESOLVED' ? '🔄 Re-open Chat' : '✓ Mark Resolved';
@@ -564,21 +562,32 @@ class InboxComponent {
 
     scrollArea.innerHTML = msgs.map((msg, index) => {
       const isOutbound = msg.direction === 'OUTBOUND';
-      const bubbleClass = isOutbound ? 'msg-bubble-outbound' : 'msg-bubble-inbound';
+      const isSystem = msg.direction === 'SYSTEM' || msg.isSystem;
 
-      // Read status ticks
-      let tickHtml = '';
-      if (isOutbound) {
-        tickHtml = `<span class="msg-tick read" title="Read by recipient">✓✓</span>`;
+      if (isSystem) {
+        return `
+          <div class="msg-row justify-center flex my-2">
+            <div class="msg-bubble system-bubble text-xs text-muted px-3 py-1 bg-tertiary rounded-full border border-subtle">
+              ${msg.text || msg.body || ''}
+            </div>
+          </div>
+        `;
       }
+
+      const bubbleClass = isOutbound ? 'msg-bubble-outbound' : 'msg-bubble-inbound';
 
       return `
         <div class="msg-row ${isOutbound ? 'justify-end' : 'justify-start'} flex">
-          <div class="msg-bubble ${bubbleClass} max-w-md p-3 rounded-lg text-sm shadow">
-            <div class="msg-body">${msg.text || msg.body || ''}</div>
-            <div class="msg-meta text-xs text-muted flex items-center justify-end gap-1 mt-1">
-              <span>${msg.timestamp}</span>
-              ${tickHtml}
+          <div class="msg-bubble-wrap ${isOutbound ? 'outbound' : 'inbound'}">
+            <div class="msg-bubble ${bubbleClass} max-w-md p-3 rounded-lg text-sm shadow">
+              <div class="msg-body">${msg.text || msg.body || ''}</div>
+              <div class="msg-footer flex items-center justify-between gap-3 mt-2 text-xs" style="font-size: 10px; color: rgba(255,255,255,0.7);">
+                ${isOutbound ? `<span class="ai-tag-pill" style="background: rgba(139, 92, 246, 0.25); color: #c4b5fd; padding: 1px 6px; border-radius: 4px; font-weight: 700; text-transform: uppercase;">${msg.sentByHuman ? 'HUMAN' : 'AI AGENT'}</span>` : '<span></span>'}
+                <span class="msg-meta flex items-center gap-1">
+                  <span>${msg.timestamp || 'Just now'}${isOutbound ? ' · DELIVERED' : ''}</span>
+                  ${isOutbound ? '<span class="msg-tick read" style="color: #38bdf8; font-weight: 700;">✓✓</span>' : ''}
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -591,20 +600,22 @@ class InboxComponent {
     if (!bar) return;
 
     const suggestions = [
-      '📅 Schedule 15-min Demo',
-      '💳 Send Growth Plan Pricing',
-      '💬 Request Follow-Up Time'
+      'Acknowledge inquiry and offer personalized assistance',
+      'Ask 2 quick qualification questions'
     ];
 
-    bar.innerHTML = suggestions.map(text => `
-      <button type="button" class="ai-suggest-chip btn btn-secondary btn-sm" style="font-size: 11.5px; border-radius: 14px;">
-        ✨ ${text}
-      </button>
-    `).join('');
+    bar.innerHTML = `
+      <span style="font-size: 11.5px; font-weight: 700; color: #a78bfa; white-space: nowrap;">✨ AI Suggestions:</span>
+      ${suggestions.map(text => `
+        <button type="button" class="ai-suggest-chip btn btn-secondary btn-sm" style="font-size: 11.5px; border-radius: 14px; padding: 4px 10px; background: rgba(139, 92, 246, 0.12); color: #c4b5fd; border: 1px solid rgba(139, 92, 246, 0.3); text-align: left;">
+          ${text}
+        </button>
+      `).join('')}
+    `;
 
     bar.querySelectorAll('.ai-suggest-chip').forEach(chip => {
       chip.addEventListener('click', () => {
-        const text = chip.textContent.replace('✨ ', '').trim();
+        const text = chip.textContent.trim();
         this.handleSendMessage(text);
       });
     });
@@ -615,7 +626,8 @@ class InboxComponent {
     const contactEl = document.getElementById('inbox-sidebar-contact');
     const compEl = document.getElementById('inbox-sidebar-company');
     const phoneEl = document.getElementById('inbox-sidebar-phone');
-    const statusPill = document.getElementById('inbox-right-status-pill');
+    const scoreEl = document.getElementById('inbox-sidebar-ai-score');
+    const aiSummaryEl = document.getElementById('inbox-sidebar-ai-summary');
     const stageSelect = document.getElementById('inbox-sidebar-stage-select');
     const agentSelect = document.getElementById('inbox-sidebar-agent-select');
     const tagsContainer = document.getElementById('inbox-sidebar-tags-container');
@@ -624,11 +636,24 @@ class InboxComponent {
     if (!conv) return;
 
     if (contactEl) contactEl.textContent = conv.contactName;
-    if (compEl) compEl.textContent = conv.company || 'Individual Prospect';
+    if (compEl) compEl.textContent = conv.company || 'Inbound WhatsApp';
     if (phoneEl) phoneEl.textContent = conv.phone || '+91 94470 12345';
-    if (statusPill) {
-      statusPill.textContent = conv.status || 'OPEN';
-      statusPill.className = conv.status === 'RESOLVED' ? 'badge badge-secondary' : 'badge badge-success';
+
+    // AI Lead Score
+    if (scoreEl) {
+      const score = conv.aiScore || 75;
+      const label = score >= 80 ? 'HOT' : score >= 50 ? 'WARM' : 'COLD';
+      const colorBg = score >= 80 ? 'rgba(239, 68, 68, 0.18)' : score >= 50 ? 'rgba(245, 158, 11, 0.18)' : 'rgba(59, 130, 246, 0.18)';
+      const colorText = score >= 80 ? '#f87171' : score >= 50 ? '#fbbf24' : '#60a5fa';
+      scoreEl.style.background = colorBg;
+      scoreEl.style.color = colorText;
+      scoreEl.style.borderColor = colorText;
+      scoreEl.textContent = `Score: ${score}/100 (${label})`;
+    }
+
+    // AI Briefing Summary
+    if (aiSummaryEl) {
+      aiSummaryEl.textContent = conv.aiSummary || 'Received real inbound message via WhatsApp webhook.';
     }
 
     if (stageSelect && conv.leadStage) stageSelect.value = conv.leadStage;
