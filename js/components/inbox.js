@@ -122,28 +122,6 @@ class InboxComponent {
       });
     }
 
-    // WhatsApp-style composer and collapsible CRM details
-    const composerInput = document.getElementById('chat-message-input');
-    const composerButton = document.getElementById('chat-submit-btn');
-    const emojiButton = document.getElementById('chat-emoji-btn');
-    const attachmentButton = document.getElementById('chat-attachment-btn');
-    const fileInput = document.getElementById('chat-file-input');
-    const detailsButton = document.getElementById('inbox-details-toggle');
-
-    if (composerInput) composerInput.addEventListener('input', () => this.updateComposerAction());
-    if (emojiButton && composerInput) emojiButton.addEventListener('click', () => {
-      composerInput.value += '🙂';
-      composerInput.focus();
-      this.updateComposerAction();
-    });
-    if (attachmentButton && fileInput) attachmentButton.addEventListener('click', () => fileInput.click());
-    if (fileInput) fileInput.addEventListener('change', () => {
-      if (fileInput.files?.[0]) alert(`Selected ${fileInput.files[0].name}. Media upload will be sent through the connected WhatsApp provider.`);
-    });
-    if (detailsButton) detailsButton.addEventListener('click', () => {
-      const layout = document.querySelector('.inbox-layout');
-      if (layout) layout.classList.toggle('details-collapsed');
-    });
     // Delete active conversation button
     const deleteBtn = document.getElementById('chat-delete-btn');
     if (deleteBtn) {
@@ -154,16 +132,6 @@ class InboxComponent {
         }
       });
     }
-  }
-
-  updateComposerAction() {
-    const input = document.getElementById('chat-message-input');
-    const button = document.getElementById('chat-submit-btn');
-    if (!input || !button) return;
-    const hasText = Boolean(input.value.trim());
-    button.textContent = hasText ? '➤' : '🎙';
-    button.title = hasText ? 'Send message' : 'Record voice message';
-    button.classList.toggle('has-text', hasText);
   }
   deleteConversation(convId) {
     let convs = window.appState.get('conversations') || [];
@@ -291,9 +259,7 @@ class InboxComponent {
     const modeBtnHuman = document.getElementById('mode-toggle-human');
 
     if (nameEl) nameEl.textContent = conv.leadName;
-    if (compEl) compEl.textContent = `last active · ${conv.phone}`;
-    const avatarEl = document.getElementById('chat-contact-avatar');
-    if (avatarEl) avatarEl.textContent = (conv.leadName || '?').split(' ').map(part => part[0]).join('').slice(0, 2).toUpperCase();
+    if (compEl) compEl.textContent = `${conv.company} · ${conv.phone}`;
 
     if (modeBtnAI && modeBtnHuman) {
       if (conv.mode === 'AI') {

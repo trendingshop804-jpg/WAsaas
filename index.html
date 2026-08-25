@@ -684,22 +684,24 @@
 
             <!-- Middle: Active Chat Pane -->
             <div class="inbox-chat-pane flex flex-col h-full overflow-hidden">
-              <div class="chat-header whatsapp-chat-header">
+              <div class="chat-header">
                 <div class="chat-header-info">
-                  <div class="chat-contact-avatar" id="chat-contact-avatar">PN</div>
-                  <div>
-                    <div class="chat-contact-name" id="chat-lead-name">Dr. Jacob Mathew</div>
-                    <span class="chat-contact-presence" id="chat-lead-company">online · +91 94470 12345</span>
-                  </div>
+                  <div style="font-weight: 700; font-size: 14px;" id="chat-lead-name">Dr. Jacob Mathew</div>
+                  <span style="font-size: 12px; color: var(--text-muted);" id="chat-lead-company">Jacob Dental · +91 94470 12345</span>
                 </div>
+
                 <div class="chat-actions flex items-center gap-2">
                   <div class="chat-mode-toggle">
-                    <button id="mode-toggle-ai" class="mode-btn active ai">AI</button>
-                    <button id="mode-toggle-human" class="mode-btn">Human</button>
+                    <button id="mode-toggle-ai" class="mode-btn active ai">🤖 AI Bot</button>
+                    <button id="mode-toggle-human" class="mode-btn">👤 Human</button>
                   </div>
-                  <button id="inbox-details-toggle" class="whatsapp-icon-btn" type="button" title="Contact details">ⓘ</button>
+                  <button id="chat-delete-btn" class="btn btn-outline" style="padding: 4px 10px; font-size: 12px; color: #ef4444; border-color: rgba(239, 68, 68, 0.3);" title="Delete this conversation thread">
+                    🗑️ Delete Chat
+                  </button>
                 </div>
               </div>
+
+
 
 
 
@@ -723,12 +725,11 @@
               </div>
 
               <!-- Chat Input Area -->
-              <form id="chat-send-form" class="chat-input-area whatsapp-composer">
-                <button id="chat-emoji-btn" class="whatsapp-icon-btn" type="button" title="Emoji">☺</button>
-                <button id="chat-attachment-btn" class="whatsapp-icon-btn" type="button" title="Attach a file">⌕</button>
-                <input id="chat-file-input" type="file" hidden>
-                <textarea id="chat-message-input" class="chat-textarea" rows="1" placeholder="Type a message"></textarea>
-                <button id="chat-submit-btn" type="submit" class="whatsapp-send-btn" title="Send message">🎙</button>
+              <form id="chat-send-form" class="chat-input-area">
+                <textarea id="chat-message-input" class="chat-textarea" placeholder="Type WhatsApp reply (or select AI suggestion above)..."></textarea>
+                <button type="submit" class="btn btn-primary" style="height: 42px;">
+                  Send
+                </button>
               </form>
 
               <!-- Simulator for incoming customer text -->
@@ -740,7 +741,7 @@
             </div>
 
             <!-- Right: Lead Details Sidebar -->
-            <div class="inbox-lead-details" id="inbox-details-panel">
+            <div class="inbox-lead-details">
               <div style="font-weight: 700; font-size: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--border-subtle);">
                 Prospect Overview
               </div>
