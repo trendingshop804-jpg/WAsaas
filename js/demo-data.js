@@ -271,33 +271,7 @@ window.DEMO_DATA = {
       mode: 'AI',
       status: 'AI Active',
       lastMessage: 'Hi Dr. Jacob Mathew, I noticed Dr. Jac...',
-      lastTimestamp: '18:01'
-    },
-    {
-      id: 'conv_002',
-      leadId: 'lead_002',
-      leadName: 'Rahul Shenoy',
-      contactName: 'Rahul Shenoy',
-      company: 'Spice Craft Bistro & Brews',
-      phone: '+91 98860 55432',
-      unreadCount: 0,
-      mode: 'AI',
-      status: 'AI Active',
-      lastMessage: 'We received the proposal document Vi...',
-      lastTimestamp: '4:45 PM'
-    },
-    {
-      id: 'conv_003',
-      leadName: 'Vipin Chandran',
-      contactName: 'Vipin Chandran',
-      company: 'AyurKerala Wellness',
-      phone: '+91 98471 99001',
-      unreadCount: 0,
-      mode: 'AI',
-      status: 'AI Active',
-      lastMessage: 'നമസ്കാരം രഹ്രിൻ സർ! ഹരിദേശ് സ...',
-      lastTimestamp: '5:10 PM'
-    }
+      lastTimestamp: '18:01',
       messages: [
         {
           id: 'm1',

@@ -254,9 +254,9 @@ Requirements:
       language,
       tone,
       sequenceStep: idx + 1,
-      modelUsed: this.selectedModel,
-      tokensEstimate: 65
     };
+  }
+
   // 1b. Multi-Day Automated Tanglish Follow-up Prompt Generator (Day 1, Day 2, Day 4, Day 7)
   async generateMultiDayFollowup({ lead = {}, step = 1 }) {
     const name = lead.contactName || 'there';
