@@ -9,6 +9,12 @@ class StateStore {
   }
 
   loadInitialState() {
+    const normalizeDigits = (p) => {
+      if (!p) return '';
+      const digits = String(p).replace(/[^0-9]/g, '');
+      return digits.length >= 10 ? digits.slice(-10) : digits;
+    };
+
     const saved = localStorage.getItem('nexuslead_state_v1');
     if (saved) {
       try {
@@ -26,9 +32,46 @@ class StateStore {
             existing.wabaId = primaryOrg.wabaId;
           }
         }
-        if (parsed.leads && Array.isArray(parsed.leads)) {
-          parsed.leads = parsed.leads.filter(l => !l.id.startsWith('lead_00'));
+
+        // Merge leads without dropping demo leads
+        const demoLeads = (window.DEMO_DATA.leads || []).slice();
+        const savedLeads = Array.isArray(parsed.leads) ? parsed.leads : [];
+        const mergedLeads = [...savedLeads];
+        for (const dl of demoLeads) {
+          const dlDigits = normalizeDigits(dl.phone);
+          const alreadyExists = mergedLeads.some(l => l.id === dl.id || (dlDigits && normalizeDigits(l.phone) === dlDigits));
+          if (!alreadyExists) {
+            mergedLeads.push(dl);
+          }
         }
+        parsed.leads = mergedLeads;
+
+        // Deduplicate conversations by normalized phone number
+        if (parsed.conversations && Array.isArray(parsed.conversations)) {
+          const convMap = new Map();
+          for (const c of parsed.conversations) {
+            const phoneKey = normalizeDigits(c.phone) || c.leadId || c.id;
+            if (!convMap.has(phoneKey)) {
+              convMap.set(phoneKey, { ...c, messages: Array.isArray(c.messages) ? [...c.messages] : [] });
+            } else {
+              const existingConv = convMap.get(phoneKey);
+              // Merge messages without duplicates
+              const existingMsgIds = new Set((existingConv.messages || []).map(m => m.id || `${m.text}_${m.timestamp}`));
+              for (const m of (c.messages || [])) {
+                const mKey = m.id || `${m.text}_${m.timestamp}`;
+                if (!existingMsgIds.has(mKey)) {
+                  existingMsgIds.add(mKey);
+                  existingConv.messages.push(m);
+                }
+              }
+              existingConv.lastMessage = c.lastMessage || existingConv.lastMessage;
+              existingConv.lastTimestamp = c.lastTimestamp || existingConv.lastTimestamp;
+              existingConv.unreadCount = Math.max(existingConv.unreadCount || 0, c.unreadCount || 0);
+            }
+          }
+          parsed.conversations = Array.from(convMap.values());
+        }
+
         return { ...window.DEMO_DATA, ...parsed };
       } catch (e) {
         console.warn('Could not parse saved state, using demo data', e);

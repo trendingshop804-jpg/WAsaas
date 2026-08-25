@@ -139,32 +139,37 @@ class InboxComponent {
 
   selectConversationByLeadId(leadId) {
     const convs = window.appState.get('conversations') || [];
-    let conv = convs.find(c => c.leadId === leadId);
+    const lead = (window.appState.get('leads') || []).find(l => l.id === leadId);
+    const leadDigits = lead && lead.phone ? String(lead.phone).replace(/[^0-9]/g, '').slice(-10) : '';
+
+    let conv = convs.find(c => c.leadId === leadId) ||
+               (leadDigits ? convs.find(c => String(c.phone || '').replace(/[^0-9]/g, '').slice(-10) === leadDigits) : null);
+
     if (conv) {
-      this.selectConversation(conv.id);
-    } else {
-      const lead = (window.appState.get('leads') || []).find(l => l.id === leadId);
-      if (lead) {
-        conv = {
-          id: 'conv_' + Date.now(),
-          leadId: lead.id,
-          leadName: lead.contactName,
-          company: lead.companyName,
-          phone: lead.phone,
-          unreadCount: 0,
-          mode: 'AI',
-          status: 'AI Active',
-          lastMessage: 'Ready for conversation',
-          lastTimestamp: 'Just now',
-          messages: [
-            { id: 'm_init', sender: 'system', text: 'Chat thread initialized for ' + lead.contactName, timestamp: 'Just now' }
-          ],
-          aiSuggestions: ['Send introduction greeting', 'Ask qualification question']
-        };
-        convs.unshift(conv);
-        window.appState.set('conversations', convs);
-        this.selectConversation(conv.id);
+      if (lead && conv.leadId !== lead.id) {
+        conv.leadId = lead.id;
       }
+      this.selectConversation(conv.id);
+    } else if (lead) {
+      conv = {
+        id: 'conv_' + Date.now(),
+        leadId: lead.id,
+        leadName: lead.contactName,
+        company: lead.companyName,
+        phone: lead.phone,
+        unreadCount: 0,
+        mode: 'AI',
+        status: 'AI Active',
+        lastMessage: 'Ready for conversation',
+        lastTimestamp: 'Just now',
+        messages: [
+          { id: 'm_init', sender: 'system', text: 'Chat thread initialized for ' + lead.contactName, timestamp: 'Just now' }
+        ],
+        aiSuggestions: ['Send introduction greeting', 'Ask qualification question']
+      };
+      convs.unshift(conv);
+      window.appState.set('conversations', convs);
+      this.selectConversation(conv.id);
     }
   }
 

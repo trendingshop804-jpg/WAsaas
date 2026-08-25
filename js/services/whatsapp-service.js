@@ -13,6 +13,26 @@ class WhatsAppService {
     this.qrTimeLeft = 45;
   }
 
+  normalizePhone(phone) {
+    if (!phone) return '';
+    const digits = String(phone).replace(/[^0-9]/g, '');
+    return digits.length >= 10 ? digits.slice(-10) : digits;
+  }
+
+  findLeadByPhone(phone, leads = null) {
+    if (!leads) leads = window.appState.get('leads') || [];
+    const targetDigits = this.normalizePhone(phone);
+    if (!targetDigits) return null;
+    return leads.find(l => this.normalizePhone(l.phone) === targetDigits) || null;
+  }
+
+  findConversationByPhone(phone, conversations = null) {
+    if (!conversations) conversations = window.appState.get('conversations') || [];
+    const targetDigits = this.normalizePhone(phone);
+    if (!targetDigits) return null;
+    return conversations.find(c => this.normalizePhone(c.phone) === targetDigits) || null;
+  }
+
   // Method A: Official Meta OAuth Flow
   async connectMetaOAuth({ 
     wabaName = 'Nexus Growth Labs WABA', 
@@ -128,9 +148,12 @@ class WhatsAppService {
       throw new Error('Cannot message opted-out contact (Compliance Rule).');
     }
 
-    // Check conversation
-    const conversations = window.appState.get('conversations');
-    let conv = conversations.find(c => c.leadId === leadId);
+    // Check conversation by leadId OR normalized phone
+    const conversations = window.appState.get('conversations') || [];
+    let conv = conversations.find(c => c.leadId === leadId) || (lead ? this.findConversationByPhone(lead.phone, conversations) : null);
+    if (conv && lead && conv.leadId !== lead.id) {
+      conv.leadId = lead.id;
+    }
 
     const newMsg = {
       id: 'm_' + Date.now(),
@@ -216,7 +239,7 @@ class WhatsAppService {
   // Receive Simulated Incoming Inbound Message from Prospect
   receiveSimulatedInbound({ leadId, text }) {
     const org = window.appState.getCurrentOrg();
-    const leads = window.appState.get('leads');
+    const leads = window.appState.get('leads') || [];
     // Conditional inbound logging based on settings flag
     if (org.enableInboundLogging) {
       console.log('[Inbound] receiveSimulatedInbound called', {leadId, text});
@@ -246,8 +269,11 @@ class WhatsAppService {
       }
     }
 
-    const conversations = window.appState.get('conversations');
-    let conv = conversations.find(c => c.leadId === leadId);
+    const conversations = window.appState.get('conversations') || [];
+    let conv = conversations.find(c => c.leadId === leadId) || this.findConversationByPhone(lead.phone, conversations);
+    if (conv && conv.leadId !== lead.id) {
+      conv.leadId = lead.id;
+    }
     console.log('[Inbound] existing conv', conv ? conv.id : 'none');
 
     const inMsg = {
@@ -358,15 +384,12 @@ class WhatsAppService {
         // Build display text — never show placeholder if we have a type label
         const displayText = text || (resolvedType !== 'text' && resolvedType !== 'unknown' ? null : null) || `📩 ${msg.sender_number || 'Unknown'} sent a message`;
 
-        // Match existing lead by phone
-        let lead = leads.find(l => {
-          const lPhoneClean = String(l.phone || '').replace(/[^0-9]/g, '');
-          return lPhoneClean && (lPhoneClean.endsWith(senderClean) || senderClean.endsWith(lPhoneClean));
-        });
+        // Match existing lead by normalized phone (last 10 digits)
+        let lead = this.findLeadByPhone(senderClean, leads);
 
         if (!lead) {
           lead = {
-            id: 'lead_in_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+            id: 'lead_in_' + senderClean,
             contactName: `WhatsApp Contact (+${senderClean})`,
             companyName: 'Inbound WhatsApp',
             phone: senderRaw.startsWith('+') ? senderRaw : `+${senderClean}`,
@@ -388,7 +411,12 @@ class WhatsAppService {
           lead.lastContacted = msg.received_at || new Date().toISOString();
         }
 
-        let conv = conversations.find(c => c.leadId === lead.id);
+        // Match conversation by lead ID OR by normalized phone number
+        let conv = conversations.find(c => c.leadId === lead.id) || this.findConversationByPhone(lead.phone, conversations);
+        if (conv && conv.leadId !== lead.id) {
+          conv.leadId = lead.id;
+        }
+
         const formattedTime = new Date(msg.received_at || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
         const inMsg = {
