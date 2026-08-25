@@ -17,9 +17,17 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 import os
 import db
 
-DATABASE_URL = os.getenv("DATABASE_URL")
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./nexuslead.db")
 if not DATABASE_URL:
     raise RuntimeError("DATABASE_URL environment variable not set")
+
+if DATABASE_URL.startswith("sqlite"):
+    import warnings
+    warnings.warn(
+        "[NexusLead] Using SQLite fallback database (./nexuslead.db). "
+        "Set DATABASE_URL to a PostgreSQL URL for production.",
+        UserWarning, stacklevel=2
+    )
 
 # Ensure tables are created (if using SQLAlchemy models)
 if hasattr(db, "Base"):
@@ -144,7 +152,9 @@ async def meta_webhook_verification(
     """
     Meta Cloud API Webhook Verification Challenge.
     """
-    META_VERIFY_TOKEN = os.getenv("META_VERIFY_TOKEN", "Nextbright2026")
+    META_VERIFY_TOKEN = os.getenv("META_VERIFY_TOKEN")
+    if not META_VERIFY_TOKEN:
+        raise HTTPException(status_code=500, detail="META_VERIFY_TOKEN is not configured on server")
     if hub_mode == "subscribe" and hub_verify_token == META_VERIFY_TOKEN:
         return PlainTextResponse(content=hub_challenge, status_code=200)
     raise HTTPException(status_code=403, detail="Verification token mismatch")

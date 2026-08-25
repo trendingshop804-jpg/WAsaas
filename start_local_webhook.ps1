@@ -5,7 +5,13 @@ $port = 8000
 $listener = New-Object System.Net.HttpListener
 $listener.Prefixes.Add("http://localhost:$port/")
 
-$verifyToken = "Nextbright2026"
+# Read verify token from environment variable (set in .env or your shell)
+$verifyToken = $env:META_VERIFY_TOKEN
+if (-not $verifyToken) {
+    Write-Host "[!] WARNING: META_VERIFY_TOKEN environment variable is not set." -ForegroundColor Red
+    Write-Host "    Set it before running: `$env:META_VERIFY_TOKEN = 'your-token'" -ForegroundColor Yellow
+    exit 1
+}
 
 Write-Host "==========================================================================" -ForegroundColor Cyan
 Write-Host "         Meta WhatsApp Webhook Local Server (Port $port)                  " -ForegroundColor Cyan
