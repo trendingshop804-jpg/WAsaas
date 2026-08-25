@@ -4,7 +4,7 @@
 
 class InboxComponent {
   constructor() {
-    this.selectedConvId = 'conv_001';
+    this.selectedConvId = 'conv_ceo';
     this.filterMode = 'all'; // 'all', 'unread', 'assigned_me', 'unassigned', 'resolved'
     this.searchTerm = '';
     this.selectedAttachment = null;
@@ -552,22 +552,24 @@ class InboxComponent {
     const scrollArea = document.getElementById('chat-messages-scroll');
     if (!scrollArea) return;
 
+    const convs = window.appState.get('conversations') || [];
+    const conv = convs.find(c => c.id === convId);
     const messagesMap = window.appState.get('messages') || {};
-    const msgs = messagesMap[convId] || [];
+    const msgs = (conv && conv.messages && conv.messages.length > 0) ? conv.messages : (messagesMap[convId] || []);
 
     if (msgs.length === 0) {
       scrollArea.innerHTML = `<div style="text-align: center; color: var(--text-muted); font-size: 13px; margin-top: 40px;">No messages in this chat yet.</div>`;
       return;
     }
 
-    scrollArea.innerHTML = msgs.map((msg, index) => {
-      const isOutbound = msg.direction === 'OUTBOUND';
-      const isSystem = msg.direction === 'SYSTEM' || msg.isSystem;
+    scrollArea.innerHTML = msgs.map((msg) => {
+      const isOutbound = msg.direction === 'OUTBOUND' || msg.sender === 'outbound';
+      const isSystem = msg.direction === 'SYSTEM' || msg.sender === 'system' || msg.isSystem;
 
       if (isSystem) {
         return `
-          <div class="msg-row justify-center flex my-2">
-            <div class="msg-bubble system-bubble text-xs text-muted px-3 py-1 bg-tertiary rounded-full border border-subtle">
+          <div class="msg-row justify-center flex my-2" style="display: flex; justify-content: center; margin: 12px 0;">
+            <div class="msg-bubble system-bubble" style="background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.1); color: var(--text-secondary); font-size: 11.5px; padding: 5px 16px; border-radius: 20px; text-align: center;">
               ${msg.text || msg.body || ''}
             </div>
           </div>
@@ -577,17 +579,17 @@ class InboxComponent {
       const bubbleClass = isOutbound ? 'msg-bubble-outbound' : 'msg-bubble-inbound';
 
       return `
-        <div class="msg-row ${isOutbound ? 'justify-end' : 'justify-start'} flex">
-          <div class="msg-bubble-wrap ${isOutbound ? 'outbound' : 'inbound'}">
-            <div class="msg-bubble ${bubbleClass} max-w-md p-3 rounded-lg text-sm shadow">
+        <div class="msg-row ${isOutbound ? 'justify-end' : 'justify-start'} flex" style="margin-bottom: 12px; display: flex; justify-content: ${isOutbound ? 'flex-end' : 'flex-start'};">
+          <div class="msg-bubble-wrap ${isOutbound ? 'outbound' : 'inbound'}" style="max-width: 72%;">
+            <div class="msg-bubble ${bubbleClass} p-3 rounded-lg text-sm shadow" style="background: ${isOutbound ? 'linear-gradient(135deg, #005c4b, #075e54)' : 'var(--bg-secondary)'}; color: ${isOutbound ? '#ffffff' : 'var(--text-primary)'}; padding: 12px 16px; border-radius: 12px; font-size: 13.5px; line-height: 1.45;">
               <div class="msg-body">${msg.text || msg.body || ''}</div>
-              <div class="msg-footer flex items-center justify-between gap-3 mt-2 text-xs" style="font-size: 10px; color: rgba(255,255,255,0.7);">
-                ${isOutbound ? `<span class="ai-tag-pill" style="background: rgba(139, 92, 246, 0.25); color: #c4b5fd; padding: 1px 6px; border-radius: 4px; font-weight: 700; text-transform: uppercase;">${msg.sentByHuman ? 'HUMAN' : 'AI AGENT'}</span>` : '<span></span>'}
-                <span class="msg-meta flex items-center gap-1">
-                  <span>${msg.timestamp || 'Just now'}${isOutbound ? ' · DELIVERED' : ''}</span>
-                  ${isOutbound ? '<span class="msg-tick read" style="color: #38bdf8; font-weight: 700;">✓✓</span>' : ''}
-                </span>
-              </div>
+            </div>
+            <div class="msg-footer flex items-center justify-between gap-3 mt-1 text-xs" style="font-size: 10.5px; color: var(--text-muted); display: flex; align-items: center; justify-content: ${isOutbound ? 'space-between' : 'flex-end'}; margin-top: 4px; padding: 0 2px;">
+              ${isOutbound ? `<span class="ai-tag-pill" style="background: rgba(139, 92, 246, 0.3); color: #c4b5fd; padding: 1px 6px; border-radius: 3px; font-weight: 700; text-transform: uppercase;">${msg.sentByHuman ? 'HUMAN' : 'AI AGENT'}</span>` : ''}
+              <span class="msg-meta flex items-center gap-1">
+                <span>${msg.timestamp || '19:44'}${isOutbound ? ' · DELIVERED' : ''}</span>
+                ${isOutbound ? '<span class="msg-tick read" style="color: #38bdf8; font-weight: 700; margin-left: 3px;">✓✓</span>' : ''}
+              </span>
             </div>
           </div>
         </div>

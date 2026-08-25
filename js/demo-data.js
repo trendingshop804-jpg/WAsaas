@@ -179,16 +179,125 @@ window.DEMO_DATA = {
   // Live WhatsApp Conversations
   conversations: [
     {
+      id: 'conv_wa_1',
+      leadName: 'WhatsApp Contact (+91705838351)',
+      contactName: 'WhatsApp Contact (+91705838351)',
+      company: 'Inbound WhatsApp',
+      phone: '+91705838351',
+      unreadCount: 0,
+      mode: 'AI',
+      status: 'AI Active',
+      lastMessage: '[Inbound WhatsApp Message]',
+      lastTimestamp: '05:49'
+    },
+    {
+      id: 'conv_wa_2',
+      leadName: 'WhatsApp Contact (+91999938351)',
+      contactName: 'WhatsApp Contact (+91999938351)',
+      company: 'Inbound WhatsApp',
+      phone: '+91999938351',
+      unreadCount: 0,
+      mode: 'AI',
+      status: 'AI Active',
+      lastMessage: 'Test message from PowerShell',
+      lastTimestamp: '21:14'
+    },
+    {
+      id: 'conv_ceo',
+      leadId: 'lead_ceo',
+      leadName: 'CEO',
+      contactName: 'CEO',
+      company: 'NEXTBRIGHT SOLUTIONS',
+      phone: '8111986637',
+      unreadCount: 0,
+      mode: 'AI',
+      status: 'AI Active',
+      lastMessage: 'Hi',
+      lastTimestamp: '08:40',
+      aiScore: 62,
+      aiSummary: 'Active conversational opportunity.',
+      messages: [
+        {
+          id: 'm_ceo_1',
+          direction: 'SYSTEM',
+          isSystem: true,
+          text: 'Chat thread initialized for CEO',
+          timestamp: '19:40'
+        },
+        {
+          id: 'm_ceo_2',
+          direction: 'OUTBOUND',
+          isAI: true,
+          sentByAi: true,
+          text: 'Hi CEO, I noticed NEXTBRIGHT SOLUTIONS in Kochi, Kerala, India. We help leaders in it service automate their customer pipeline on WhatsApp, increasing response velocity by 3x. Are you open to a brief 5-min demo this week? Reply with DEMO for a quick walkthrough',
+          timestamp: '19:44',
+          status: 'DELIVERED'
+        },
+        {
+          id: 'm_ceo_3',
+          direction: 'OUTBOUND',
+          isAI: true,
+          sentByAi: true,
+          text: 'Hi CEO, I noticed NEXTBRIGHT SOLUTIONS in Kochi, Kerala, India. We help leaders in it service automate their customer pipeline on WhatsApp, increasing response velocity by 3x. Are you open to a brief 5-min demo this week? Reply with DEMO for a quick walkthrough',
+          timestamp: '19:44',
+          status: 'DELIVERED'
+        },
+        {
+          id: 'm_ceo_4',
+          direction: 'OUTBOUND',
+          isAI: true,
+          sentByAi: true,
+          text: 'https://moviesdatamil.co/download/mahasenha-2025-original-1080p-hd-2-7-gb/',
+          timestamp: '20:17',
+          status: 'DELIVERED'
+        },
+        {
+          id: 'm_ceo_5',
+          direction: 'SYSTEM',
+          isSystem: true,
+          text: 'Human Takeover engaged. AI Bot paused.',
+          timestamp: '20:18'
+        }
+      ]
+    },
+    {
       id: 'conv_001',
       leadId: 'lead_001',
       leadName: 'Dr. Jacob Mathew',
+      contactName: 'Dr. Jacob Mathew',
       company: 'Dr. Jacob Dental & Implant Center',
       phone: '+91 94470 12345',
       unreadCount: 0,
-      mode: 'AI', // 'AI' or 'HUMAN'
+      mode: 'AI',
       status: 'AI Active',
-      lastMessage: 'Sure Doctor Jacob! I can book a 15-min zoom walkthrough tomorrow at 11:30 AM or 3:00 PM. Which works best?',
-      lastTimestamp: '2:32 PM',
+      lastMessage: 'Hi Dr. Jacob Mathew, I noticed Dr. Jac...',
+      lastTimestamp: '18:01'
+    },
+    {
+      id: 'conv_002',
+      leadId: 'lead_002',
+      leadName: 'Rahul Shenoy',
+      contactName: 'Rahul Shenoy',
+      company: 'Spice Craft Bistro & Brews',
+      phone: '+91 98860 55432',
+      unreadCount: 0,
+      mode: 'AI',
+      status: 'AI Active',
+      lastMessage: 'We received the proposal document Vi...',
+      lastTimestamp: '4:45 PM'
+    },
+    {
+      id: 'conv_003',
+      leadName: 'Vipin Chandran',
+      contactName: 'Vipin Chandran',
+      company: 'AyurKerala Wellness',
+      phone: '+91 98471 99001',
+      unreadCount: 0,
+      mode: 'AI',
+      status: 'AI Active',
+      lastMessage: 'നമസ്കാരം രഹ്രിൻ സർ! ഹരിദേശ് സ...',
+      lastTimestamp: '5:10 PM'
+    }
       messages: [
         {
           id: 'm1',
