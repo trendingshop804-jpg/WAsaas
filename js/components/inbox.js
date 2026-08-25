@@ -1,23 +1,28 @@
 /* ==========================================================================
-   NexusLead AI - WhatsApp Inbox & Live Two-Way Chat Component
+   NexusLead AI - WhatsApp CRM Two-Way Inbox & Realtime Component
    ========================================================================== */
 
 class InboxComponent {
   constructor() {
     this.selectedConvId = 'conv_001';
-    this.filterMode = 'all'; // 'all', 'ai', 'human', 'unread'
+    this.filterMode = 'all'; // 'all', 'unread', 'assigned_me', 'unassigned', 'resolved'
     this.searchTerm = '';
+    this.selectedAttachment = null;
+    this.realtimeChannel = null;
+    this.timerInterval = null;
   }
 
   init() {
     this.bindEvents();
     this.render();
     this.setupScrollListeners();
+    this.setupRealtimeSubscription();
 
     window.appState.on('messageSent', () => {
       this.render();
       this.scrollToBottom(true);
     });
+
     window.appState.on('inboundReceived', () => {
       const messagesScroll = document.getElementById('chat-messages-scroll');
       let isNearBottom = true;
@@ -32,7 +37,38 @@ class InboxComponent {
         this.showScrollBottomButton(true);
       }
     });
+
     window.appState.on('conversations', () => this.render());
+
+    // Start 1-minute interval to update 24-hr session countdown
+    this.timerInterval = setInterval(() => this.update24hWindowTimer(), 30000);
+  }
+
+  /* ── Supabase Realtime Subscription ────────────────────────────────── */
+  setupRealtimeSubscription() {
+    try {
+      if (window.authService && window.authService.supabase) {
+        const supabase = window.authService.supabase;
+        this.realtimeChannel = supabase
+          .channel('inbox-realtime')
+          .on(
+            'postgres_changes',
+            { event: 'INSERT', schema: 'public', table: 'messages' },
+            (payload) => {
+              const newMsg = payload.new;
+              if (newMsg && window.whatsappService) {
+                window.whatsappService.receiveSimulatedInbound(
+                  newMsg.sender_number || '+91 94470 12345',
+                  newMsg.body || newMsg.content || ''
+                );
+              }
+            }
+          )
+          .subscribe();
+      }
+    } catch (e) {
+      console.warn('[Inbox Realtime] Could not subscribe to Supabase Realtime:', e.message);
+    }
   }
 
   setupScrollListeners() {
@@ -83,7 +119,6 @@ class InboxComponent {
     }
   }
 
-
   bindEvents() {
     // Search input
     const search = document.getElementById('inbox-search-input');
@@ -99,467 +134,542 @@ class InboxComponent {
       chip.addEventListener('click', () => {
         document.querySelectorAll('.inbox-filter-chip').forEach(c => c.classList.remove('active'));
         chip.classList.add('active');
-        this.filterMode = chip.getAttribute('data-filter');
+        this.filterMode = chip.getAttribute('data-filter') || 'all';
         this.renderConversationList();
       });
     });
 
-    // Chat form submit (Send message)
-    const chatForm = document.getElementById('chat-send-form');
-    if (chatForm) {
-      chatForm.addEventListener('submit', (e) => {
+    // Send Message Form
+    const sendForm = document.getElementById('chat-send-form');
+    if (sendForm) {
+      sendForm.addEventListener('submit', (e) => {
         e.preventDefault();
         this.handleSendMessage();
       });
     }
 
-    // Simulate Customer Inbound Message form submit
-    const inboundForm = document.getElementById('simulate-customer-reply-form');
-    if (inboundForm) {
-      inboundForm.addEventListener('submit', (e) => {
-        e.preventDefault();
-        this.handleSimulateInbound();
+    // Textarea Enter handler (Enter sends, Shift+Enter new line)
+    const msgInput = document.getElementById('chat-message-input');
+    if (msgInput) {
+      msgInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          this.handleSendMessage();
+        }
       });
     }
 
-    // Delete active conversation button
+    // Emoji Picker Trigger
+    const emojiBtn = document.getElementById('inbox-emoji-trigger-btn');
+    const emojiPopover = document.getElementById('emoji-picker-popover');
+    if (emojiBtn && emojiPopover) {
+      emojiBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        emojiPopover.style.display = emojiPopover.style.display === 'none' ? 'grid' : 'none';
+      });
+
+      document.addEventListener('click', (e) => {
+        if (!emojiPopover.contains(e.target) && e.target !== emojiBtn) {
+          emojiPopover.style.display = 'none';
+        }
+      });
+
+      emojiPopover.querySelectorAll('.emoji-item').forEach(item => {
+        item.addEventListener('click', () => {
+          const emoji = item.getAttribute('data-emoji');
+          if (msgInput && emoji) {
+            msgInput.value += emoji;
+            msgInput.focus();
+          }
+          emojiPopover.style.display = 'none';
+        });
+      });
+    }
+
+    // Attachment File Input
+    const mediaInput = document.getElementById('inbox-media-file-input');
+    const previewBar = document.getElementById('inbox-attachment-preview-bar');
+    const attachmentNameEl = document.getElementById('inbox-attachment-name');
+    const clearAttachmentBtn = document.getElementById('inbox-clear-attachment-btn');
+
+    if (mediaInput) {
+      mediaInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) {
+          this.selectedAttachment = file;
+          if (attachmentNameEl) attachmentNameEl.textContent = `📎 Selected: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+          if (previewBar) previewBar.style.display = 'flex';
+        }
+      });
+    }
+
+    if (clearAttachmentBtn) {
+      clearAttachmentBtn.addEventListener('click', () => {
+        this.selectedAttachment = null;
+        if (mediaInput) mediaInput.value = '';
+        if (previewBar) previewBar.style.display = 'none';
+      });
+    }
+
+    // Approved Template Trigger Button
+    const templateBtn = document.getElementById('inbox-template-selector-btn');
+    const templateBannerBtn = document.getElementById('inbox-open-templates-banner-btn');
+    const handleOpenTemplates = () => {
+      if (window.navigationComponent) {
+        window.navigationComponent.switchView('templates');
+      }
+    };
+    if (templateBtn) templateBtn.addEventListener('click', handleOpenTemplates);
+    if (templateBannerBtn) templateBannerBtn.addEventListener('click', handleOpenTemplates);
+
+    // AI / Human Mode Toggle
+    const btnAi = document.getElementById('mode-toggle-ai');
+    const btnHuman = document.getElementById('mode-toggle-human');
+    if (btnAi && btnHuman) {
+      btnAi.addEventListener('click', () => this.switchMode('AI'));
+      btnHuman.addEventListener('click', () => this.switchMode('HUMAN'));
+    }
+
+    // Mark Resolved Button
+    const resolveBtn = document.getElementById('chat-resolve-btn');
+    if (resolveBtn) {
+      resolveBtn.addEventListener('click', () => this.toggleResolved());
+    }
+
+    // Delete Chat Thread Button
     const deleteBtn = document.getElementById('chat-delete-btn');
     if (deleteBtn) {
       deleteBtn.addEventListener('click', () => {
-        const conv = this.getSelectedConversation();
+        if (this.selectedConvId) {
+          this.deleteConversation(this.selectedConvId);
+        }
+      });
+    }
+
+    // Simulate Customer Inbound Reply
+    const simForm = document.getElementById('simulate-customer-reply-form');
+    if (simForm) {
+      simForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const input = document.getElementById('sim-customer-inbound-text');
+        const text = input ? input.value.trim() : '';
+        if (text && this.selectedConvId) {
+          const convs = window.appState.get('conversations') || [];
+          const conv = convs.find(c => c.id === this.selectedConvId);
+          const phone = conv ? conv.phone : '+91 94470 12345';
+          window.whatsappService.receiveSimulatedInbound(phone, text);
+          if (input) input.value = '';
+        }
+      });
+    }
+
+    // Right Panel CRM Stage Selector
+    const stageSelect = document.getElementById('inbox-sidebar-stage-select');
+    if (stageSelect) {
+      stageSelect.addEventListener('change', (e) => {
+        const newStage = e.target.value;
+        const conv = (window.appState.get('conversations') || []).find(c => c.id === this.selectedConvId);
         if (conv) {
-          this.deleteConversation(conv.id);
+          conv.leadStage = newStage;
+          const leads = window.appState.get('leads') || [];
+          const lead = leads.find(l => l.id === conv.leadId);
+          if (lead) lead.stage = newStage;
+          window.appState.set('conversations', window.appState.get('conversations'));
+        }
+      });
+    }
+
+    // Right Panel Assigned Agent Selector
+    const agentSelect = document.getElementById('inbox-sidebar-agent-select');
+    if (agentSelect) {
+      agentSelect.addEventListener('change', (e) => {
+        const agent = e.target.value;
+        const conv = (window.appState.get('conversations') || []).find(c => c.id === this.selectedConvId);
+        if (conv) {
+          conv.assignedAgent = agent;
+          window.appState.set('conversations', window.appState.get('conversations'));
+        }
+      });
+    }
+
+    // Right Panel Add Tag Form
+    const tagForm = document.getElementById('inbox-add-tag-form');
+    if (tagForm) {
+      tagForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const tagInput = document.getElementById('inbox-new-tag-input');
+        const tagText = tagInput ? tagInput.value.trim() : '';
+        if (tagText && this.selectedConvId) {
+          const conv = (window.appState.get('conversations') || []).find(c => c.id === this.selectedConvId);
+          if (conv) {
+            conv.tags = conv.tags || [];
+            if (!conv.tags.includes(tagText)) {
+              conv.tags.push(tagText);
+              window.appState.set('conversations', window.appState.get('conversations'));
+              this.renderRightSidebar(conv);
+            }
+          }
+          if (tagInput) tagInput.value = '';
+        }
+      });
+    }
+
+    // Right Panel Add Internal Note Form
+    const noteForm = document.getElementById('inbox-add-note-form');
+    if (noteForm) {
+      noteForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const noteInput = document.getElementById('inbox-new-note-input');
+        const noteText = noteInput ? noteInput.value.trim() : '';
+        if (noteText && this.selectedConvId) {
+          const conv = (window.appState.get('conversations') || []).find(c => c.id === this.selectedConvId);
+          if (conv) {
+            conv.internalNotes = conv.internalNotes || [];
+            conv.internalNotes.unshift({
+              id: 'note_' + Date.now(),
+              author: 'Karthik Raja',
+              timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              text: noteText
+            });
+            window.appState.set('conversations', window.appState.get('conversations'));
+            this.renderRightSidebar(conv);
+          }
+          if (noteInput) noteInput.value = '';
         }
       });
     }
   }
+
   deleteConversation(convId) {
+    if (!confirm('Are you sure you want to delete this chat thread?')) return;
+
     let convs = window.appState.get('conversations') || [];
-    const conv = convs.find(c => c.id === convId);
+    convs = convs.filter(c => c.id !== convId);
+    window.appState.set('conversations', convs);
+
+    let messagesMap = window.appState.get('messages') || {};
+    delete messagesMap[convId];
+    window.appState.set('messages', messagesMap);
+
+    if (this.selectedConvId === convId) {
+      this.selectedConvId = convs.length > 0 ? convs[0].id : null;
+    }
+    this.render();
+  }
+
+  toggleResolved() {
+    const convs = window.appState.get('conversations') || [];
+    const conv = convs.find(c => c.id === this.selectedConvId);
     if (!conv) return;
 
-    if (confirm(`Are you sure you want to delete the chat thread with ${conv.leadName || conv.phone}?`)) {
-      convs = convs.filter(c => c.id !== convId);
+    conv.status = conv.status === 'RESOLVED' ? 'OPEN' : 'RESOLVED';
+    window.appState.set('conversations', convs);
+    this.render();
+  }
+
+  switchMode(mode) {
+    const convs = window.appState.get('conversations') || [];
+    const conv = convs.find(c => c.id === this.selectedConvId);
+    if (conv) {
+      conv.mode = mode;
       window.appState.set('conversations', convs);
-      window.appState.addAuditLog('Chat Thread Deleted', conv.leadName || conv.phone, 'Deleted conversation thread.', 'Success');
-      if (convs.length > 0) {
-        this.selectedConvId = convs[0].id;
-      } else {
-        this.selectedConvId = null;
-      }
-      this.render();
+      this.updateModeToggleUI(mode);
     }
   }
 
-  getSelectedConversation() {
-    const convs = window.appState.get('conversations') || [];
-    return convs.find(c => c.id === this.selectedConvId) || convs[0];
+  updateModeToggleUI(mode) {
+    const btnAi = document.getElementById('mode-toggle-ai');
+    const btnHuman = document.getElementById('mode-toggle-human');
+    if (!btnAi || !btnHuman) return;
+
+    if (mode === 'AI') {
+      btnAi.className = 'mode-btn active ai';
+      btnHuman.className = 'mode-btn';
+    } else {
+      btnAi.className = 'mode-btn';
+      btnHuman.className = 'mode-btn active human';
+    }
   }
 
-  selectConversation(convId) {
-    this.selectedConvId = convId;
-    const conv = (window.appState.get('conversations') || []).find(c => c.id === convId);
-    if (conv) conv.unreadCount = 0;
-    window.appState.saveState();
-    this.render();
-    setTimeout(() => this.scrollToBottom(true), 50);
-  }
+  handleSendMessage(suggestedText = null) {
+    const input = document.getElementById('chat-message-input');
+    let text = suggestedText || (input ? input.value.trim() : '');
 
-  selectConversationByLeadId(leadId) {
-    const convs = window.appState.get('conversations') || [];
-    const lead = (window.appState.get('leads') || []).find(l => l.id === leadId);
-    const leadDigits = lead && lead.phone ? String(lead.phone).replace(/[^0-9]/g, '').slice(-10) : '';
+    if (this.selectedAttachment) {
+      text = `📎 Attached [${this.selectedAttachment.name}]: ${text}`;
+      this.selectedAttachment = null;
+      const mediaInput = document.getElementById('inbox-media-file-input');
+      const previewBar = document.getElementById('inbox-attachment-preview-bar');
+      if (mediaInput) mediaInput.value = '';
+      if (previewBar) previewBar.style.display = 'none';
+    }
 
-    let conv = convs.find(c => c.leadId === leadId) ||
-               (leadDigits ? convs.find(c => String(c.phone || '').replace(/[^0-9]/g, '').slice(-10) === leadDigits) : null);
+    if (!text || !this.selectedConvId) return;
 
-    if (conv) {
-      if (lead && conv.leadId !== lead.id) {
-        conv.leadId = lead.id;
-      }
-      this.selectConversation(conv.id);
-    } else if (lead) {
-      conv = {
-        id: 'conv_' + Date.now(),
-        leadId: lead.id,
-        leadName: lead.contactName,
-        company: lead.companyName,
-        phone: lead.phone,
-        unreadCount: 0,
-        mode: 'AI',
-        status: 'AI Active',
-        lastMessage: 'Ready for conversation',
-        lastTimestamp: 'Just now',
-        messages: [
-          { id: 'm_init', sender: 'system', text: 'Chat thread initialized for ' + lead.contactName, timestamp: 'Just now' }
-        ],
-        aiSuggestions: ['Send introduction greeting', 'Ask qualification question']
-      };
-      convs.unshift(conv);
-      window.appState.set('conversations', convs);
-      this.selectConversation(conv.id);
+    window.whatsappService.sendMessage(this.selectedConvId, text);
+
+    if (input && !suggestedText) {
+      input.value = '';
+      input.style.height = 'auto';
     }
   }
 
   render() {
     this.renderConversationList();
     this.renderActiveChat();
-    this.setupScrollListeners();
   }
 
+  /* ── 1. Left Panel: Conversation List ──────────────────────────────── */
   renderConversationList() {
-    const listEl = document.getElementById('inbox-conversations-scroll');
-    if (!listEl) return;
+    const container = document.getElementById('inbox-conversations-scroll');
+    if (!container) return;
 
-    const convs = window.appState.get('conversations') || [];
-    const filtered = convs.filter(c => {
-      const matchesSearch = !this.searchTerm ||
-        c.leadName.toLowerCase().includes(this.searchTerm) ||
-        c.company.toLowerCase().includes(this.searchTerm) ||
-        c.phone.includes(this.searchTerm);
+    let convs = window.appState.get('conversations') || [];
 
-      let matchesMode = true;
-      if (this.filterMode === 'ai') matchesMode = c.mode === 'AI';
-      if (this.filterMode === 'human') matchesMode = c.mode === 'HUMAN';
-      if (this.filterMode === 'unread') matchesMode = (c.unreadCount || 0) > 0;
+    // Filter Logic
+    if (this.filterMode === 'unread') {
+      convs = convs.filter(c => c.unreadCount > 0);
+    } else if (this.filterMode === 'assigned_me') {
+      convs = convs.filter(c => c.assignedAgent && c.assignedAgent.includes('You'));
+    } else if (this.filterMode === 'unassigned') {
+      convs = convs.filter(c => !c.assignedAgent || c.assignedAgent === 'Unassigned');
+    } else if (this.filterMode === 'resolved') {
+      convs = convs.filter(c => c.status === 'RESOLVED');
+    } else {
+      // 'all': hide resolved unless explicitly filtered
+      convs = convs.filter(c => c.status !== 'RESOLVED');
+    }
 
-      return matchesSearch && matchesMode;
+    // Search filter
+    if (this.searchTerm) {
+      convs = convs.filter(c =>
+        c.contactName.toLowerCase().includes(this.searchTerm) ||
+        (c.company && c.company.toLowerCase().includes(this.searchTerm)) ||
+        (c.phone && c.phone.toLowerCase().includes(this.searchTerm))
+      );
+    }
+
+    if (convs.length === 0) {
+      container.innerHTML = `<div style="padding: 24px; text-align: center; color: var(--text-muted); font-size: 13px;">No conversations match your filter.</div>`;
+      return;
+    }
+
+    container.innerHTML = convs.map(conv => {
+      const isActive = conv.id === this.selectedConvId;
+      const initials = conv.contactName ? conv.contactName.split(' ').map(n=>n[0]).join('').substring(0,2) : 'WA';
+      const statusClass = conv.mode === 'AI' ? 'status-ai-active' : 'status-human-active';
+
+      return `
+        <div class="conversation-item ${isActive ? 'active' : ''}" data-conv-id="${conv.id}">
+          <div class="conversation-avatar">
+            ${initials}
+            <div class="avatar-badge-status ${statusClass}"></div>
+          </div>
+          <div class="conversation-meta">
+            <div class="conv-top-row">
+              <span class="conv-name">${conv.contactName}</span>
+              <span class="conv-time">${conv.lastTimestamp || ''}</span>
+            </div>
+            <div class="conv-snippet">${conv.lastMessage || 'No messages yet'}</div>
+            ${conv.unreadCount > 0 ? `<div class="badge badge-whatsapp" style="margin-top: 4px; font-size: 10px; padding: 2px 6px;">${conv.unreadCount} new</div>` : ''}
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    // Bind item clicks
+    container.querySelectorAll('.conversation-item').forEach(item => {
+      item.addEventListener('click', () => {
+        const convId = item.getAttribute('data-conv-id');
+        this.selectConversation(convId);
+      });
     });
-
-    listEl.innerHTML = filtered.map(c => `
-      <div class="conversation-item ${c.id === this.selectedConvId ? 'active' : ''}" onclick="window.inboxComponent.selectConversation('${c.id}')">
-        <div class="conversation-avatar">
-          ${c.leadName.split(' ').map(n => n[0]).join('').slice(0, 2)}
-          <span class="avatar-badge-status ${c.mode === 'AI' ? 'status-ai-active' : 'status-human-active'}"></span>
-        </div>
-        <div class="conversation-meta">
-          <div class="conv-top-row">
-            <span class="conv-name">${this.escapeHtml(c.leadName)}</span>
-            <span class="conv-time">${c.lastTimestamp}</span>
-          </div>
-          <div class="flex items-center justify-between">
-            <span class="conv-snippet">${this.escapeHtml(c.lastMessage)}</span>
-            ${(c.unreadCount || 0) > 0 ? `<span class="nav-pill pulse-green">${c.unreadCount}</span>` : ''}
-          </div>
-        </div>
-      </div>
-    `).join('');
   }
 
+  selectConversation(convId) {
+    this.selectedConvId = convId;
+    window.whatsappService.markAsRead(convId);
+    this.render();
+  }
+
+  /* ── 2. Center Panel: Active Chat Window ────────────────────────────── */
   renderActiveChat() {
-    const conv = this.getSelectedConversation();
-    if (!conv) return;
+    const convs = window.appState.get('conversations') || [];
+    const conv = convs.find(c => c.id === this.selectedConvId);
 
-    const lead = (window.appState.get('leads') || []).find(l => l.id === conv.leadId);
-
-    // Chat Header
     const nameEl = document.getElementById('chat-lead-name');
     const compEl = document.getElementById('chat-lead-company');
-    const modeBtnAI = document.getElementById('mode-toggle-ai');
-    const modeBtnHuman = document.getElementById('mode-toggle-human');
+    const resolveBtn = document.getElementById('chat-resolve-btn');
 
-    if (nameEl) nameEl.textContent = conv.leadName;
-    if (compEl) compEl.textContent = `${conv.company} · ${conv.phone}`;
-
-    if (modeBtnAI && modeBtnHuman) {
-      if (conv.mode === 'AI') {
-        modeBtnAI.className = 'mode-btn active ai';
-        modeBtnHuman.className = 'mode-btn';
-      } else {
-        modeBtnAI.className = 'mode-btn';
-        modeBtnHuman.className = 'mode-btn active human';
-      }
-
-      modeBtnAI.onclick = () => this.setChatMode(conv.id, 'AI');
-      modeBtnHuman.onclick = () => this.setChatMode(conv.id, 'HUMAN');
+    if (!conv) {
+      if (nameEl) nameEl.textContent = 'Select a conversation';
+      if (compEl) compEl.textContent = '';
+      return;
     }
 
-    // Message List
-    const messagesScroll = document.getElementById('chat-messages-scroll');
-    if (messagesScroll) {
-      messagesScroll.innerHTML = (conv.messages || []).map(m => {
-        if (m.sender === 'system') {
-          return `
-            <div class="msg-bubble-wrap system">
-              <div class="msg-bubble">${this.escapeHtml(m.text)}</div>
-            </div>
-          `;
-        }
+    if (nameEl) nameEl.textContent = conv.contactName;
+    if (compEl) compEl.textContent = `${conv.company || 'Lead'} · ${conv.phone}`;
 
-        const isInbound = m.sender === 'inbound';
-        const msgType = m.type || 'text';
+    if (resolveBtn) {
+      resolveBtn.innerHTML = conv.status === 'RESOLVED' ? '🔄 Re-open Chat' : '✓ Mark Resolved';
+      resolveBtn.style.color = conv.status === 'RESOLVED' ? '#34d399' : 'var(--text-secondary)';
+    }
 
-        let contentHtml = '';
+    this.updateModeToggleUI(conv.mode);
+    this.update24hWindowTimer(conv);
+    this.renderMessages(conv.id);
+    this.renderAiSuggestions(conv);
+    this.renderRightSidebar(conv);
+  }
 
-        switch (msgType) {
-          case 'image':
-            contentHtml = `
-              <div class="msg-media msg-media-image">
-                <img src="${m.mediaUrl || ''}" alt="${this.escapeHtml(m.caption || 'Image')}" class="msg-img" onclick="window.inboxComponent.openMediaViewer('${m.mediaUrl || ''}', 'image')" />
-              </div>
-              ${m.caption ? `<div class="msg-media-caption">${this.escapeHtml(m.caption)}</div>` : ''}
-            `;
-            break;
+  update24hWindowTimer(conv = null) {
+    if (!conv && this.selectedConvId) {
+      conv = (window.appState.get('conversations') || []).find(c => c.id === this.selectedConvId);
+    }
+    const banner = document.getElementById('inbox-24h-banner');
+    const countEl = document.getElementById('session-timer-count');
+    const bannerTemplateBtn = document.getElementById('inbox-open-templates-banner-btn');
+    if (!banner || !conv) return;
 
-          case 'video':
-            contentHtml = `
-              <div class="msg-media msg-media-video">
-                <video src="${m.mediaUrl || ''}" class="msg-video" controls preload="metadata"></video>
-              </div>
-              ${m.caption ? `<div class="msg-media-caption">${this.escapeHtml(m.caption)}</div>` : ''}
-            `;
-            break;
+    // Simulate 24-hr session window countdown
+    const lastTime = new Date(conv.lastTimestamp || Date.now());
+    const windowExpiry = new Date(lastTime.getTime() + 24 * 60 * 60 * 1000);
+    const diffMs = windowExpiry.getTime() - Date.now();
 
-          case 'document':
-          case 'file':
-            const fileName = m.fileName || 'Document';
-            const fileSize = m.fileSize || '';
-            const fileIcon = this.getFileIcon(fileName);
-            contentHtml = `
-              <div class="msg-file-attachment">
-                <div class="msg-file-icon">${fileIcon}</div>
-                <div class="msg-file-info">
-                  <div class="msg-file-name">${this.escapeHtml(fileName)}</div>
-                  ${fileSize ? `<div class="msg-file-size">${this.escapeHtml(fileSize)}</div>` : ''}
-                </div>
-                ${m.mediaUrl ? `<a href="${m.mediaUrl}" target="_blank" class="msg-file-download" title="Download">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                </a>` : ''}
-              </div>
-              ${m.caption ? `<div class="msg-media-caption">${this.escapeHtml(m.caption)}</div>` : ''}
-            `;
-            break;
+    if (diffMs <= 0) {
+      banner.className = 'session-window-banner expired';
+      banner.innerHTML = `
+        <span>⚠️ <strong>24h Session Expired:</strong> Free-form messaging blocked by Meta. Approved template required.</span>
+      `;
+      if (bannerTemplateBtn) bannerTemplateBtn.style.display = 'inline-flex';
+    } else {
+      const hours = Math.floor(diffMs / (1000 * 60 * 60));
+      const mins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+      banner.className = hours < 2 ? 'session-window-banner expiring' : 'session-window-banner active';
+      if (countEl) countEl.textContent = `${hours}h ${mins}m left`;
+    }
+  }
 
-          case 'sticker':
-            contentHtml = `
-              <div class="msg-sticker">
-                <img src="${m.mediaUrl || ''}" alt="Sticker" class="msg-sticker-img" />
-              </div>
-            `;
-            break;
+  renderMessages(convId) {
+    const scrollArea = document.getElementById('chat-messages-scroll');
+    if (!scrollArea) return;
 
-          case 'audio':
-            contentHtml = `
-              <div class="msg-audio">
-                <audio src="${m.mediaUrl || ''}" controls preload="metadata" class="msg-audio-player"></audio>
-              </div>
-            `;
-            break;
+    const messagesMap = window.appState.get('messages') || {};
+    const msgs = messagesMap[convId] || [];
 
-          case 'location':
-            contentHtml = `
-              <div class="msg-location">
-                <div class="msg-location-icon">📍</div>
-                <div class="msg-location-info">
-                  <div class="msg-location-name">${this.escapeHtml(m.locationName || 'Shared Location')}</div>
-                  ${m.locationAddress ? `<div class="msg-location-address">${this.escapeHtml(m.locationAddress)}</div>` : ''}
-                </div>
-              </div>
-            `;
-            break;
+    if (msgs.length === 0) {
+      scrollArea.innerHTML = `<div style="text-align: center; color: var(--text-muted); font-size: 13px; margin-top: 40px;">No messages in this chat yet.</div>`;
+      return;
+    }
 
-          case 'contact':
-            contentHtml = `
-              <div class="msg-contact-card">
-                <div class="msg-contact-icon">👤</div>
-                <div class="msg-contact-info">
-                  <div class="msg-contact-name">${this.escapeHtml(m.contactName || 'Contact')}</div>
-                  ${m.contactPhone ? `<div class="msg-contact-phone">${this.escapeHtml(m.contactPhone)}</div>` : ''}
-                </div>
-              </div>
-            `;
-            break;
+    scrollArea.innerHTML = msgs.map((msg, index) => {
+      const isOutbound = msg.direction === 'OUTBOUND';
+      const bubbleClass = isOutbound ? 'msg-bubble-outbound' : 'msg-bubble-inbound';
 
-          case 'unknown':
-            contentHtml = `
-              <div class="msg-unknown">
-                <div class="msg-unknown-icon">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                </div>
-                <div class="msg-unknown-text">${this.escapeHtml(m.text || 'Unsupported message type')}</div>
-              </div>
-            `;
-            break;
+      // Read status ticks
+      let tickHtml = '';
+      if (isOutbound) {
+        tickHtml = `<span class="msg-tick read" title="Read by recipient">✓✓</span>`;
+      }
 
-          default: // text
-            contentHtml = this.escapeHtml(m.text);
-            break;
-        }
-
-        const bubbleClass = msgType === 'sticker' ? 'msg-bubble msg-bubble-sticker' : 'msg-bubble';
-
-        return `
-          <div class="msg-bubble-wrap ${isInbound ? 'inbound' : 'outbound'}">
-            <div class="${bubbleClass}">
-              ${contentHtml}
-            </div>
-            <div class="msg-footer">
-              ${m.isAI ? '<span class="ai-tag-pill">AI AGENT</span>' : ''}
-              ${msgType !== 'text' && msgType !== 'unknown' ? `<span class="msg-type-tag">${this.getMsgTypeLabel(msgType)}</span>` : ''}
-              <span>${m.timestamp}</span>
-              ${!isInbound ? `<span>· ${m.status || 'DELIVERED'}</span>` : ''}
+      return `
+        <div class="msg-row ${isOutbound ? 'justify-end' : 'justify-start'} flex">
+          <div class="msg-bubble ${bubbleClass} max-w-md p-3 rounded-lg text-sm shadow">
+            <div class="msg-body">${msg.text || msg.body || ''}</div>
+            <div class="msg-meta text-xs text-muted flex items-center justify-end gap-1 mt-1">
+              <span>${msg.timestamp}</span>
+              ${tickHtml}
             </div>
           </div>
-        `;
-      }).join('') + '<div id="messagesEndRef"></div>';
-
-      const messagesEndRef = document.getElementById('messagesEndRef');
-      if (messagesEndRef) {
-        messagesEndRef.scrollIntoView({ behavior: 'smooth' });
-      } else {
-        messagesScroll.scrollTop = messagesScroll.scrollHeight;
-      }
-    }
-
-
-    // AI Suggestions Bar
-    const aiBar = document.getElementById('chat-ai-suggestions-bar');
-    if (aiBar) {
-      const suggestions = conv.aiSuggestions || window.aiService.suggestReplies(conv);
-      aiBar.innerHTML = `
-        <span style="font-size: 11px; font-weight: 700; color: #a78bfa; white-space: nowrap;">✨ AI Suggestions:</span>
-        ${suggestions.map(s => `
-          <button class="ai-chip" onclick="window.inboxComponent.applyAiSuggestion(\`${s.replace(/"/g, '\\"')}\`)">
-            ${this.escapeHtml(s)}
-          </button>
-        `).join('')}
+        </div>
       `;
-    }
-
-    // Lead Sidebar details
-    if (lead) {
-      const setLeadDetail = (id, val) => {
-        const el = document.getElementById(id);
-        if (el) el.textContent = val;
-      };
-
-      setLeadDetail('inbox-sidebar-contact', lead.contactName);
-      setLeadDetail('inbox-sidebar-company', lead.companyName);
-      setLeadDetail('inbox-sidebar-phone', lead.phone);
-      setLeadDetail('inbox-sidebar-email', lead.email || 'N/A');
-      setLeadDetail('inbox-sidebar-location', lead.location);
-      setLeadDetail('inbox-sidebar-score', `Score: ${lead.score}/100 (${lead.scoreCategory.toUpperCase()})`);
-      setLeadDetail('inbox-sidebar-ai-summary', lead.aiSummary || 'Active conversational opportunity.');
-    }
+    }).join('') + '<div id="messagesEndRef"></div>';
   }
 
-  setChatMode(convId, mode) {
-    const convs = window.appState.get('conversations') || [];
-    const conv = convs.find(c => c.id === convId);
-    if (conv) {
-      conv.mode = mode;
-      conv.status = mode === 'AI' ? 'AI Active' : 'Human Active';
-      conv.messages.push({
-        id: 'm_sys_' + Date.now(),
-        sender: 'system',
-        text: mode === 'HUMAN' ? 'Human Takeover engaged. AI Bot paused.' : 'AI Sales Agent resumed for conversation.',
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  renderAiSuggestions(conv) {
+    const bar = document.getElementById('chat-ai-suggestions-bar');
+    if (!bar) return;
+
+    const suggestions = [
+      '📅 Schedule 15-min Demo',
+      '💳 Send Growth Plan Pricing',
+      '💬 Request Follow-Up Time'
+    ];
+
+    bar.innerHTML = suggestions.map(text => `
+      <button type="button" class="ai-suggest-chip btn btn-secondary btn-sm" style="font-size: 11.5px; border-radius: 14px;">
+        ✨ ${text}
+      </button>
+    `).join('');
+
+    bar.querySelectorAll('.ai-suggest-chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        const text = chip.textContent.replace('✨ ', '').trim();
+        this.handleSendMessage(text);
       });
-      window.appState.saveState();
-      window.appState.addAuditLog(
-        mode === 'HUMAN' ? 'Human Takeover Engaged' : 'AI Agent Resumed',
-        conv.leadName,
-        `Switched chat mode to ${mode}.`,
-        'Success'
-      );
-      this.render();
-    }
-  }
-
-  applyAiSuggestion(text) {
-    const input = document.getElementById('chat-message-input');
-    if (input) {
-      input.value = text;
-      input.focus();
-    }
-  }
-
-  async handleSendMessage() {
-    const input = document.getElementById('chat-message-input');
-    const text = input ? input.value.trim() : '';
-    if (!text) return;
-
-    const conv = this.getSelectedConversation();
-    if (!conv) return;
-
-    input.value = '';
-    try {
-      await window.whatsappService.sendMessage({
-        leadId: conv.leadId,
-        text,
-        isAI: conv.mode === 'AI'
-      });
-    } catch (err) {
-      alert(err.message);
-    }
-  }
-
-  handleSimulateInbound() {
-    const input = document.getElementById('sim-customer-inbound-text');
-    const text = input ? input.value.trim() : '';
-    if (!text) return;
-
-    const conv = this.getSelectedConversation();
-    if (!conv) return;
-
-    input.value = '';
-    window.whatsappService.receiveSimulatedInbound({
-      leadId: conv.leadId,
-      text
     });
   }
 
-  getFileIcon(fileName) {
-    const ext = (fileName || '').split('.').pop().toLowerCase();
-    const iconMap = {
-      pdf: '📄', doc: '📝', docx: '📝', xls: '📊', xlsx: '📊',
-      ppt: '📑', pptx: '📑', csv: '📊', txt: '📃',
-      zip: '🗜️', rar: '🗜️', '7z': '🗜️',
-      jpg: '🖼️', jpeg: '🖼️', png: '🖼️', gif: '🖼️', webp: '🖼️',
-      mp4: '🎬', mov: '🎬', avi: '🎬', mkv: '🎬',
-      mp3: '🎵', wav: '🎵', ogg: '🎵', aac: '🎵',
-      apk: '📱', exe: '⚙️', dmg: '💿',
-    };
-    return iconMap[ext] || '📎';
-  }
+  /* ── 3. Right Panel: Prospect & CRM Details ─────────────────────────── */
+  renderRightSidebar(conv) {
+    const contactEl = document.getElementById('inbox-sidebar-contact');
+    const compEl = document.getElementById('inbox-sidebar-company');
+    const phoneEl = document.getElementById('inbox-sidebar-phone');
+    const statusPill = document.getElementById('inbox-right-status-pill');
+    const stageSelect = document.getElementById('inbox-sidebar-stage-select');
+    const agentSelect = document.getElementById('inbox-sidebar-agent-select');
+    const tagsContainer = document.getElementById('inbox-sidebar-tags-container');
+    const notesList = document.getElementById('inbox-internal-notes-list');
 
-  getMsgTypeLabel(type) {
-    const labels = {
-      image: '📷 Photo', video: '🎥 Video', document: '📄 Document',
-      file: '📎 File', sticker: '🩷 Sticker', audio: '🎤 Audio',
-      location: '📍 Location', contact: '👤 Contact'
-    };
-    return labels[type] || type;
-  }
+    if (!conv) return;
 
-  openMediaViewer(url, type) {
-    if (!url) return;
-    // Create fullscreen overlay
-    let overlay = document.getElementById('media-viewer-overlay');
-    if (overlay) overlay.remove();
-
-    overlay = document.createElement('div');
-    overlay.id = 'media-viewer-overlay';
-    overlay.className = 'media-viewer-overlay';
-    overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
-
-    let mediaEl = '';
-    if (type === 'image') {
-      mediaEl = `<img src="${url}" class="media-viewer-content" alt="Full size image" />`;
-    } else if (type === 'video') {
-      mediaEl = `<video src="${url}" class="media-viewer-content" controls autoplay></video>`;
+    if (contactEl) contactEl.textContent = conv.contactName;
+    if (compEl) compEl.textContent = conv.company || 'Individual Prospect';
+    if (phoneEl) phoneEl.textContent = conv.phone || '+91 94470 12345';
+    if (statusPill) {
+      statusPill.textContent = conv.status || 'OPEN';
+      statusPill.className = conv.status === 'RESOLVED' ? 'badge badge-secondary' : 'badge badge-success';
     }
 
-    overlay.innerHTML = `
-      <button class="media-viewer-close" onclick="document.getElementById('media-viewer-overlay').remove()">✕</button>
-      ${mediaEl}
-    `;
-    document.body.appendChild(overlay);
-  }
+    if (stageSelect && conv.leadStage) stageSelect.value = conv.leadStage;
+    if (agentSelect && conv.assignedAgent) agentSelect.value = conv.assignedAgent;
 
-  escapeHtml(str) {
-    if (!str) return '';
-    return String(str).replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[m]);
+    // Tags
+    if (tagsContainer) {
+      const tags = conv.tags || ['VIP Lead', 'Dental Clinic'];
+      tagsContainer.innerHTML = tags.map(t => `
+        <span class="crm-tag-badge">
+          ${t}
+          <button type="button" class="crm-tag-remove-btn" data-tag="${t}">✕</button>
+        </span>
+      `).join('');
+
+      tagsContainer.querySelectorAll('.crm-tag-remove-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const t = btn.getAttribute('data-tag');
+          conv.tags = (conv.tags || []).filter(x => x !== t);
+          window.appState.set('conversations', window.appState.get('conversations'));
+          this.renderRightSidebar(conv);
+        });
+      });
+    }
+
+    // Internal Notes
+    if (notesList) {
+      const notes = conv.internalNotes || [
+        { author: 'Karthik Raja', timestamp: '10:15 AM', text: 'Prospect expressed interest in automated WhatsApp booking sequence.' }
+      ];
+
+      notesList.innerHTML = notes.map(n => `
+        <div class="internal-note-card">
+          <div class="internal-note-header">
+            <strong>${n.author}</strong>
+            <span>${n.timestamp}</span>
+          </div>
+          <div class="internal-note-body">${n.text}</div>
+        </div>
+      `).join('');
+    }
   }
 }
 

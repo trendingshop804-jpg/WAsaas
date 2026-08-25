@@ -658,22 +658,22 @@
           </div>
 
           <div id="campaigns-list-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 18px;">
-            <!-- Rendered Dynamically -->
           </div>
         </section>
 
-        <!-- 6. LIVE INBOX VIEW -->
+        <!-- 6. LIVE INBOX VIEW (WhatsApp CRM 3-Panel Layout) -->
         <section id="view-inbox" class="view-panel h-screen overflow-hidden">
           <div class="inbox-layout h-full overflow-hidden">
             <!-- Left: Conversations List -->
             <div class="inbox-conversations-list flex flex-col h-full overflow-hidden">
               <div class="inbox-search-header">
-                <input type="text" id="inbox-search-input" class="form-input" style="padding: 7px 10px; font-size: 12.5px;" placeholder="Search chats...">
-                <div class="inbox-filter-chips">
+                <input type="text" id="inbox-search-input" class="form-input" style="padding: 7px 10px; font-size: 12.5px;" placeholder="Search chats by name or +91...">
+                <div class="inbox-filter-chips custom-scrollbar">
                   <span class="filter-chip inbox-filter-chip active" data-filter="all">All</span>
-                  <span class="filter-chip inbox-filter-chip" data-filter="ai">🤖 AI Active</span>
-                  <span class="filter-chip inbox-filter-chip" data-filter="human">👤 Human Active</span>
                   <span class="filter-chip inbox-filter-chip" data-filter="unread">Unread</span>
+                  <span class="filter-chip inbox-filter-chip" data-filter="assigned_me">Assigned to me</span>
+                  <span class="filter-chip inbox-filter-chip" data-filter="unassigned">Unassigned</span>
+                  <span class="filter-chip inbox-filter-chip" data-filter="resolved">Resolved</span>
                 </div>
               </div>
 
@@ -683,33 +683,44 @@
             </div>
 
             <!-- Middle: Active Chat Pane -->
-            <div class="inbox-chat-pane flex flex-col h-full overflow-hidden">
+            <div class="inbox-chat-pane flex flex-col h-full overflow-hidden" style="position: relative;">
               <div class="chat-header">
                 <div class="chat-header-info">
-                  <div style="font-weight: 700; font-size: 14px;" id="chat-lead-name">Dr. Jacob Mathew</div>
-                  <span style="font-size: 12px; color: var(--text-muted);" id="chat-lead-company">Jacob Dental · +91 94470 12345</span>
+                  <div style="font-weight: 700; font-size: 14px;" id="chat-lead-name">Select a conversation</div>
+                  <span style="font-size: 12px; color: var(--text-muted);" id="chat-lead-company">Choose a contact to view chat</span>
                 </div>
 
                 <div class="chat-actions flex items-center gap-2">
+                  <button id="chat-resolve-btn" class="btn btn-secondary btn-sm" style="font-size: 11.5px; padding: 4px 10px;" title="Mark thread as resolved">
+                    ✓ Mark Resolved
+                  </button>
+
                   <div class="chat-mode-toggle">
                     <button id="mode-toggle-ai" class="mode-btn active ai">🤖 AI Bot</button>
                     <button id="mode-toggle-human" class="mode-btn">👤 Human</button>
                   </div>
+
                   <button id="chat-delete-btn" class="btn btn-outline" style="padding: 4px 10px; font-size: 12px; color: #ef4444; border-color: rgba(239, 68, 68, 0.3);" title="Delete this conversation thread">
                     🗑️ Delete Chat
                   </button>
                 </div>
               </div>
 
+              <!-- 24-Hour Meta Messaging Session Window Banner -->
+              <div id="inbox-24h-banner" class="session-window-banner active">
+                <div class="flex items-center gap-2">
+                  <span>⏱️ <strong>24h Session Window:</strong> Free-form messaging active</span>
+                  <span id="session-timer-count" class="session-timer-badge">23h 59m left</span>
+                </div>
+                <button id="inbox-open-templates-banner-btn" class="btn btn-secondary btn-sm" style="padding: 2px 8px; font-size: 11px; display: none;">
+                  📑 Send Approved Template
+                </button>
+              </div>
 
-
-
-
-              <!-- Message Stream -->
+              <!-- Message Stream Scroll Area -->
               <div class="chat-messages-scroll flex-1 overflow-y-auto p-4 space-y-4 min-h-0 custom-scrollbar" id="chat-messages-scroll">
                 <!-- Rendered dynamically -->
               </div>
-
 
               <!-- Floating Scroll to Bottom Button -->
               <button id="inbox-scroll-bottom-btn" class="inbox-scroll-bottom-btn" title="Scroll to latest message">
@@ -719,18 +730,61 @@
                 <span id="inbox-scroll-unread-badge" class="new-msg-badge" style="display: none;"></span>
               </button>
 
+              <!-- Emoji Picker Popover -->
+              <div id="emoji-picker-popover" class="emoji-picker-popover" style="display: none;">
+                <button type="button" class="emoji-item" data-emoji="👍">👍</button>
+                <button type="button" class="emoji-item" data-emoji="❤️">❤️</button>
+                <button type="button" class="emoji-item" data-emoji="🔥">🔥</button>
+                <button type="button" class="emoji-item" data-emoji="😊">😊</button>
+                <button type="button" class="emoji-item" data-emoji="🙏">🙏</button>
+                <button type="button" class="emoji-item" data-emoji="✅">✅</button>
+                <button type="button" class="emoji-item" data-emoji="🎉">🎉</button>
+                <button type="button" class="emoji-item" data-emoji="🚀">🚀</button>
+                <button type="button" class="emoji-item" data-emoji="📅">📅</button>
+                <button type="button" class="emoji-item" data-emoji="💼">💼</button>
+                <button type="button" class="emoji-item" data-emoji="⭐">⭐</button>
+                <button type="button" class="emoji-item" data-emoji="🤝">🤝</button>
+                <button type="button" class="emoji-item" data-emoji="📞">📞</button>
+                <button type="button" class="emoji-item" data-emoji="📍">📍</button>
+                <button type="button" class="emoji-item" data-emoji="💵">💵</button>
+                <button type="button" class="emoji-item" data-emoji="💯">💯</button>
+                <button type="button" class="emoji-item" data-emoji="👋">👋</button>
+                <button type="button" class="emoji-item" data-emoji="🎯">🎯</button>
+              </div>
+
               <!-- AI Suggestions Bar -->
               <div class="ai-suggest-bar" id="chat-ai-suggestions-bar">
                 <!-- Rendered dynamically -->
               </div>
 
-              <!-- Chat Input Area -->
-              <form id="chat-send-form" class="chat-input-area">
-                <textarea id="chat-message-input" class="chat-textarea" placeholder="Type WhatsApp reply (or select AI suggestion above)..."></textarea>
-                <button type="submit" class="btn btn-primary" style="height: 42px;">
+              <!-- Chat Input Area with Media & Emoji Controls -->
+              <form id="chat-send-form" class="chat-input-area" style="position: relative;">
+                <div class="flex items-center gap-1" style="margin-right: 6px;">
+                  <button type="button" id="inbox-emoji-trigger-btn" class="btn btn-secondary btn-icon btn-sm" title="Insert Emoji" style="padding: 6px 8px; font-size: 15px;">
+                    😊
+                  </button>
+                  <label for="inbox-media-file-input" class="btn btn-secondary btn-icon btn-sm" title="Attach Image or Document" style="padding: 6px 8px; font-size: 15px; cursor: pointer;">
+                    📎
+                  </label>
+                  <input type="file" id="inbox-media-file-input" style="display: none;" accept="image/*,application/pdf,application/msword,.docx">
+                  
+                  <button type="button" id="inbox-template-selector-btn" class="btn btn-secondary btn-icon btn-sm" title="Insert Approved WhatsApp Template" style="padding: 6px 8px; font-size: 14px;">
+                    📑
+                  </button>
+                </div>
+
+                <textarea id="chat-message-input" class="chat-textarea" placeholder="Type WhatsApp reply (Press Enter to send, Shift+Enter for new line)..."></textarea>
+                
+                <button type="submit" class="btn btn-primary" style="height: 42px; padding: 0 18px; font-weight: 600;">
                   Send
                 </button>
               </form>
+
+              <!-- Attachment Preview Bar (hidden by default) -->
+              <div id="inbox-attachment-preview-bar" style="display: none; padding: 6px 14px; background: rgba(99, 102, 241, 0.1); border-top: 1px solid rgba(99, 102, 241, 0.2); font-size: 12px;" class="flex items-center justify-between">
+                <span id="inbox-attachment-name" style="color: #a5b4fc; font-weight: 600;">📎 Selected: document.pdf</span>
+                <button type="button" id="inbox-clear-attachment-btn" style="background: none; border: none; color: #ef4444; cursor: pointer; font-size: 12px;">✕ Cancel</button>
+              </div>
 
               <!-- Simulator for incoming customer text -->
               <form id="simulate-customer-reply-form" style="padding: 6px 18px; background: var(--bg-tertiary); border-top: 1px solid var(--border-subtle); display: flex; align-items: center; gap: 8px;">
@@ -740,33 +794,81 @@
               </form>
             </div>
 
-            <!-- Right: Lead Details Sidebar -->
-            <div class="inbox-lead-details">
-              <div style="font-weight: 700; font-size: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--border-subtle);">
-                Prospect Overview
+            <!-- Right: Contact/CRM Details Sidebar -->
+            <div class="inbox-lead-details custom-scrollbar" style="overflow-y: auto; display: flex; flex-direction: column; gap: 16px;">
+              <div style="font-weight: 700; font-size: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--border-subtle);" class="flex items-center justify-between">
+                <span>Prospect Overview</span>
+                <span id="inbox-right-status-pill" class="badge badge-success" style="font-size: 10px;">OPEN</span>
+              </div>
+              
+              <!-- Contact Details -->
+              <div class="space-y-2">
+                <div>
+                  <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase;">Contact & Company</div>
+                  <div style="font-weight: 700; color: var(--text-primary);" id="inbox-sidebar-contact">Select a lead</div>
+                  <div style="font-size: 12px; color: var(--text-secondary);" id="inbox-sidebar-company">--</div>
+                </div>
+
+                <div>
+                  <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase;">WhatsApp Number</div>
+                  <div class="badge badge-whatsapp font-mono" id="inbox-sidebar-phone">--</div>
+                </div>
               </div>
 
+              <!-- CRM Pipeline Stage -->
+              <div class="form-group" style="margin-bottom: 0;">
+                <label class="form-label" style="font-size: 11px; text-transform: uppercase; color: var(--text-muted);">Lead Stage</label>
+                <select id="inbox-sidebar-stage-select" class="form-select" style="padding: 5px 8px; font-size: 12px;">
+                  <option value="New Lead">New Lead</option>
+                  <option value="Contacted">Contacted</option>
+                  <option value="Qualified">Qualified</option>
+                  <option value="Proposal Sent">Proposal Sent</option>
+                  <option value="Won / Customer">Won / Customer</option>
+                  <option value="Lost">Lost</option>
+                </select>
+              </div>
+
+              <!-- Assigned Agent Selector -->
+              <div class="form-group" style="margin-bottom: 0;">
+                <label class="form-label" style="font-size: 11px; text-transform: uppercase; color: var(--text-muted);">Assigned Sales Agent</label>
+                <select id="inbox-sidebar-agent-select" class="form-select" style="padding: 5px 8px; font-size: 12px;">
+                  <option value="Unassigned">Unassigned</option>
+                  <option value="Karthik Raja">Karthik Raja (You)</option>
+                  <option value="AI Bot Agent">🤖 AI Bot Agent</option>
+                  <option value="Rohith Sharma">Rohith Sharma</option>
+                </select>
+              </div>
+
+              <!-- Tags Manager -->
               <div>
-                <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase;">Contact & Company</div>
-                <div style="font-weight: 700; color: var(--text-primary);" id="inbox-sidebar-contact">Dr. Jacob Mathew</div>
-                <div style="font-size: 12px; color: var(--text-secondary);" id="inbox-sidebar-company">Dr. Jacob Dental & Implant Center</div>
+                <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; margin-bottom: 6px;">CRM Tags</div>
+                <div id="inbox-sidebar-tags-container" class="flex flex-wrap gap-1" style="margin-bottom: 8px;">
+                  <!-- Rendered dynamically -->
+                </div>
+                <form id="inbox-add-tag-form" class="flex gap-1">
+                  <input type="text" id="inbox-new-tag-input" class="form-input" style="padding: 3px 6px; font-size: 11.5px; height: 26px;" placeholder="Add tag (e.g. VIP)...">
+                  <button type="submit" class="btn btn-secondary btn-sm" style="padding: 2px 8px; font-size: 11px;">+ Tag</button>
+                </form>
               </div>
 
-              <div>
-                <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase;">WhatsApp Number</div>
-                <div class="badge badge-whatsapp font-mono" id="inbox-sidebar-phone">+91 94470 12345</div>
-              </div>
-
-              <div>
-                <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase;">AI Lead Score</div>
-                <div class="badge badge-hot" id="inbox-sidebar-score">Score: 94/100 (HOT)</div>
-              </div>
-
+              <!-- AI Briefing -->
               <div style="padding: 12px; background: var(--bg-tertiary); border-radius: 8px;">
                 <div style="font-weight: 700; font-size: 11.5px; color: #a78bfa; margin-bottom: 4px;">AI Executive Briefing</div>
                 <div style="font-size: 12px; color: var(--text-secondary); line-height: 1.4;" id="inbox-sidebar-ai-summary">
-                  Chief surgeon wants automated recall booking system. High budget indicated in conversation.
+                  Select a chat thread to view AI lead scoring & contextual intelligence.
                 </div>
+              </div>
+
+              <!-- Internal Team Notes Section -->
+              <div>
+                <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; margin-bottom: 6px;">Internal Team Notes</div>
+                <div id="inbox-internal-notes-list" class="internal-notes-timeline custom-scrollbar">
+                  <!-- Rendered dynamically -->
+                </div>
+                <form id="inbox-add-note-form" class="space-y-2">
+                  <textarea id="inbox-new-note-input" class="form-input" style="padding: 6px; font-size: 11.5px; height: 50px;" placeholder="Write a private internal note for your team..."></textarea>
+                  <button type="submit" class="btn btn-secondary btn-sm w-full" style="padding: 4px; font-size: 11px;">+ Save Internal Note</button>
+                </form>
               </div>
             </div>
           </div>
