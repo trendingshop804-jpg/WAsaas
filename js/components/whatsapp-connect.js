@@ -242,21 +242,22 @@ class WhatsAppConnectComponent {
         appId: appId,
         cookie: true,
         xfbml: true,
-        version: 'v18.0'
+        version: 'v21.0'
       });
 
       if (statusMsg) statusMsg.innerHTML = 'Connecting to Meta dialog...';
 
-      // Login popup
+      // Login popup with WhatsApp & Instagram permissions
       FB.login((response) => {
         if (response.authResponse) {
           this.metaAccessToken = response.authResponse.accessToken;
           if (statusMsg) {
             statusMsg.style.color = '#10b981';
-            statusMsg.innerHTML = '✓ Authenticated with Meta!';
+            statusMsg.innerHTML = '✓ Authenticated with Meta Business!';
           }
           if (loginBtn) loginBtn.style.display = 'none';
           this.fetchRealBusinesses();
+          this.exchangeAndPersistToken(response.authResponse.accessToken);
         } else {
           if (statusMsg) {
             statusMsg.style.color = '#ef4444';
@@ -264,7 +265,7 @@ class WhatsAppConnectComponent {
           }
         }
       }, {
-        scope: 'whatsapp_business_management,whatsapp_business_messaging'
+        scope: 'whatsapp_business_management,whatsapp_business_messaging,instagram_basic,instagram_manage_messages,pages_show_list,pages_read_engagement'
       });
 
     } catch (err) {
@@ -272,6 +273,26 @@ class WhatsAppConnectComponent {
         statusMsg.style.color = '#ef4444';
         statusMsg.innerHTML = `SDK Error: ${err.message}`;
       }
+    }
+  }
+
+  async exchangeAndPersistToken(accessToken) {
+    if (!window.supabaseConfig || !window.supabaseConfig.isSupabaseConfigured()) return;
+    try {
+      const org = window.appState.getCurrentOrg();
+      const edgeUrl = window.supabaseConfig.getEdgeFunctionUrl('meta-oauth-exchange');
+      if (!edgeUrl) return;
+
+      await fetch(edgeUrl, {
+        method: 'POST',
+        headers: window.supabaseConfig.getAuthHeaders(),
+        body: JSON.stringify({
+          accessToken,
+          organizationId: org.id
+        })
+      });
+    } catch (e) {
+      console.warn('[Meta Token Sync]:', e.message);
     }
   }
 

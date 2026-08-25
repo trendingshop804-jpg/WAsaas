@@ -12,17 +12,133 @@
   <link rel="stylesheet" href="css/dashboard.css">
   <link rel="stylesheet" href="css/crm.css">
   <link rel="stylesheet" href="css/workflow.css">
-  <link rel="stylesheet" href="css/inbox.css">
   <link rel="stylesheet" href="css/settings.css">
+
+  <!-- Supabase JS Client SDK -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
-  <div id="app">
-    <!-- Ambient Background Glows -->
-    <div class="ambient-glow-1"></div>
-    <div class="ambient-glow-2"></div>
+  <!-- ========================================================================
+       AUTHENTICATION FULLSCREEN OVERLAY (Login, Signup, Forgot Password)
+       ======================================================================== -->
+  <div id="auth-fullscreen-wrapper" class="auth-fullscreen-wrapper" style="display: none;">
+    <div class="auth-card">
+      <div class="auth-header">
+        <div class="auth-logo-wrap">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
+          </svg>
+        </div>
+        <h1 class="auth-title">NexusLead AI</h1>
+        <p class="auth-subtitle">AI Lead Generation & WhatsApp Sales Automation</p>
+      </div>
 
-    <!-- Sidebar Navigation -->
-    <aside class="sidebar">
+      <!-- Auth Error Alert -->
+      <div id="auth-error-alert" class="auth-alert-error"></div>
+
+      <!-- Switch Tabs (Sign In vs Sign Up) -->
+      <div class="auth-tabs">
+        <button class="auth-tab-btn active auth-toggle-link" data-target="login">Sign In</button>
+        <button class="auth-tab-btn auth-toggle-link" data-target="signup">Create Account</button>
+      </div>
+
+      <!-- 1. Login Container -->
+      <div id="auth-login-container">
+        <form id="auth-login-form" class="space-y-4">
+          <div class="form-group">
+            <label class="form-label" for="login-email">Work Email</label>
+            <input type="email" id="login-email" class="form-input" required placeholder="name@company.com" autocomplete="email">
+          </div>
+
+          <div class="form-group">
+            <div class="flex items-center justify-between" style="margin-bottom: 6px;">
+              <label class="form-label" for="login-password" style="margin-bottom: 0;">Password</label>
+              <a href="#" id="auth-open-forgot-btn" style="font-size: 12px; color: var(--brand-whatsapp); text-decoration: none;">Forgot password?</a>
+            </div>
+            <input type="password" id="login-password" class="form-input" required placeholder="••••••••" autocomplete="current-password">
+          </div>
+
+          <button type="submit" id="login-submit-btn" class="btn btn-primary w-full" style="height: 42px; font-weight: 600; justify-content: center;">
+            Sign In to NexusLead
+          </button>
+        </form>
+
+        <div class="auth-footer-text">
+          Don't have an account? <a href="#" class="auth-toggle-link" data-target="signup">Start 14-day free trial</a>
+        </div>
+      </div>
+
+      <!-- 2. Signup Container -->
+      <div id="auth-signup-container" style="display: none;">
+        <form id="auth-signup-form" class="space-y-4">
+          <div class="form-group">
+            <label class="form-label" for="signup-name">Your Full Name</label>
+            <input type="text" id="signup-name" class="form-input" required placeholder="e.g. Alex Mathew" autocomplete="name">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="signup-workspace">Workspace / Business Name</label>
+            <input type="text" id="signup-workspace" class="form-input" required placeholder="e.g. Growth Marketing Labs">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="signup-email">Work Email</label>
+            <input type="email" id="signup-email" class="form-input" required placeholder="alex@growthlabs.io" autocomplete="email">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="signup-password">Create Password (min. 6 chars)</label>
+            <input type="password" id="signup-password" class="form-input" required minlength="6" placeholder="••••••••" autocomplete="new-password">
+          </div>
+
+          <button type="submit" id="signup-submit-btn" class="btn btn-primary w-full" style="height: 42px; font-weight: 600; justify-content: center;">
+            Create Free Account
+          </button>
+        </form>
+
+        <div class="auth-footer-text">
+          Already registered? <a href="#" class="auth-toggle-link" data-target="login">Sign in here</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Forgot Password Modal -->
+  <div id="auth-forgot-modal" class="modal-backdrop">
+    <div class="modal" style="max-width: 400px;">
+      <div class="modal-header">
+        <h3>Reset Password</h3>
+        <button id="close-forgot-modal-btn" class="btn btn-secondary btn-icon btn-sm">✕</button>
+      </div>
+      <form id="auth-forgot-form">
+        <div class="modal-body">
+          <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 14px;">
+            Enter your work email address and we'll send you instructions to reset your password.
+          </p>
+          <div class="form-group">
+            <label class="form-label" for="forgot-email">Account Email</label>
+            <input type="email" id="forgot-email" class="form-input" required placeholder="name@company.com">
+          </div>
+          <div id="forgot-status-msg" style="font-size: 12px; margin-top: 8px;"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="submit" id="forgot-submit-btn" class="btn btn-primary">Send Reset Link</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ========================================================================
+       MAIN APPLICATION SHELL
+       ======================================================================== -->
+  <div id="app-shell" class="app-container" style="display: flex;">
+    <div id="app">
+      <!-- Ambient Background Glows -->
+      <div class="ambient-glow-1"></div>
+      <div class="ambient-glow-2"></div>
+
+      <!-- Sidebar Navigation -->
+      <aside class="sidebar">
       <div class="sidebar-brand">
         <a href="#" class="brand-logo">
           <div class="brand-icon">
@@ -141,12 +257,17 @@
 
       <!-- Sidebar Footer -->
       <div class="sidebar-footer">
-        <div class="user-profile-widget">
-          <div class="user-avatar">KR</div>
-          <div class="user-meta">
-            <span class="user-name">Karthik Raja</span>
-            <span class="user-role">Owner & Admin</span>
+        <div class="user-profile-widget flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <div class="user-avatar" id="sidebar-user-avatar">NL</div>
+            <div class="user-meta">
+              <span class="user-name" id="sidebar-user-name">Workspace Admin</span>
+              <span class="user-role" id="sidebar-user-role">Owner & Admin</span>
+            </div>
           </div>
+          <button class="btn btn-icon btn-sm auth-logout-btn" title="Sign Out" style="color: var(--text-muted); padding: 4px; background: transparent; border: none; cursor: pointer;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+          </button>
         </div>
       </div>
     </aside>
@@ -1826,14 +1947,15 @@
           </div>
         </form>
       </div>
-    </div>
-
+  </div>
   </div>
 
   <!-- Scripts -->
   <script src="js/demo-data.js"></script>
   <script src="js/state.js"></script>
   <script src="js/services/supabase-config.js"></script>
+  <script src="js/services/auth-service.js"></script>
+  <script src="js/components/auth.js"></script>
   <!-- App Config (gitignored — holds API keys) -->
   <script src="js/config.js"></script>
   <script src="js/services/ai-service.js"></script>

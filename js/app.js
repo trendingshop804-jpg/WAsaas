@@ -2,8 +2,12 @@
    NexusLead AI - Application Bootstrapper & Lifecycle Orchestrator
    ========================================================================== */
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   console.log('⚡ Initializing NexusLead AI SaaS Platform...');
+
+  // Initialize Auth Service & UI Guard
+  if (window.authService) await window.authService.init();
+  if (window.authComponent) window.authComponent.init();
 
   // Initialize Core Services & Components
   if (window.navigationComponent) window.navigationComponent.init();
