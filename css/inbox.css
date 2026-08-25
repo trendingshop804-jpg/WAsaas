@@ -39,7 +39,18 @@
   min-height: 0;
 }
 
-@media (max-width: 1200px) {
+/* Keep the full inbox context available on standard desktop and laptop screens. */
+@media (min-width: 1024px) {
+  .inbox-layout {
+    grid-template-columns: minmax(270px, 320px) minmax(0, 1fr) minmax(260px, 300px);
+  }
+
+  .inbox-lead-details {
+    display: flex;
+  }
+}
+
+@media (max-width: 1023px) {
   .inbox-layout {
     grid-template-columns: 320px 1fr;
   }
