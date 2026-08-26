@@ -402,12 +402,15 @@ class InboxComponent {
     let text = suggestedText || (input ? input.value.trim() : '');
 
     if (this.selectedAttachment) {
-      text = `📎 Attached [${this.selectedAttachment.name}]: ${text}`;
+      const file = this.selectedAttachment;
+      const messageType = this.getMediaMessageType(file);
+      this.sendMediaMessage(file, messageType, text);
       this.selectedAttachment = null;
       const mediaInput = document.getElementById('inbox-media-file-input');
       const previewBar = document.getElementById('inbox-attachment-preview-bar');
       if (mediaInput) mediaInput.value = '';
       if (previewBar) previewBar.style.display = 'none';
+      return;
     }
 
     if (!text || !this.selectedConvId) return;
@@ -427,6 +430,134 @@ class InboxComponent {
       input.value = '';
       input.style.height = 'auto';
     }
+  }
+
+  getMediaMessageType(file) {
+    const type = file.type || '';
+    if (type.startsWith('image/')) return 'image';
+    if (type.startsWith('audio/')) return 'audio';
+    if (type.startsWith('video/')) return 'video';
+    if (type.startsWith('text/') || type === 'application/pdf' || type.includes('spreadsheet') || type.includes('document') || type.includes('presentation')) return 'document';
+    const ext = file.name.split('.').pop()?.toLowerCase() || '';
+    if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext)) return 'image';
+    if (['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac'].includes(ext)) return 'audio';
+    if (['mp4', 'mov', 'avi', 'mkv', 'webm'].includes(ext)) return 'video';
+    if (['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'csv'].includes(ext)) return 'document';
+    return 'document';
+  }
+
+  async sendMediaMessage(file, messageType, text = '') {
+    const conv = (window.appState.get('conversations') || []).find(c => c.id === this.selectedConvId);
+    if (!conv?.leadId || !conv?.phone) {
+      alert('This conversation is not linked to a lead with a phone number.');
+      return;
+    }
+
+    const input = document.getElementById('chat-message-input');
+    if (input) {
+      input.value = '';
+      input.style.height = 'auto';
+    }
+
+    const tempId = 'm_media_' + Date.now();
+    const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const mediaUrl = URL.createObjectURL(file);
+    const mimeType = file.type || 'application/octet-stream';
+    const fileName = file.name;
+
+    const optimisticMsg = {
+      id: tempId,
+      wa_message_id: null,
+      sender: 'outbound',
+      direction: 'outbound',
+      type: messageType,
+      message_type: messageType,
+      text: text || fileName,
+      body: text || fileName,
+      content: text || fileName,
+      mediaUrl: mediaUrl,
+      media_url: mediaUrl,
+      mediaMimeType: mimeType,
+      media_mime_type: mimeType,
+      fileName: fileName,
+      file_name: fileName,
+      mediaSize: file.size,
+      media_size: file.size,
+      caption: text || '',
+      media_caption: text || '',
+      timestamp: timestamp,
+      received_at: new Date().toISOString(),
+      status: 'SENDING',
+      sentByHuman: true,
+      isOptimistic: true
+    };
+
+    if (conv.messages) {
+      conv.messages.push(optimisticMsg);
+    } else {
+      conv.messages = [optimisticMsg];
+    }
+    conv.lastMessage = optimisticMsg.text;
+    conv.lastTimestamp = timestamp;
+    window.appState.saveState();
+    this.renderMessages(conv.id);
+    this.scrollToBottom(true);
+
+    const fileBase64 = await this.fileToBase64(file);
+
+    try {
+      const res = await fetch('/api/send-media', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          fileBase64,
+          messageType,
+          text,
+          leadId: conv.leadId,
+          senderNumber: conv.phone,
+          caption: text || '',
+          fileName,
+          mimeType
+        })
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to send media');
+      }
+
+      optimisticMsg.status = 'SENT';
+      optimisticMsg.wa_message_id = data.messageId;
+      optimisticMsg.isOptimistic = false;
+
+      if (data.message && data.message.media_url) {
+        optimisticMsg.media_url = data.message.media_url;
+        optimisticMsg.mediaUrl = data.message.media_url;
+      }
+    } catch (err) {
+      console.error('Media send failed:', err);
+      optimisticMsg.status = 'FAILED';
+      alert(err.message || 'Failed to send media. Please try again.');
+    } finally {
+      window.appState.saveState();
+      this.renderMessages(conv.id);
+      this.scrollToBottom(true);
+    }
+  }
+
+  fileToBase64(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const base64 = (reader.result as string).split(',')[1];
+        resolve(base64);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
   }
 
   render() {
