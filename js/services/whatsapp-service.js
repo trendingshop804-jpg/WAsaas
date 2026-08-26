@@ -477,6 +477,15 @@ class WhatsAppService {
     }
   }
 
+  markAsRead(convId) {
+    const conversations = window.appState.get('conversations') || [];
+    const conv = conversations.find(c => c.id === convId);
+    if (conv && conv.unreadCount > 0) {
+      conv.unreadCount = 0;
+      window.appState.saveState();
+    }
+  }
+
   startInboundPolling(intervalMs = 4000) {
     this.syncInboundMessagesFromSupabase();
     if (!this.pollingInterval) {
