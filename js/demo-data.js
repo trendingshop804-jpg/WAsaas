@@ -24,6 +24,8 @@ window.DEMO_DATA = {
       phoneId: '1016931798166599',
       whatsappToken: 'EAAVpyP3ZC4g0BSeHel0YnEDduQrqZABbZA7ElyCniYBgjVUnZC1a1MwvK64i72GsgZAlOLXw2KohURinIsMmm7nKItgcF2MUbWdRatJ0inN5JGuayc68bVM2a5W73Oli2LQRfnsjZBkfsIvhuYK6vhpa7yEfvJilP7E6U8vHoCiFVtZBbJmDPT9kuQyoXNk',
       wabaId: 'WABA_1016931798166599',
+      about: 'Available for demos 9AM-6PM. Book via wa.me/yournumber',
+      profilePictureUrl: 'https://i.pravatar.cc/400/?u=waba1',
       industry: 'Digital Marketing & Sales Automation',
       website: 'https://nextbright.io',
       location: 'Kerala, India',

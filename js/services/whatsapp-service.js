@@ -133,6 +133,99 @@ class WhatsAppService {
     window.appState.emit('whatsappConnectionChanged', { status: 'DISCONNECTED' });
   }
 
+  async fetchCurrentProfile() {
+    const org = window.appState.getCurrentOrg();
+    if (!org.whatsappConnected) return { success: false, error: 'No WhatsApp connection active.' };
+
+    if (window.supabaseConfig?.isSupabaseConfigured()) {
+      const fnUrl = window.supabaseConfig.getEdgeFunctionUrl('update-whatsapp-profile');
+      const res = await fetch(fnUrl, {
+        method: 'POST',
+        headers: window.supabaseConfig.getAuthHeaders(),
+        body: JSON.stringify({ action: 'fetch_profile' }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success && data.profile) {
+        org.about = data.profile.about || org.about;
+        org.profilePictureUrl = data.profile.profile_picture_url || org.profilePictureUrl;
+        window.appState.saveState();
+      }
+      return data;
+    }
+
+    await new Promise(r => setTimeout(r, 600));
+    return {
+      success: true,
+      profile: {
+        about: org.about || '',
+        profile_picture_url: org.profilePictureUrl || '',
+      },
+    };
+  }
+
+  async updateProfilePicture(imageBase64, fileName) {
+    const org = window.appState.getCurrentOrg();
+    if (!org.whatsappConnected) return { success: false, error: 'No WhatsApp connection active.' };
+
+    if (window.supabaseConfig?.isSupabaseConfigured()) {
+      const fnUrl = window.supabaseConfig.getEdgeFunctionUrl('update-whatsapp-profile');
+      const res = await fetch(fnUrl, {
+        method: 'POST',
+        headers: window.supabaseConfig.getAuthHeaders(),
+        body: JSON.stringify({ action: 'update_profile_picture', imageBase64, fileName }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success && data.profile_picture_url) {
+        org.profilePictureUrl = data.profile_picture_url;
+        window.appState.saveState();
+        window.appState.addAuditLog('WhatsApp Profile Picture Updated', org.whatsappNumber, 'Profile photo synced to WhatsApp Business.', 'Success');
+      }
+      return data;
+    }
+
+    await new Promise(r => setTimeout(r, 800));
+    return {
+      success: true,
+      message: 'Profile picture updated (demo mode).',
+      profile_picture_url: URL.createObjectURL(this._dataURLToFile(imageBase64)),
+    };
+  }
+
+  async updateAbout(about) {
+    const org = window.appState.getCurrentOrg();
+    if (!org.whatsappConnected) return { success: false, error: 'No WhatsApp connection active.' };
+
+    if (about.length > 139) return { success: false, error: `About text exceeds 139 characters (${about.length}/139).` };
+
+    if (window.supabaseConfig?.isSupabaseConfigured()) {
+      const fnUrl = window.supabaseConfig.getEdgeFunctionUrl('update-whatsapp-profile');
+      const res = await fetch(fnUrl, {
+        method: 'POST',
+        headers: window.supabaseConfig.getAuthHeaders(),
+        body: JSON.stringify({ action: 'update_about', about }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        org.about = about;
+        window.appState.saveState();
+        window.appState.addAuditLog('WhatsApp About Text Updated', org.whatsappNumber, `About set to: "${about}"`, 'Success');
+      }
+      return data;
+    }
+
+    await new Promise(r => setTimeout(r, 600));
+    return { success: true, message: 'About text saved (demo mode).', about };
+  }
+
+  _dataURLToFile(dataUrl) {
+    const match = dataUrl.match(/^data:(image\/[a-zA-Z]+);base64,(.+)$/);
+    if (!match) return new File([], 'photo.png', { type: 'image/png' });
+    const bytes = atob(match[2]);
+    const arr = new Uint8Array(bytes.length);
+    for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+    return new File([arr], 'profile.jpg', { type: match[1] });
+  }
+
   // Outbound Message Dispatch with Rate-Limiting & Guardrails
   async sendMessage({ leadId, text, isAI = false }) {
     const org = window.appState.getCurrentOrg();

@@ -1506,10 +1506,56 @@
                     <input type="text" id="settings-org-timezone" class="form-input">
                   </div>
                 </div>
-                <button type="submit" class="btn btn-primary btn-sm">Save Profile Changes</button>
-              </form>
-            </div>
-          </div>
+               <button type="submit" class="btn btn-primary btn-sm">Save Profile Changes</button>
+               </form>
+             </div>
+
+             <!-- WhatsApp Profile Picture -->
+             <div class="card" style="margin-bottom: 24px;">
+               <h3 style="margin-bottom: 14px;">WhatsApp Business Profile Picture</h3>
+               <div class="flex items-center gap-4">
+                 <div class="wa-profile-photo-container" style="position: relative; width: 100px; height: 100px; flex-shrink: 0;">
+                   <img id="wa-profile-preview" class="wa-profile-preview" src="https://wa.me/profile-picture/placeholder" alt="Profile" style="width: 100px; height: 100px; border-radius: 50%; object-fit: cover; border: 3px solid var(--border-color); background: var(--card-bg-secondary);">
+                   <div id="wa-profile-overlay" style="display:none; position: absolute; top: 0; left: 0; width: 100px; height: 100px; border-radius: 50%; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.2s;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0">
+                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8h18v11Z"/><path d="M1 8V4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4"/><path d="M10 12l6-6 6 6"/></svg>
+                   </div>
+                 </div>
+                 <div style="flex: 1;">
+                   <input type="file" id="wa-profile-input" accept="image/jpeg,image/png" style="display: none;">
+                   <div id="wa-profile-filename" style="font-size: 12px; color: var(--text-muted); margin-bottom: 8px;">No file selected</div>
+                   <button id="wa-change-photo-btn" class="btn btn-secondary btn-sm" style="display: inline-flex; align-items: center; gap: 6px;">
+                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8h18v11Z"/><path d="M1 8V4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4"/><circle cx="10" cy="9" r="3"/><path d="M15 3h-2"/></svg>
+                     Change Photo
+                   </button>
+                   <button id="wa-upload-photo-btn" class="btn btn-primary btn-sm" style="display: none; margin-left: 8px;">Confirm Upload</button>
+                   <button id="wa-cancel-photo-btn" class="btn btn-outline btn-sm" style="display: none; margin-left: 8px;">Cancel</button>
+
+                   <div id="wa-profile-status" style="margin-top: 8px; font-size: 12px; display: none;"></div>
+                   <div class="wa-profile-help-text" style="font-size: 11.5px; color: var(--text-muted); margin-top: 6px;">Recommended: square JPEG or PNG, under 5MB. Changes may take a few minutes to appear on WhatsApp.</div>
+                 </div>
+               </div>
+             </div>
+
+             <!-- WhatsApp Business About Text -->
+             <div class="card" style="margin-bottom: 0;">
+               <h3 style="margin-bottom: 14px;">WhatsApp Business About Text</h3>
+               <div class="form-group">
+                 <label for="wa-about-input" class="form-label">About (visible to WhatsApp contacts)</label>
+                 <div style="position: relative;">
+                   <textarea id="wa-about-input" class="form-input" rows="3" maxlength="139" placeholder="Available for demos 9AM-6PM" style="resize: vertical; padding-right: 60px;"></textarea>
+                   <span id="wa-about-counter" class="wa-about-counter" style="position: absolute; bottom: 8px; right: 10px; font-size: 12px; color: var(--text-muted);">0/139</span>
+                 </div>
+               </div>
+               <div style="display: flex; gap: 8px;">
+                 <button id="wa-save-about-btn" class="btn btn-primary btn-sm" style="display: inline-flex; align-items: center; gap: 6px;">
+                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                   Save to WhatsApp
+                 </button>
+                 <div id="wa-about-status" style="font-size: 12px; color: var(--text-muted); align-self: center;"></div>
+               </div>
+               <div class="wa-about-help-text" style="font-size: 11.5px; color: var(--text-muted); margin-top: 6px;">Syncs to your real WhatsApp Business profile. Max 139 characters (same as WhatsApp app). Changes propagate within minutes.</div>
+             </div>
+           </div>
 
           <!-- TAB: Audit Trail -->
           <div id="settings-audit-tab-panel" class="settings-tab-panel">
@@ -2095,6 +2141,7 @@
   <script src="js/components/team.js"></script>
   <script src="js/components/settings.js"></script>
   <script src="js/components/settings-integrations.js"></script>
+  <script src="js/components/settings-business-profile.js"></script>
   <script src="js/components/billing.js"></script>
   <script src="js/components/onboarding.js"></script>
 

@@ -30,6 +30,8 @@ class StateStore {
             existing.phoneId = primaryOrg.phoneId;
             existing.whatsappToken = primaryOrg.whatsappToken;
             existing.wabaId = primaryOrg.wabaId;
+            existing.about = primaryOrg.about;
+            existing.profilePictureUrl = primaryOrg.profilePictureUrl;
           }
         }
 
