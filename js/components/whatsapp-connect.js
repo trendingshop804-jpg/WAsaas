@@ -257,7 +257,9 @@ class WhatsAppConnectComponent {
           }
           if (loginBtn) loginBtn.style.display = 'none';
           this.fetchRealBusinesses();
-          this.exchangeAndPersistToken(response.authResponse.accessToken);
+          this.exchangeAndPersistToken(response.authResponse.accessToken)
+            .then(result => this.applyMetaConnectionSummary(result))
+            .catch(error => console.warn('[Meta Connection Sync]:', error.message));
         } else {
           if (statusMsg) {
             statusMsg.style.color = '#ef4444';
@@ -283,7 +285,7 @@ class WhatsAppConnectComponent {
       const edgeUrl = window.supabaseConfig.getEdgeFunctionUrl('meta-oauth-exchange');
       if (!edgeUrl) return;
 
-      await fetch(edgeUrl, {
+      const response = await fetch(edgeUrl, {
         method: 'POST',
         headers: window.supabaseConfig.getAuthHeaders(),
         body: JSON.stringify({
@@ -291,8 +293,45 @@ class WhatsAppConnectComponent {
           organizationId: org.id
         })
       });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Meta connection could not be saved.');
+      return result;
     } catch (e) {
       console.warn('[Meta Token Sync]:', e.message);
+      throw e;
+    }
+  }
+
+  applyMetaConnectionSummary(result) {
+    const instagram = Array.isArray(result?.instagram) ? result.instagram[0] : null;
+    const statusMsg = document.getElementById('meta-real-status-msg');
+    if (!instagram) {
+      if (statusMsg) {
+        statusMsg.style.display = 'block';
+        statusMsg.style.color = 'var(--text-muted)';
+        statusMsg.textContent = 'Meta login complete. No linked Instagram professional account was found.';
+      }
+      return;
+    }
+
+    const org = window.appState.getCurrentOrg();
+    org.instagramConnected = true;
+    org.instagramBusinessId = instagram.instagramBusinessId;
+    org.instagramUsername = instagram.username;
+    org.instagramPageId = instagram.pageId;
+    window.appState.saveState();
+    window.appState.addAuditLog(
+      'Instagram Meta OAuth Connected',
+      instagram.username,
+      `Linked Instagram professional account through Meta Page ${instagram.pageName}.`,
+      'Connected'
+    );
+    window.appState.emit('instagramConnectionChanged', { status: 'CONNECTED', account: instagram });
+
+    if (statusMsg) {
+      statusMsg.style.display = 'block';
+      statusMsg.style.color = '#10b981';
+      statusMsg.textContent = `✓ Instagram @${instagram.username} linked. Select the WhatsApp business and phone number to finish setup.`;
     }
   }
 
@@ -396,7 +435,7 @@ class WhatsAppConnectComponent {
 
       if (data.data && data.data.length > 0) {
         data.data.forEach(ph => {
-          select.insertAdjacentHTML('beforeend', `<option value="${ph.display_phone_number}">${ph.display_phone_number} (${ph.verified_name || 'Verified'})</option>`);
+          select.insertAdjacentHTML('beforeend', `<option value="${ph.id}" data-display-phone="${ph.display_phone_number}">${ph.display_phone_number} (${ph.verified_name || 'Verified'})</option>`);
         });
         if (statusMsg) statusMsg.style.display = 'none';
       } else {
@@ -477,9 +516,11 @@ class WhatsAppConnectComponent {
     } else {
       const bizSelect = document.getElementById('meta-real-business-select');
       const wabaSelect = document.getElementById('meta-real-waba-select');
-      phone = document.getElementById('meta-real-phone-select')?.value;
+      const phoneSelect = document.getElementById('meta-real-phone-select');
+      const selectedPhone = phoneSelect?.options[phoneSelect.selectedIndex];
+      phone = selectedPhone?.dataset.displayPhone || '';
 
-      if (!bizSelect?.value || !wabaSelect?.value || !phone) {
+      if (!bizSelect?.value || !wabaSelect?.value || !phoneSelect?.value || !phone) {
         alert('Please complete the Facebook login steps and select your Business, WABA, and Phone Number.');
         return;
       }
@@ -494,7 +535,9 @@ class WhatsAppConnectComponent {
       submitBtn.disabled = true;
     }
 
-    const phoneIdVal = this.metaMode === 'token' ? document.getElementById('meta-phone-id-input')?.value.trim() : null;
+    const phoneIdVal = this.metaMode === 'token'
+      ? document.getElementById('meta-phone-id-input')?.value.trim()
+      : (this.metaMode === 'real' ? document.getElementById('meta-real-phone-select')?.value : null);
     const wabaIdVal  = this.metaMode === 'token' ? document.getElementById('meta-waba-id-input')?.value.trim() : (this.metaMode === 'real' ? document.getElementById('meta-real-waba-select')?.value : null);
 
     // Call service layer to configure organization state

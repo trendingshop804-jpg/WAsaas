@@ -506,6 +506,43 @@ class InboxComponent {
     this.render();
   }
 
+  // Used by the CRM "Open WhatsApp Chat" action. Create the conversation on
+  // demand so a lead without previous messages can still open the inbox.
+  selectConversationByLeadId(leadId) {
+    const leads = window.appState.get('leads') || [];
+    const lead = leads.find(item => item.id === leadId);
+    if (!lead) return false;
+
+    const conversations = window.appState.get('conversations') || [];
+    let conversation = conversations.find(item => item.leadId === leadId)
+      || window.whatsappService.findConversationByPhone(lead.phone, conversations);
+
+    if (!conversation) {
+      conversation = {
+        id: `conv_${lead.id}`,
+        leadId: lead.id,
+        leadName: lead.contactName || lead.name || 'WhatsApp Contact',
+        company: lead.companyName || lead.company || '',
+        phone: lead.phone || '',
+        unreadCount: 0,
+        mode: 'HUMAN',
+        status: 'OPEN',
+        lastMessage: 'No messages yet',
+        lastTimestamp: '',
+        messages: [],
+        aiSuggestions: []
+      };
+      conversations.unshift(conversation);
+      window.appState.set('conversations', conversations);
+    } else if (conversation.leadId !== lead.id) {
+      conversation.leadId = lead.id;
+      window.appState.set('conversations', conversations);
+    }
+
+    this.selectConversation(conversation.id);
+    return true;
+  }
+
   /* ── 2. Center Panel: Active Chat Window ────────────────────────────── */
   renderActiveChat() {
     const convs = window.appState.get('conversations') || [];
