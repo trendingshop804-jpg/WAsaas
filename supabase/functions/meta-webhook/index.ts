@@ -29,13 +29,20 @@ async function processInboundMedia(msg: any, mediaType: string, supabaseAdmin: a
     return null;
   }
 
-  try {
-    console.log(`[Media] Processing ${mediaType} with ID: ${mediaId}`);
+  console.log("[Media] Starting media processing for type:", mediaType, "media id:", mediaId);
 
+  let metaRes;
+  let downloadRes;
+  let uploadResult;
+
+  try {
     // Step 1: Get the download URL from Meta
-    const metaRes = await fetch(`https://graph.facebook.com/v21.0/${mediaId}?access_token=${accessToken}`);
+    console.log("[Media] Calling Graph API for media ID:", mediaId);
+    metaRes = await fetch(`https://graph.facebook.com/v21.0/${mediaId}?access_token=${accessToken}`);
+    console.log("[Media] Graph API response status:", metaRes.status);
+
     if (!metaRes.ok) {
-      console.error(`[Media] Failed to get media info: ${metaRes.status}`);
+      console.error("[Media] Failed to get media info:", metaRes.status);
       return null;
     }
     const meta = await metaRes.json();
@@ -44,21 +51,24 @@ async function processInboundMedia(msg: any, mediaType: string, supabaseAdmin: a
       return null;
     }
 
-    console.log(`[Media] Got download URL for ${mediaId}`);
+    console.log("[Media] Got download URL for", mediaId);
 
-    // Step 2: Download the media binary (Meta requires Bearer auth for download)
-    const downloadRes = await fetch(meta.url, {
+    // Step 2: Download the media binary
+    console.log("[Media] Downloading media from URL:", meta.url.substring(0, 100) + "...");
+    downloadRes = await fetch(meta.url, {
       headers: { 'Authorization': `Bearer ${accessToken}` }
     });
+    console.log("[Media] Download status:", downloadRes.status);
+
     if (!downloadRes.ok) {
-      console.error(`[Media] Download failed: ${downloadRes.status}`);
+      console.error("[Media] Download failed:", downloadRes.status);
       return null;
     }
     const buffer = await downloadRes.arrayBuffer();
     const mimeType = meta.content_type || downloadRes.headers.get("content-type") || "application/octet-stream";
     const fileName = meta.filename || `${mediaId}`;
 
-    console.log(`[Media] Downloaded ${buffer.byteLength} bytes, type: ${mimeType}`);
+    console.log("[Media] Downloaded", buffer.byteLength, "bytes, type:", mimeType);
 
     // Step 3: Upload to Supabase Storage
     const cleanPhone = String(msg.from || "").replace(/[^0-9]/g, "").slice(-10);
@@ -66,21 +76,24 @@ async function processInboundMedia(msg: any, mediaType: string, supabaseAdmin: a
     const safeFileName = `${mediaId}_${fileName.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
     const storagePath = `${cleanPhone}/${mediaId}/${safeFileName}.${ext}`;
 
-    console.log(`[Media] Uploading to storage: ${storagePath}`);
+    console.log("[Media] Uploading to storage:", storagePath);
 
-    const { error: uploadError } = await supabaseAdmin.storage
+    const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
       .from("whatsapp-media")
       .upload(storagePath, new Uint8Array(buffer), {
         contentType: mimeType,
         upsert: true,
       });
 
+    uploadResult = uploadData;
+    console.log("[Media] Upload result:", JSON.stringify(uploadResult), "Error:", JSON.stringify(uploadError));
+
     if (uploadError) {
       console.error("[Media] Storage upload error:", uploadError);
       return null;
     }
 
-    console.log(`[Media] Upload successful`);
+    console.log("[Media] Upload successful");
 
     // Step 4: Get public URL from Supabase Storage
     const { data: publicUrlData } = supabaseAdmin.storage
@@ -93,11 +106,14 @@ async function processInboundMedia(msg: any, mediaType: string, supabaseAdmin: a
       return null;
     }
 
-    console.log(`[Media] Public URL: ${publicUrl}`);
+    console.log("[Media] Public URL:", publicUrl);
 
     return { mediaUrl: publicUrl, mediaMimeType: mimeType, fileName };
   } catch (err) {
     console.error("[Media] Processing error:", err);
+    console.error("[Media] Graph API status:", metaRes?.status);
+    console.error("[Media] Download status:", downloadRes?.status);
+    console.error("[Media] Upload result:", JSON.stringify(uploadResult));
     return null;
   }
 }
@@ -137,6 +153,8 @@ export const handler = async (event: any) => {
       );
 
       for (const msg of messages) {
+        console.log("Webhook invoked, message type:", msg.type);
+
         const sender = msg.from ?? "";
         const type = msg.type ?? "";
         const content = msg.text?.body ?? "";
@@ -150,8 +168,9 @@ export const handler = async (event: any) => {
         let displayContent = content;
 
         if (isMedia) {
-          console.log(`[Webhook] Media payload[${type}]:`, JSON.stringify(msg[type]));
+          console.log("[Webhook] Starting media processing for type:", type, "media id:", msg[type]?.id);
           mediaInfo = await processInboundMedia(msg, type, supabaseAdmin);
+          console.log("[Webhook] Media processing completed, result:", mediaInfo ? "SUCCESS" : "FAILED");
           caption = msg[type]?.caption || "";
           displayContent = caption || (type === "audio" ? "🎤 Voice message" : `📎 ${type} message`);
           console.log(`[Webhook] Media processing result:`, mediaInfo ? "SUCCESS" : "FAILED");
