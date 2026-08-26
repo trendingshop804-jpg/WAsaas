@@ -616,9 +616,13 @@ class InboxComponent {
       return;
     }
 
+    const MEDIA_TYPES = ['image', 'video', 'audio', 'document', 'sticker'];
+
     scrollArea.innerHTML = msgs.map((msg) => {
       const isOutbound = msg.direction === 'OUTBOUND' || msg.sender === 'outbound';
       const isSystem = msg.direction === 'SYSTEM' || msg.sender === 'system' || msg.isSystem;
+      const msgType = msg.type || 'text';
+      const isMedia = MEDIA_TYPES.includes(msgType);
 
       if (isSystem) {
         return `
@@ -631,11 +635,35 @@ class InboxComponent {
       }
 
       const bubbleClass = isOutbound ? 'msg-bubble-outbound' : 'msg-bubble-inbound';
+      const bubbleBg = isOutbound ? 'linear-gradient(135deg, #005c4b, #075e54)' : 'var(--bg-secondary)';
+      const bubbleColor = isOutbound ? '#ffffff' : 'var(--text-primary)';
+
+      if (isMedia) {
+        const mediaHtml = this.renderMediaMessage(msg, msgType, isOutbound);
+        const isSticker = msgType === 'sticker';
+
+        return `
+          <div class="msg-row ${isOutbound ? 'justify-end' : 'justify-start'} flex" style="margin-bottom: 12px; display: flex; justify-content: ${isOutbound ? 'flex-end' : 'flex-start'};">
+            <div class="msg-bubble-wrap ${isOutbound ? 'outbound' : 'inbound'}" style="max-width: ${isSticker ? '40%' : '72%'};">
+              <div class="msg-bubble ${bubbleClass} p-3 rounded-lg text-sm shadow" style="background: ${bubbleBg}; color: ${bubbleColor}; padding: 8px 12px; border-radius: ${isSticker ? '8px' : '12px'}; font-size: 13.5px; line-height: 1.45;">
+                ${mediaHtml}
+              </div>
+              <div class="msg-footer flex items-center justify-between gap-3 mt-1 text-xs" style="font-size: 10.5px; color: var(--text-muted); display: flex; align-items: center; justify-content: ${isOutbound ? 'space-between' : 'flex-end'}; margin-top: 4px; padding: 0 2px;">
+                ${isOutbound ? `<span class="ai-tag-pill" style="background: rgba(139, 92, 246, 0.3); color: #c4b5fd; padding: 1px 6px; border-radius: 3px; font-weight: 700; text-transform: uppercase;">${msg.sentByHuman ? 'HUMAN' : 'AI AGENT'}</span>` : ''}
+                <span class="msg-meta flex items-center gap-1">
+                  <span>${msg.timestamp || '19:44'}${isOutbound ? ' · DELIVERED' : ''}</span>
+                  ${isOutbound ? '<span class="msg-tick read" style="color: #38bdf8; font-weight: 700; margin-left: 3px;">✓✓</span>' : ''}
+                </span>
+              </div>
+            </div>
+          </div>
+        `;
+      }
 
       return `
         <div class="msg-row ${isOutbound ? 'justify-end' : 'justify-start'} flex" style="margin-bottom: 12px; display: flex; justify-content: ${isOutbound ? 'flex-end' : 'flex-start'};">
           <div class="msg-bubble-wrap ${isOutbound ? 'outbound' : 'inbound'}" style="max-width: 72%;">
-            <div class="msg-bubble ${bubbleClass} p-3 rounded-lg text-sm shadow" style="background: ${isOutbound ? 'linear-gradient(135deg, #005c4b, #075e54)' : 'var(--bg-secondary)'}; color: ${isOutbound ? '#ffffff' : 'var(--text-primary)'}; padding: 12px 16px; border-radius: 12px; font-size: 13.5px; line-height: 1.45;">
+            <div class="msg-bubble ${bubbleClass} p-3 rounded-lg text-sm shadow" style="background: ${bubbleBg}; color: ${bubbleColor}; padding: 12px 16px; border-radius: 12px; font-size: 13.5px; line-height: 1.45;">
               <div class="msg-body">${msg.text || msg.body || ''}</div>
             </div>
             <div class="msg-footer flex items-center justify-between gap-3 mt-1 text-xs" style="font-size: 10.5px; color: var(--text-muted); display: flex; align-items: center; justify-content: ${isOutbound ? 'space-between' : 'flex-end'}; margin-top: 4px; padding: 0 2px;">
@@ -649,6 +677,214 @@ class InboxComponent {
         </div>
       `;
     }).join('') + '<div id="messagesEndRef"></div>';
+
+    this.bindMediaPreviewHandlers();
+  }
+
+  /**
+   * Render the HTML body for a media message (image, video, audio, document, sticker).
+   */
+  renderMediaMessage(msg, msgType, isOutbound) {
+    const mediaUrl = msg.mediaUrl || msg.media_url || '';
+    const mimeType = msg.mimeType || msg.media_mime_type || '';
+    const fileName = msg.fileName || msg.file_name || (msgType === 'document' ? 'document' : `${msgType}`);
+    const caption = msg.caption || '';
+
+    if (!mediaUrl) {
+      return this.renderMediaPlaceholder(msgType, fileName);
+    }
+
+    let mediaHtml = '';
+
+    switch (msgType) {
+      case 'image':
+        mediaHtml = `
+          <div class="media-image-container" style="position: relative; display: inline-block; max-width: 100%;">
+            <img src="${mediaUrl}" alt="Image" class="media-image" style="max-width: 100%; border-radius: 8px; display: block;"
+                 data-media-url="${mediaUrl}" data-media-type="image"
+                 loading="lazy" onload="this.style.opacity='1'; this.parentElement.querySelector('.media-loading').style.display='none';"
+                 onerror="this.parentElement.innerHTML='<div class=\"media-error\" style=\"display:flex;align-items:center;justify-content:center;padding:16px;color:var(--text-muted);\"><span>⚠️ Image failed to load</span></div>'">
+            <div class="media-loading" style="position:absolute;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.1);border-radius:8px;">
+              <div class="spinner-border" style="width:20px;height:20px;border:2pxpx solid var(--border-medium);border-top-color:var(--text-muted);border-radius:50%;animation:spin 0.8s linear infinite;"></div>
+            </div>
+            <button class="media-view-btn" data-media-url="${mediaUrl}" data-media-type="image"
+                    style="position:absolute;top:4px;right:4px;background:rgba(0,0,0,0.5);border:none;border-radius:4px;padding:4px 8px;cursor:pointer;color:#fff;font-size:12px;">
+              View
+            </button>
+          </div>
+          ${caption ? `<div class="media-caption" style="font-size:13px;color:${isOutbound ? '#ffffffcc' : 'var(--text-secondary)'};margin-top:6px;">${caption}</div>` : ''}
+        `;
+        break;
+
+      case 'video':
+        mediaHtml = `
+          <div class="media-video-container" style="position: relative; display: inline-block; max-width: 100%;">
+            <div class="media-video-placeholder" style="width:100%;height:200px;background:rgba(0,0,0,0.3);border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;"
+                 onclick="window.inboxComponent.showMediaPreview('${mediaUrl}','video','')">
+              <div style="color:var(--text-muted);text-align:center;">
+                <div style="font-size:32px;margin-bottom:4px;">▶</div>
+                <span>Play video</span>
+              </div>
+            </div>
+            <button class="media-view-btn" data-media-url="${mediaUrl}" data-media-type="video"
+                    style="position:absolute;top:4px;right:4px;background:rgba(0,0,0,0.5);border:none;border-radius:4px;padding:4px 8px;cursor:pointer;color:#fff;font-size:12px;">
+              View
+            </button>
+          </div>
+          ${caption ? `<div class="media-caption" style="font-size:13px;color:${isOutbound ? '#ffffffcc' : 'var(--text-secondary)'};margin-top:6px;">${caption}</div>` : ''}
+        `;
+        break;
+
+      case 'audio':
+        mediaHtml = `
+          <div class="media-audio-container" style="display:flex;align-items:center;gap:10px;background:rgba(0,0,0,0.05);border-radius:8px;padding:8px 12px;min-width:160px;">
+            <audio controls preload="none" style="flex:1;" data-media-url="${mediaUrl}" data-media-type="audio"
+                   onerror="this.parentElement.innerHTML='<span style=\"color:var(--text-muted);font-size:12px;\">⚠️ Audio failed to load</span>'">
+              <source src="${mediaUrl}" type="${mimeType || 'audio/mpeg'}">
+              Your browser does not support the audio element.
+            </audio>
+            <button class="media-view-btn" data-media-url="${mediaUrl}" data-media-type="audio"
+                    style="background:rgba(0,0,0,0.5);border:none;border-radius:4px;padding:4px 8px;cursor:pointer;color:#fff;font-size:12px;">
+              View
+            </button>
+          </div>
+          ${caption ? `<div class="media-caption" style="font-size:13px;color:${isOutbound ? '#ffffffcc' : 'var(--text-secondary)'};margin-top:6px;">${caption}</div>` : ''}
+        `;
+        break;
+
+      case 'document':
+        const sizeStr = msg.mediaSize ? this.formatFileSize(msg.mediaSize) : '';
+        const iconLetter = fileName.split('.').pop()?.[0]?.toUpperCase() || 'D';
+        mediaHtml = `
+          <div class="media-document-container" style="display:flex;align-items:center;gap:10px;background:rgba(0,0,0,0.05);border-radius:8px;padding:8px 12px;min-width:200px;">
+            <div style="display:flex;align-items:center;justify-content:center;width:40px;height:40px;background:rgba(100,116,204,0.2);border-radius:8px;font-size:18px;font-weight:700;color:#6366f1;">
+              ${iconLetter}
+            </div>
+            <div style="flex:1;min-width:0;">
+              <div class="media-doc-name" style="font-size:13px;font-weight:500;color:${isOutbound ? '#ffffff' : 'var(--text-primary)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                ${fileName}
+              </div>
+              ${sizeStr ? `<div class="media-doc-size" style="font-size:11px;color:var(--text-muted);">${sizeStr}</div>` : ''}
+            </div>
+            <a href="${mediaUrl}" download="${fileName}" class="media-doc-download"
+               style="background:var(--border-medium);border:none;border-radius:4px;padding:6px 10px;cursor:pointer;color:var(--text-secondary);font-size:12px;text-decoration:none;">
+              ⬇
+            </a>
+          </div>
+          ${caption ? `<div class="media-caption" style="font-size:13px;color:${isOutbound ? '#ffffffcc' : 'var(--text-secondary)'};margin-top:6px;">${caption}</div>` : ''}
+        `;
+        break;
+
+      case 'sticker':
+        mediaHtml = `
+          <div class="media-sticker-container" style="display: inline-block;">
+            <img src="${mediaUrl}" alt="Sticker" class="media-sticker" style="width:120px;height:auto;border-radius:0;"
+                 data-media-url="${mediaUrl}" data-media-type="image"
+                 loading="lazy"
+                 onerror="this.parentElement.innerHTML='<div style=\"display:flex;align-items:center;justify-content:center;padding:8px;color:var(--text-muted);font-size:12px;\">🩷 Sticker</div>'">
+          </div>
+        `;
+        break;
+
+      default:
+        return this.renderMediaPlaceholder(msgType, fileName);
+    }
+
+    return mediaHtml;
+  }
+
+  /**
+   * Placeholder HTML when media URL is not yet available (still downloading or failed to store).
+   */
+  renderMediaPlaceholder(msgType, fileName) {
+    const labels = {
+      image: '📎 Image',
+      video: '📎 Video',
+      audio: '🎤 Voice message',
+      document: `📎 ${fileName || 'Document'}`,
+      sticker: '🩷 Sticker',
+    };
+    return `<div class="media-placeholder" style="display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,0.05);border-radius:8px;color:var(--text-muted);font-size:13px;">
+      ${labels[msgType] || '📎 Media message'}
+    </div>`;
+  }
+
+  /**
+   * Format bytes to human-readable file size.
+   */
+   formatFileSize(bytes) {
+    if (!bytes || bytes === 0) return '';
+    const units = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(1024));
+    const val = bytes / Math.pow(1024, i);
+    const formatted = i === 0 ? val.toFixed(0) : parseFloat(val.toFixed(1)).toString();
+    return formatted + ' ' + units[i];
+   }
+
+  /**
+   * Bind click handlers on "View" buttons to open the media preview modal.
+   */
+  bindMediaPreviewHandlers() {
+    setTimeout(() => {
+      const btns = document.querySelectorAll('.media-view-btn');
+      btns.forEach(btn => {
+        btn.replaceWith(btn.cloneNode(true));
+        btn.addEventListener('click', (e) => {
+          const url = btn.getAttribute('data-media-url');
+          const type = btn.getAttribute('data-media-type');
+          this.showMediaPreview(url, type, btn.getAttribute('data-media-name') || '');
+        });
+      });
+
+      const previewImgs = document.querySelectorAll('img[data-media-url][data-media-type="image"]');
+      previewImgs.forEach(img => {
+        img.replaceWith(img.cloneNode(true));
+        img.addEventListener('click', () => {
+          this.showMediaPreview(img.getAttribute('data-media-url'), 'image', '');
+        });
+      });
+    }, 0);
+  }
+
+  /**
+   * Show a full-screen media preview modal (matches WhatsApp's media viewer).
+   */
+  showMediaPreview(url, type, fileName) {
+    let existing = document.getElementById('media-preview-modal');
+    if (existing) existing.remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'media-preview-modal';
+    modal.style.cssText = `
+      position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 9999;
+      display: flex; align-items: center; justify-content: center; padding: 20px;
+    `;
+
+    let innerContent = '';
+    if (type === 'image') {
+      innerContent = `<img src="${url}" alt="Preview" style="max-width:90vw;max-height:90vh;object-fit:contain;border-radius:8px;">`;
+    } else if (type === 'video') {
+      innerContent = `<video controls autoplay style="max-width:90vw;max-height:90vh;border-radius:8px;"><source src="${url}"><p style="color:#fff;">Video playback not supported</p></video>`;
+    } else if (type === 'audio') {
+      innerContent = `<div style="display:flex;flex-direction:column;align-items:center;gap:20px;color:#fff;"><div style="font-size:24px;">🎵</div><audio controls style="width:100%;max-width:400px;"><source src="${url}"></audio>${fileName ? `<span style="font-size:14px;">${fileName}</span>` : ''}</div>`;
+    }
+
+    modal.innerHTML = `
+      <button id="media-preview-close" style="position:absolute;top:16px;right:16px;background:none;border:none;color:#fff;font-size:28px;cursor:pointer;">✕</button>
+      ${innerContent}
+    `;
+
+    const closeHandler = () => {
+      document.body.style.overflow = '';
+      modal.remove();
+    };
+
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) closeHandler();
+    });
+    modal.querySelector('#media-preview-close')?.addEventListener('click', closeHandler);
+    document.body.style.overflow = 'hidden';
+    document.body.appendChild(modal);
   }
 
   renderAiSuggestions(conv) {

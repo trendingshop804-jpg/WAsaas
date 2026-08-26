@@ -356,33 +356,44 @@ class WhatsAppService {
         const senderClean = senderRaw.replace(/[^0-9]/g, '');
         if (!senderClean) continue;
 
-        // Robustly extract the actual message text from all possible field locations
+        // Extract message text from all possible field locations
         const rawPayload = msg.raw || {};
         const waMsg = rawPayload?.entry?.[0]?.changes?.[0]?.value?.messages?.[0] || {};
         const text =
           msg.content ||
+          msg.caption ||
           msg.body ||
           msg.text ||
           waMsg?.text?.body ||
-          waMsg?.button?.text ||
-          waMsg?.interactive?.button_reply?.title ||
-          waMsg?.interactive?.list_reply?.title ||
           waMsg?.image?.caption ||
           waMsg?.video?.caption ||
           waMsg?.document?.filename ||
-          waMsg?.audio?.id && '🎤 Audio message' ||
-          waMsg?.sticker?.id && '🩷 Sticker' ||
-          waMsg?.location && `📍 ${waMsg.location.name || 'Location'}` ||
-          waMsg?.contacts?.[0]?.name?.formatted_name && `👤 ${waMsg.contacts[0].name.formatted_name}` ||
+          (waMsg?.audio?.id && '🎤 Audio message') ||
+          (waMsg?.sticker?.id && '🩷 Sticker') ||
+          (waMsg?.location && `📍 ${waMsg.location.name || 'Location'}`) ||
+          (waMsg?.contacts?.[0]?.name?.formatted_name && `👤 ${waMsg.contacts[0].name.formatted_name}`) ||
           null;
 
-        // Derive media type from Supabase field OR raw payload
+        // Derive media type from Supabase column OR raw payload (backward compat)
         const rawMsgType = msg.message_type || waMsg?.type || 'text';
         const mediaTypeMap = { image: 'image', video: 'video', audio: 'audio', document: 'document', sticker: 'sticker', location: 'location', contacts: 'contact' };
         const resolvedType = mediaTypeMap[rawMsgType] || (rawMsgType === 'text' ? 'text' : (text ? 'text' : 'unknown'));
 
-        // Build display text — never show placeholder if we have a type label
-        const displayText = text || (resolvedType !== 'text' && resolvedType !== 'unknown' ? null : null) || `📩 ${msg.sender_number || 'Unknown'} sent a message`;
+        // Resolve media URL: prefer stored DB column (already a signed URL from /api/messages),
+        // fall back to raw payload URLs for backward compatibility
+        const mediaUrl = msg.media_url || waMsg?.image?.url || waMsg?.video?.url || waMsg?.audio?.url || waMsg?.document?.url || waMsg?.sticker?.url || undefined;
+        const mimeType = msg.media_mime_type || waMsg?.image?.mime_type || waMsg?.video?.mime_type || undefined;
+        const fileName = msg.file_name || waMsg?.document?.filename || undefined;
+        const caption = msg.media_caption || waMsg?.image?.caption || waMsg?.video?.caption || undefined;
+
+        // Build display text — for media messages, use caption as the text if available
+        let displayText = text;
+        if (resolvedType !== 'text' && resolvedType !== 'unknown') {
+          displayText = caption || text || null;
+        }
+        if (!displayText) {
+          displayText = `📩 ${msg.sender_number || 'Unknown'} sent a ${resolvedType} message`;
+        }
 
         // Match existing lead by normalized phone (last 10 digits)
         let lead = this.findLeadByPhone(senderClean, leads);
@@ -423,14 +434,16 @@ class WhatsAppService {
           id: 'm_sb_' + msgId,
           sender: msg.direction === 'outbound' ? 'outbound' : 'inbound',
           type: resolvedType,
-          text: resolvedType === 'text' || resolvedType === 'unknown' ? displayText : (text || undefined),
-          caption: resolvedType !== 'text' && resolvedType !== 'unknown' ? text : undefined,
-          mediaUrl: waMsg?.image?.url || waMsg?.video?.url || waMsg?.audio?.url || waMsg?.document?.url || waMsg?.sticker?.url || undefined,
+          text: resolvedType === 'text' ? displayText : displayText,
+          caption: caption || undefined,
+          mediaUrl: mediaUrl || undefined,
+          mimeType: mimeType || undefined,
+          fileName: fileName || undefined,
+          mediaSize: msg.media_size || 0,
           locationName: waMsg?.location?.name,
           locationAddress: waMsg?.location?.address,
           contactName: waMsg?.contacts?.[0]?.name?.formatted_name,
           contactPhone: waMsg?.contacts?.[0]?.phones?.[0]?.phone,
-          fileName: waMsg?.document?.filename,
           timestamp: formattedTime
         };
 
