@@ -14,8 +14,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse
 
 # Database setup
-import os
 import db
+from db import SessionLocal, Message, Lead, init_db
+from sqlalchemy import select, desc
+
+# Ensure tables exist on startup
+init_db()
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./nexuslead.db")
 if not DATABASE_URL:
@@ -28,10 +32,6 @@ if DATABASE_URL.startswith("sqlite"):
         "Set DATABASE_URL to a PostgreSQL URL for production.",
         UserWarning, stacklevel=2
     )
-
-# Ensure tables are created (if using SQLAlchemy models)
-if hasattr(db, "Base"):
-    db.Base.metadata.create_all(bind=db.engine)
 
 app = FastAPI(
     title="NexusLead AI API",
@@ -159,6 +159,64 @@ async def meta_webhook_verification(
         return PlainTextResponse(content=hub_challenge, status_code=200)
     raise HTTPException(status_code=403, detail="Verification token mismatch")
 
+
+@app.get("/api/messages")
+async def get_messages(limit: int = 50):
+    """
+    Return recent messages for the frontend inbox.
+    Maps Python model columns to the field names expected by js/services/whatsapp-service.js.
+    """
+    db_session = SessionLocal()
+    try:
+        stmt = (
+            select(Message)
+            .order_by(desc(Message.created_at))
+            .limit(limit)
+        )
+        rows = db_session.execute(stmt).scalars().all()
+
+        messages = []
+        for m in rows:
+            msg_data = {
+                "id": m.id,
+                "wa_message_id": m.meta_message_id,
+                "sender_number": m.sender_number,
+                "content": m.body,
+                "message_type": m.message_type or "text",
+                "direction": m.direction.lower(),
+                "received_at": m.created_at.isoformat() if m.created_at else None,
+                "media_url": m.media_url,
+                "media_mime_type": m.media_mime_type,
+                "file_name": m.file_name,
+                "media_caption": m.media_caption,
+                "media_size": m.media_size or 0,
+            }
+            messages.append(msg_data)
+
+        return {"count": len(messages), "messages": messages}
+    except Exception as e:
+        print(f"[!] Error fetching messages: {e}")
+        return {"count": 0, "messages": [], "error": str(e)}
+    finally:
+        db_session.close()
+
+
+@app.get("/api/media/{path:path}")
+async def serve_media(path: str):
+    """
+    Serve locally-downloaded media files.
+    Path format: 'media/{phone}/{media_id}_{filename}' (relative to backend/)
+    """
+    import os
+    from fastapi.responses import FileResponse
+    media_dir = os.path.join(os.path.dirname(__file__), "media")
+    file_path = os.path.normpath(os.path.join(media_dir, path))
+    if not file_path.startswith(media_dir):
+        raise HTTPException(status_code=403, detail="Access denied")
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(file_path)
+
 @app.post("/webhooks/meta")
 async def meta_webhook_events(request: Request, background_tasks: BackgroundTasks):
     """
@@ -171,12 +229,218 @@ async def meta_webhook_events(request: Request, background_tasks: BackgroundTask
     return JSONResponse(content={"status": "EVENT_RECEIVED"}, status_code=200)
 
 async def process_meta_payload(payload: Dict[str, Any]):
-    # Log incoming webhook
-    print(f"[*] Processing incoming Meta Webhook Event: {json.dumps(payload)[:200]}...")
-    # 1. Parse text message
-    # 2. Check for STOP / Unsubscribe keywords
-    # 3. Classify intent with AI
-    # 4. Trigger automated reply if AI Mode is active
+    """
+    Process incoming Meta WhatsApp webhook payload.
+    Saves inbound messages (text and media) to the database.
+    For media messages, downloads from Meta's Media API and stores locally.
+    """
+    db_session = SessionLocal()
+    try:
+        entry = payload.get("entry", [{}])[0] if payload.get("entry") else {}
+        change = entry.get("changes", [{}])[0] if entry.get("changes") else {}
+        changes = change.get("value", {})
+        messages = changes.get("messages", [])
+        contacts = changes.get("contacts", [])
+        phone_number_id = changes.get("metadata", {}).get("phone_number_id")
+        access_token = os.getenv("ACCESS_TOKEN", "")
+
+        # Resolve display name from contacts
+        contact_name = "WhatsApp Contact"
+        if contacts and contacts[0] and contacts[0].get("profile", {}).get("name"):
+            contact_name = contacts[0]["profile"]["name"]
+
+        for msg in messages:
+            wa_msg_id = msg.get("id", "")
+            phone = msg.get("from", "")
+            msg_type = msg.get("type", "text")
+            timestamp = msg.get("timestamp", "")
+            received_at = datetime.datetime.fromtimestamp(int(timestamp)) if timestamp else datetime.datetime.utcnow()
+
+            # Determine sender name from contacts
+            sender_name = contact_name
+            if contacts:
+                for c in contacts:
+                    if c.get("wa_id") == phone and c.get("profile", {}).get("name"):
+                        sender_name = c["profile"]["name"]
+
+            # --- Handle text messages ---
+            if msg_type == "text":
+                text_body = msg.get("text", {}).get("body", "")
+                existing = db_session.execute(
+                    select(Message).where(Message.meta_message_id == wa_msg_id)
+                ).scalar_one_or_none()
+                if existing:
+                    continue
+
+                # Find or create lead by phone
+                lead = db_session.execute(
+                    select(Lead).where(Lead.phone == phone)
+                ).scalar_one_or_none()
+                if not lead:
+                    lead = Lead(
+                        id=str(uuid.uuid4()),
+                        organization_id="default",
+                        company_name="Inbound WhatsApp",
+                        contact_name=sender_name,
+                        phone=phone,
+                        email="",
+                        score=75,
+                        status="Contacted",
+                        ai_summary="Received real inbound message via WhatsApp webhook.",
+                    )
+                    db_session.add(lead)
+                    db_session.flush()
+
+                message = Message(
+                    id=str(uuid.uuid4()),
+                    conversation_id=None,
+                    direction="INBOUND",
+                    is_ai=0,
+                    body=text_body,
+                    status="DELIVERED",
+                    meta_message_id=wa_msg_id,
+                    sender_number=phone,
+                    message_type="text",
+                    media_url=None,
+                    media_mime_type=None,
+                    media_caption=None,
+                    file_name=None,
+                    media_size=0,
+                    created_at=received_at,
+                )
+                db_session.add(message)
+                print(f"[OK] Inbound text message stored from {phone}: \"{text_body}\"")
+
+            # --- Handle media messages ---
+            elif msg_type in ("image", "video", "audio", "document", "sticker"):
+                media_id = msg.get(msg_type, {}).get("id", "")
+                caption = msg.get(msg_type, {}).get("caption", "")
+
+                existing = db_session.execute(
+                    select(Message).where(Message.meta_message_id == wa_msg_id)
+                ).scalar_one_or_none()
+                if existing:
+                    continue
+
+                # Find or create lead
+                lead = db_session.execute(
+                    select(Lead).where(Lead.phone == phone)
+                ).scalar_one_or_none()
+                if not lead:
+                    lead = Lead(
+                        id=str(uuid.uuid4()),
+                        organization_id="default",
+                        company_name="Inbound WhatsApp",
+                        contact_name=sender_name,
+                        phone=phone,
+                        email="",
+                        score=75,
+                        status="Contacted",
+                        ai_summary="Received real inbound message via WhatsApp webhook.",
+                    )
+                    db_session.add(lead)
+                    db_session.flush()
+
+                # Download media from Meta if we have an access token
+                media_url = None
+                media_mime_type = None
+                file_name = None
+                media_size = 0
+
+                if access_token and media_id:
+                    try:
+                        # Step 1: Get download URL from Meta
+                        meta_res = await httpx_get(
+                            f"https://graph.facebook.com/v21.0/{media_id}?access_token={access_token}"
+                        )
+                        if meta_res and meta_res.get("url"):
+                            media_type_info = meta_res.get("content_type", "application/octet-stream")
+                            meta_filename = meta_res.get("filename", f"{media_id}")
+
+                            # Step 2: Download the media binary
+                            download_res = await httpx_get_bytes(meta_res["url"])
+                            if download_res:
+                                media_size = len(download_res)
+
+                                # Step 3: Save locally (backend/media/{phone}/{media_id}_{filename})
+                                media_dir = os.path.join(os.path.dirname(__file__), "media")
+                                phone_safe = phone.replace("+", "").replace("-", "")[-10:]
+                                file_path = os.path.join(media_dir, phone_safe, f"{media_id}_{meta_filename}")
+                                os.makedirs(os.path.dirname(file_path), exist_ok=True)
+                                with open(file_path, "wb") as f:
+                                    f.write(download_res)
+
+                                # Store relative path as media_url
+                                rel_path = os.path.relpath(file_path, os.path.dirname(__file__))
+                                media_url = rel_path
+                                media_mime_type = media_type_info
+                                file_name = meta_filename
+                                print(f"[OK] Media downloaded: {msg_type} ({media_size} bytes) from {phone}")
+                    except Exception as e:
+                        print(f"[!] Media download failed for {media_id}: {e}")
+
+                display_content = caption or ("Voice message" if msg_type == "audio" else f"{msg_type} message")
+
+                message = Message(
+                    id=str(uuid.uuid4()),
+                    conversation_id=None,
+                    direction="INBOUND",
+                    is_ai=0,
+                    body=display_content,
+                    status="DELIVERED",
+                    meta_message_id=wa_msg_id,
+                    sender_number=phone,
+                    message_type=msg_type,
+                    media_url=media_url,
+                    media_mime_type=media_mime_type,
+                    media_caption=caption or None,
+                    file_name=file_name,
+                    media_size=media_size,
+                    created_at=received_at,
+                )
+                db_session.add(message)
+                print(f"[OK] Inbound {msg_type} message stored from {phone} (media_url={media_url})")
+
+            # --- Handle status updates (ignore for storage) ---
+            # Meta also sends status updates (sent, delivered, read)
+            # These arrive as payloads with "statuses" instead of "messages"
+
+        db_session.commit()
+    except Exception as e:
+        db_session.rollback()
+        print(f"[!] Error processing webhook payload: {e}")
+    finally:
+        db_session.close()
+
+
+async def httpx_get(url: str) -> Optional[Dict]:
+    """Async fetch that returns JSON."""
+    import urllib.request
+    import asyncio
+    loop = asyncio.get_event_loop()
+    def _sync():
+        with urllib.request.urlopen(url, timeout=30) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    try:
+        return await loop.run_in_executor(None, _sync)
+    except Exception as e:
+        print(f"[!] HTTP GET failed: {e}")
+        return None
+
+
+async def httpx_get_bytes(url: str) -> Optional[bytes]:
+    """Async fetch that returns raw bytes."""
+    import urllib.request
+    import asyncio
+    loop = asyncio.get_event_loop()
+    def _sync():
+        with urllib.request.urlopen(url, timeout=60) as resp:
+            return resp.read()
+    try:
+        return await loop.run_in_executor(None, _sync)
+    except Exception as e:
+        print(f"[!] HTTP GET bytes failed: {e}")
+        return None
 
 # ---------------------------------------------------------------------------
 # Routes: Multilingual AI Message Composer Proxy (OpenRouter Powered)
