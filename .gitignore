@@ -45,3 +45,10 @@ cloudflared.exe
 # Next.js build output
 .next/
 out/
+
+# Local agent/editor state
+.claude/
+.kilo/
+
+# Supabase CLI local link state
+supabase/.temp/

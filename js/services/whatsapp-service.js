@@ -343,7 +343,24 @@ class WhatsAppService {
       }
     }
     const lead = leads.find(l => l.id === leadId);
-    if (!lead) return;
+    if (!lead) {
+      lead = {
+        id: leadId,
+        contactName: `WhatsApp Contact (${leadId})`,
+        companyName: 'Inbound WhatsApp',
+        phone: '',
+        email: '',
+        location: 'Inbound',
+        status: 'Replied',
+        score: 75,
+        scoreCategory: 'warm',
+        source: 'Simulated Inbound',
+        lastContacted: new Date().toISOString(),
+        aiSummary: 'Simulated inbound message for testing.'
+      };
+      leads.unshift(lead);
+      window.appState.set('leads', leads);
+    }
 
     const optOutCheck = window.aiService.detectOptOut(text);
     if (optOutCheck.isOptOut) {
