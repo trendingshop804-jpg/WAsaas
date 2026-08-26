@@ -699,56 +699,64 @@ class InboxComponent {
     switch (msgType) {
       case 'image':
         mediaHtml = `
-          <div class="media-image-container" style="position: relative; display: inline-block; max-width: 100%;">
-            <img src="${mediaUrl}" alt="Image" class="media-image" style="max-width: 100%; border-radius: 8px; display: block;"
+          <div class="media-image-container" style="position: relative; display: inline-block; max-width: 280px;">
+            <img src="${mediaUrl}" alt="Image" class="media-image" style="max-width: 100%; border-radius: 8px; display: block; cursor: pointer;"
                  data-media-url="${mediaUrl}" data-media-type="image"
-                 loading="lazy" onload="this.style.opacity='1'; this.parentElement.querySelector('.media-loading').style.display='none';"
-                 onerror="this.parentElement.innerHTML='<div class=\"media-error\" style=\"display:flex;align-items:center;justify-content:center;padding:16px;color:var(--text-muted);\"><span>⚠️ Image failed to load</span></div>'">
+                 loading="lazy" onload="this.style.opacity='1'; const l=this.parentElement.querySelector('.media-loading'); if(l)l.style.display='none';"
+                 onerror="this.parentElement.innerHTML='<div class=\\'media-error\\' style=\\'display:flex;align-items:center;justify-content:center;padding:16px;color:var(--text-muted);\\'><span>⚠️ Image failed to load</span></div>'">
             <div class="media-loading" style="position:absolute;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.1);border-radius:8px;">
-              <div class="spinner-border" style="width:20px;height:20px;border:2pxpx solid var(--border-medium);border-top-color:var(--text-muted);border-radius:50%;animation:spin 0.8s linear infinite;"></div>
+              <div class="spinner-border" style="width:20px;height:20px;border:2px solid var(--border-medium);border-top-color:var(--text-muted);border-radius:50%;animation:spin 0.8s linear infinite;"></div>
             </div>
-            <button class="media-view-btn" data-media-url="${mediaUrl}" data-media-type="image"
-                    style="position:absolute;top:4px;right:4px;background:rgba(0,0,0,0.5);border:none;border-radius:4px;padding:4px 8px;cursor:pointer;color:#fff;font-size:12px;">
-              View
-            </button>
+            <div class="media-actions" style="position:absolute;top:4px;right:4px;display:flex;gap:4px;">
+              <button class="media-action-btn media-download-btn" data-media-url="${mediaUrl}" data-file-name="${fileName || 'image'}"
+                      style="background:rgba(0,0,0,0.6);border:none;border-radius:4px;padding:4px 6px;cursor:pointer;color:#fff;font-size:14px;line-height:1;"
+                      title="Download">⬇</button>
+              <button class="media-action-btn media-view-btn" data-media-url="${mediaUrl}" data-media-type="image"
+                      style="background:rgba(0,0,0,0.6);border:none;border-radius:4px;padding:4px 8px;cursor:pointer;color:#fff;font-size:11px;"
+                      title="View full size">⊕</button>
+            </div>
           </div>
-          ${caption ? `<div class="media-caption" style="font-size:13px;color:${isOutbound ? '#ffffffcc' : 'var(--text-secondary)'};margin-top:6px;">${caption}</div>` : ''}
+          ${caption ? `<div class="media-caption" style="font-size:13px;color:${isOutbound ? '#ffffffcc' : 'var(--text-secondary)'};margin-top:6px;max-width:280px;">${caption}</div>` : ''}
         `;
         break;
 
       case 'video':
         mediaHtml = `
-          <div class="media-video-container" style="position: relative; display: inline-block; max-width: 100%;">
-            <div class="media-video-placeholder" style="width:100%;height:200px;background:rgba(0,0,0,0.3);border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;"
-                 onclick="window.inboxComponent.showMediaPreview('${mediaUrl}','video','')">
-              <div style="color:var(--text-muted);text-align:center;">
-                <div style="font-size:32px;margin-bottom:4px;">▶</div>
-                <span>Play video</span>
+          <div class="media-video-container" style="position: relative; display: inline-block; max-width: 280px;">
+            <video preload="metadata" muted playsinline style="max-width: 100%; border-radius: 8px; display: block; background: #000;"
+                   data-media-url="${mediaUrl}" data-media-type="video"
+                   onerror="this.parentElement.innerHTML='<div class=\\'media-error\\' style=\\'display:flex;align-items:center;justify-content:center;padding:16px;color:var(--text-muted);\\'><span>⚠️ Video failed to load</span></div>'">
+              <source src="${mediaUrl}#t=0.1" type="${mimeType || 'video/mp4'}">
+            </video>
+            <div class="media-video-overlay" style="position:absolute;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.2);border-radius:8px;pointer-events:none;">
+              <div style="width:48px;height:48px;border-radius:50%;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;">
+                <span style="color:#fff;font-size:20px;">▶</span>
               </div>
             </div>
-            <button class="media-view-btn" data-media-url="${mediaUrl}" data-media-type="video"
-                    style="position:absolute;top:4px;right:4px;background:rgba(0,0,0,0.5);border:none;border-radius:4px;padding:4px 8px;cursor:pointer;color:#fff;font-size:12px;">
-              View
-            </button>
+            <div class="media-actions" style="position:absolute;top:4px;right:4px;display:flex;gap:4px;">
+              <button class="media-action-btn media-download-btn" data-media-url="${mediaUrl}" data-file-name="${fileName || 'video'}"
+                      style="background:rgba(0,0,0,0.6);border:none;border-radius:4px;padding:4px 6px;cursor:pointer;color:#fff;font-size:14px;line-height:1;"
+                      title="Download">⬇</button>
+              <button class="media-action-btn media-view-btn" data-media-url="${mediaUrl}" data-media-type="video"
+                      style="background:rgba(0,0,0,0.6);border:none;border-radius:4px;padding:4px 8px;cursor:pointer;color:#fff;font-size:11px;"
+                      title="Play full screen">⊕</button>
+            </div>
           </div>
-          ${caption ? `<div class="media-caption" style="font-size:13px;color:${isOutbound ? '#ffffffcc' : 'var(--text-secondary)'};margin-top:6px;">${caption}</div>` : ''}
+          ${caption ? `<div class="media-caption" style="font-size:13px;color:${isOutbound ? '#ffffffcc' : 'var(--text-secondary)'};margin-top:6px;max-width:280px;">${caption}</div>` : ''}
         `;
         break;
 
       case 'audio':
         mediaHtml = `
-          <div class="media-audio-container" style="display:flex;align-items:center;gap:10px;background:rgba(0,0,0,0.05);border-radius:8px;padding:8px 12px;min-width:160px;">
-            <audio controls preload="none" style="flex:1;" data-media-url="${mediaUrl}" data-media-type="audio"
-                   onerror="this.parentElement.innerHTML='<span style=\"color:var(--text-muted);font-size:12px;\">⚠️ Audio failed to load</span>'">
+          <div class="media-audio-container" style="display:flex;align-items:center;gap:10px;background:rgba(0,0,0,0.05);border-radius:8px;padding:8px 12px;min-width:200px;max-width:280px;">
+            <audio controls preload="none" style="flex:1;height:36px;" data-media-url="${mediaUrl}" data-media-type="audio"
+                   onerror="this.parentElement.innerHTML='<span style=\\'color:var(--text-muted);font-size:12px;\\'>⚠️ Audio failed to load</span>'">
               <source src="${mediaUrl}" type="${mimeType || 'audio/mpeg'}">
-              Your browser does not support the audio element.
             </audio>
-            <button class="media-view-btn" data-media-url="${mediaUrl}" data-media-type="audio"
-                    style="background:rgba(0,0,0,0.5);border:none;border-radius:4px;padding:4px 8px;cursor:pointer;color:#fff;font-size:12px;">
-              View
-            </button>
+            <button class="media-action-btn media-download-btn" data-media-url="${mediaUrl}" data-file-name="${fileName || 'audio'}"
+                    style="background:rgba(0,0,0,0.5);border:none;border-radius:4px;padding:4px 6px;cursor:pointer;color:#fff;font-size:14px;line-height:1;flex-shrink:0;"
+                    title="Download">⬇</button>
           </div>
-          ${caption ? `<div class="media-caption" style="font-size:13px;color:${isOutbound ? '#ffffffcc' : 'var(--text-secondary)'};margin-top:6px;">${caption}</div>` : ''}
         `;
         break;
 
@@ -756,8 +764,8 @@ class InboxComponent {
         const sizeStr = msg.mediaSize ? this.formatFileSize(msg.mediaSize) : '';
         const iconLetter = fileName.split('.').pop()?.[0]?.toUpperCase() || 'D';
         mediaHtml = `
-          <div class="media-document-container" style="display:flex;align-items:center;gap:10px;background:rgba(0,0,0,0.05);border-radius:8px;padding:8px 12px;min-width:200px;">
-            <div style="display:flex;align-items:center;justify-content:center;width:40px;height:40px;background:rgba(100,116,204,0.2);border-radius:8px;font-size:18px;font-weight:700;color:#6366f1;">
+          <div class="media-document-container" style="display:flex;align-items:center;gap:10px;background:rgba(0,0,0,0.05);border-radius:8px;padding:8px 12px;min-width:200px;max-width:280px;">
+            <div style="display:flex;align-items:center;justify-content:center;width:40px;height:40px;background:rgba(100,116,204,0.2);border-radius:8px;font-size:18px;font-weight:700;color:#6366f1;flex-shrink:0;">
               ${iconLetter}
             </div>
             <div style="flex:1;min-width:0;">
@@ -767,21 +775,20 @@ class InboxComponent {
               ${sizeStr ? `<div class="media-doc-size" style="font-size:11px;color:var(--text-muted);">${sizeStr}</div>` : ''}
             </div>
             <a href="${mediaUrl}" download="${fileName}" class="media-doc-download"
-               style="background:var(--border-medium);border:none;border-radius:4px;padding:6px 10px;cursor:pointer;color:var(--text-secondary);font-size:12px;text-decoration:none;">
-              ⬇
-            </a>
+               style="background:var(--border-medium);border:none;border-radius:4px;padding:6px 10px;cursor:pointer;color:var(--text-secondary);font-size:12px;text-decoration:none;flex-shrink:0;"
+               title="Download">⬇</a>
           </div>
-          ${caption ? `<div class="media-caption" style="font-size:13px;color:${isOutbound ? '#ffffffcc' : 'var(--text-secondary)'};margin-top:6px;">${caption}</div>` : ''}
+          ${caption ? `<div class="media-caption" style="font-size:13px;color:${isOutbound ? '#ffffffcc' : 'var(--text-secondary)'};margin-top:6px;max-width:280px;">${caption}</div>` : ''}
         `;
         break;
 
       case 'sticker':
         mediaHtml = `
           <div class="media-sticker-container" style="display: inline-block;">
-            <img src="${mediaUrl}" alt="Sticker" class="media-sticker" style="width:120px;height:auto;border-radius:0;"
-                 data-media-url="${mediaUrl}" data-media-type="image"
+            <img src="${mediaUrl}" alt="Sticker" class="media-sticker" style="width:120px;height:auto;display:block;"
+                 data-media-url="${mediaUrl}" data-media-type="sticker"
                  loading="lazy"
-                 onerror="this.parentElement.innerHTML='<div style=\"display:flex;align-items:center;justify-content:center;padding:8px;color:var(--text-muted);font-size:12px;\">🩷 Sticker</div>'">
+                 onerror="this.parentElement.innerHTML='<div style=\\'display:flex;align-items:center;justify-content:center;padding:8px;color:var(--text-muted);font-size:12px;\\'>🩷 Sticker</div>'">
           </div>
         `;
         break;
@@ -822,7 +829,7 @@ class InboxComponent {
    }
 
   /**
-   * Bind click handlers on "View" buttons to open the media preview modal.
+   * Bind click handlers on "View" and "Download" buttons for media messages.
    */
   bindMediaPreviewHandlers() {
     setTimeout(() => {
@@ -831,9 +838,22 @@ class InboxComponent {
         const newBtn = btn.cloneNode(true);
         btn.replaceWith(newBtn);
         newBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
           const url = newBtn.getAttribute('data-media-url');
           const type = newBtn.getAttribute('data-media-type');
           this.showMediaPreview(url, type, newBtn.getAttribute('data-media-name') || '');
+        });
+      });
+
+      const downloadBtns = document.querySelectorAll('.media-download-btn');
+      downloadBtns.forEach(btn => {
+        const newBtn = btn.cloneNode(true);
+        btn.replaceWith(newBtn);
+        newBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const url = newBtn.getAttribute('data-media-url');
+          const fileName = newBtn.getAttribute('data-file-name') || 'download';
+          this.downloadMedia(url, fileName);
         });
       });
 
@@ -859,25 +879,34 @@ class InboxComponent {
     const modal = document.createElement('div');
     modal.id = 'media-preview-modal';
     modal.style.cssText = `
-      position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 9999;
-      display: flex; align-items: center; justify-content: center; padding: 20px;
+      position: fixed; inset: 0; background: rgba(0,0,0,0.92); z-index: 9999;
+      display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px;
     `;
 
     let innerContent = '';
     if (type === 'image') {
-      innerContent = `<img src="${url}" alt="Preview" style="max-width:90vw;max-height:90vh;object-fit:contain;border-radius:8px;">`;
+      innerContent = `<img src="${url}" alt="Preview" style="max-width:90vw;max-height:75vh;object-fit:contain;border-radius:8px;">`;
     } else if (type === 'video') {
-      innerContent = `<video controls autoplay style="max-width:90vw;max-height:90vh;border-radius:8px;"><source src="${url}"><p style="color:#fff;">Video playback not supported</p></video>`;
+      innerContent = `<video controls autoplay style="max-width:90vw;max-height:75vh;border-radius:8px;background:#000;"><source src="${url}"><p style="color:#fff;">Video playback not supported</p></video>`;
     } else if (type === 'audio') {
-      innerContent = `<div style="display:flex;flex-direction:column;align-items:center;gap:20px;color:#fff;"><div style="font-size:24px;">🎵</div><audio controls style="width:100%;max-width:400px;"><source src="${url}"></audio>${fileName ? `<span style="font-size:14px;">${fileName}</span>` : ''}</div>`;
+      innerContent = `<div style="display:flex;flex-direction:column;align-items:center;gap:20px;color:#fff;"><div style="font-size:48px;">🎵</div><audio controls style="width:100%;max-width:400px;"><source src="${url}"></audio>${fileName ? `<span style="font-size:14px;">${fileName}</span>` : ''}</div>`;
     }
 
+    const downloadBtnHtml = (type === 'image' || type === 'video' || type === 'audio')
+      ? `<button id="media-preview-download" style="position:absolute;top:16px;left:16px;background:rgba(255,255,255,0.15);border:none;border-radius:6px;padding:8px 14px;cursor:pointer;color:#fff;font-size:13px;display:flex;align-items:center;gap:6px;text-decoration:none;">
+           <span style="font-size:16px;">⬇</span> Download
+         </button>`
+      : '';
+
     modal.innerHTML = `
-      <button id="media-preview-close" style="position:absolute;top:16px;right:16px;background:none;border:none;color:#fff;font-size:28px;cursor:pointer;">✕</button>
+      <button id="media-preview-close" style="position:absolute;top:16px;right:16px;background:none;border:none;color:#fff;font-size:28px;cursor:pointer;width:40px;height:40px;display:flex;align-items:center;justify-content:center;border-radius:50%;background:rgba(255,255,255,0.1);">✕</button>
+      ${downloadBtnHtml}
       ${innerContent}
     `;
 
     const closeHandler = () => {
+      const vid = modal.querySelector('video');
+      if (vid) vid.pause();
       document.body.style.overflow = '';
       modal.remove();
     };
@@ -885,9 +914,33 @@ class InboxComponent {
     modal.addEventListener('click', (e) => {
       if (e.target === modal) closeHandler();
     });
-    modal.querySelector('#media-preview-close')?.addEventListener('click', closeHandler);
+
+    const closeBtn = modal.querySelector('#media-preview-close');
+    if (closeBtn) closeBtn.addEventListener('click', closeHandler);
+
+    const downloadBtn = modal.querySelector('#media-preview-download');
+    if (downloadBtn) {
+      downloadBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.downloadMedia(url, fileName || type);
+      });
+    }
+
     document.body.style.overflow = 'hidden';
     document.body.appendChild(modal);
+  }
+
+  /**
+   * Trigger a direct file download for a media URL.
+   */
+  downloadMedia(url, fileName) {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName || 'download';
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   }
 
   renderAiSuggestions(conv) {
