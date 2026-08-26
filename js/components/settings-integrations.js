@@ -619,22 +619,52 @@ class SettingsIntegrationsComponent {
      FACEBOOK SDK — Embedded Signup for WhatsApp
      ══════════════════════════════════════════════════════════════════════ */
   _loadFbSdk() {
-    if (window.FB) return;
-    const script = document.createElement('script');
-    script.src = 'https://connect.facebook.net/en_US/sdk.js';
-    script.async = true;
-    script.onload = () => {
-      const appId = window.supabaseConfig?.metaAppId || '';
-      if (appId) {
-        window.FB.init({
-          appId: appId,
-          autoLogAppEvents: true,
-          xfbml: false,
-          version: 'v21.0'
-        });
+    return new Promise((resolve, reject) => {
+      if (window.FB && window.FB.__initialized) {
+        console.log('[FB Connect] FB SDK already loaded and initialized');
+        return resolve();
       }
-    };
-    document.body.appendChild(script);
+
+      if (window.FB && !window.FB.__initialized) {
+        console.log('[FB Connect] FB exists but not initialized, initializing...');
+        this._initFb();
+        return resolve();
+      }
+
+      console.log('[FB Connect] Loading FB SDK script...');
+      const script = document.createElement('script');
+      script.src = 'https://connect.facebook.net/en_US/sdk.js';
+      script.async = true;
+      script.onload = () => {
+        console.log('[FB Connect] FB SDK script loaded');
+        this._initFb();
+        resolve();
+      };
+      script.onerror = (err) => {
+        console.error('[FB Connect] Failed to load FB SDK script');
+        reject(err);
+      };
+      document.body.appendChild(script);
+    });
+  }
+
+  _initFb() {
+    const appId = window.supabaseConfig?.metaAppId || '';
+    console.log('[FB Connect] Initializing FB with appId:', appId || '(empty)');
+
+    if (!appId) {
+      console.warn('[FB Connect] No Meta App ID configured - FB will not be initialized');
+      return;
+    }
+
+    window.FB.init({
+      appId: appId,
+      autoLogAppEvents: true,
+      xfbml: false,
+      version: 'v21.0'
+    });
+    window.FB.__initialized = true;
+    console.log('[FB Connect] FB.init() called successfully');
   }
 
   _bindFbMessageListener() {
@@ -657,14 +687,37 @@ class SettingsIntegrationsComponent {
   }
 
   async _handleEmbeddedSignup() {
+    console.log('[FB Connect] Button clicked, starting connection...');
+
     if (!window.supabaseConfig?.isSupabaseConfigured()) {
+      console.log('[FB Connect] Supabase not configured');
       this._toast('Supabase not configured. Please set up your environment.', 'error');
       return;
     }
 
     const configId = window.supabaseConfig?.whatsappConfigId;
+    console.log('[FB Connect] Config ID:', configId);
+
     if (!configId) {
+      console.log('[FB Connect] WhatsApp config ID missing');
       this._toast('WhatsApp config ID not configured.', 'error');
+      return;
+    }
+
+    console.log('[FB Connect] FB object exists:', typeof window.FB);
+    if (typeof window.FB === 'undefined') {
+      console.log('[FB Connect] FB SDK not loaded, loading now...');
+      await this._loadFbSdk();
+    }
+
+    if (typeof window.FB === 'undefined' || !window.FB.__initialized) {
+      console.log('[FB Connect] FB not initialized, initializing...');
+      this._initFb();
+    }
+
+    if (typeof window.FB === 'undefined' || !window.FB.__initialized) {
+      console.error('[FB Connect] FB failed to initialize - check Meta App ID');
+      this._toast('Facebook SDK failed to initialize. Check Meta App ID configuration.', 'error');
       return;
     }
 
@@ -673,17 +726,24 @@ class SettingsIntegrationsComponent {
     this._waSignupError = null;
 
     const timeout = setTimeout(() => {
+      console.log('[FB Connect] Connection timed out');
       this._toast('Connection timed out, please try again', 'error');
     }, 60000);
 
+    console.log('[FB Connect] Calling FB.login...');
+
     window.FB.login((response) => {
+      console.log('[FB Connect] FB.login response:', response);
+
       if (!response.authResponse) {
         clearTimeout(timeout);
+        console.log('[FB Connect] Login cancelled or failed');
         this._toast('Login was cancelled or failed', 'error');
         return;
       }
 
       const code = response.authResponse.code;
+      console.log('[FB Connect] Got auth code:', code);
 
       const waitForSignupData = setInterval(async () => {
         if (window.__wa_signup_cancelled) {
@@ -702,8 +762,11 @@ class SettingsIntegrationsComponent {
           try {
             const org = window.appState.getCurrentOrg();
             const edgeUrl = window.supabaseConfig.getEdgeFunctionUrl('meta-oauth-exchange');
+            console.log('[FB Connect] Edge function URL:', edgeUrl);
+
             if (!edgeUrl) throw new Error('Edge function URL not configured');
 
+            console.log('[FB Connect] Calling edge function...');
             const res = await fetch(edgeUrl, {
               method: 'POST',
               headers: window.supabaseConfig.getAuthHeaders(),
@@ -717,6 +780,8 @@ class SettingsIntegrationsComponent {
             });
 
             const data = await res.json();
+            console.log('[FB Connect] Edge function response:', data);
+
             if (!res.ok || !data.success) {
               throw new Error(data.error || 'Failed to complete connection');
             }
@@ -731,6 +796,7 @@ class SettingsIntegrationsComponent {
             this._toast(`WhatsApp connected: ${data.phone_number}`, 'success');
             this._renderCards();
           } catch (err) {
+            console.error('[FB Connect] Edge function error:', err);
             this._toast(err.message || 'Failed to complete connection', 'error');
           }
         }
