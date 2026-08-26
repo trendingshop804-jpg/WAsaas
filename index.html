@@ -325,13 +325,12 @@
               <p style="color: var(--text-secondary); font-size: 13.5px;">Real-time overview of your automated B2B lead generation and WhatsApp conversions.</p>
             </div>
             <div class="flex items-center gap-2">
-              <button class="btn btn-secondary btn-sm" data-action="quick-discover">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-                Find Leads
-              </button>
-              <button class="btn btn-primary btn-sm" data-action="quick-campaign">
-                + Launch Campaign
-              </button>
+              <div class="dashboard-time-filter">
+                <button class="time-filter-btn active" data-range="24h">Last 24 Hours</button>
+                <button class="time-filter-btn" data-range="7d">Last 7 Days</button>
+                <button class="time-filter-btn" data-range="30d">Last 30 Days</button>
+                <button class="time-filter-btn" data-range="all">All Time</button>
+              </div>
             </div>
           </div>
 

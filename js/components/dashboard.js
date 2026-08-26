@@ -4,6 +4,7 @@
 
 class DashboardComponent {
   init() {
+    this.currentTimeRange = '24h'; // Default: Last 24 Hours
     this.renderMetrics();
     this.renderFunnel();
     this.renderActivityStream();
@@ -30,11 +31,52 @@ class DashboardComponent {
     document.querySelectorAll('[data-action="quick-workflow"]').forEach(btn => {
       btn.addEventListener('click', () => window.navigationComponent.switchView('workflows'));
     });
+
+    // Time filter buttons
+    document.querySelectorAll('.time-filter-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.time-filter-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        this.currentTimeRange = btn.dataset.range;
+        this.renderMetrics();
+        this.renderFunnel();
+        this.renderActivityStream();
+      });
+    });
+  }
+
+  /**
+   * Get the date threshold based on current time range filter.
+   * Returns a Date object or null for "all time".
+   */
+  getTimeThreshold() {
+    const now = new Date();
+    switch (this.currentTimeRange) {
+      case '24h':
+        return new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      case '7d':
+        return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      case '30d':
+        return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      case 'all':
+      default:
+        return null;
+    }
+  }
+
+  /**
+   * Check if a date is within the current time range.
+   */
+  isWithinTimeRange(dateStr) {
+    const threshold = this.getTimeThreshold();
+    if (!threshold) return true; // All time
+    if (!dateStr) return true; // Include items without dates
+    return new Date(dateStr) >= threshold;
   }
 
   renderMetrics() {
-    const leads = window.appState.get('leads') || [];
-    const campaigns = window.appState.get('campaigns') || [];
+    const leads = (window.appState.get('leads') || []).filter(l => this.isWithinTimeRange(l.createdAt || l.created_at));
+    const campaigns = (window.appState.get('campaigns') || []).filter(c => this.isWithinTimeRange(c.createdAt || c.created_at));
     const org = window.appState.getCurrentOrg();
 
     const totalLeads = leads.length;
@@ -71,7 +113,7 @@ class DashboardComponent {
   }
 
   renderFunnel() {
-    const leads = window.appState.get('leads') || [];
+    const leads = (window.appState.get('leads') || []).filter(l => this.isWithinTimeRange(l.createdAt || l.created_at));
     const total = leads.length || 1;
     const contacted = leads.filter(l => l.status !== 'New').length;
     const replied = leads.filter(l => ['Replied', 'Qualified', 'Proposal', 'Negotiation', 'Won'].includes(l.status)).length;
@@ -98,7 +140,9 @@ class DashboardComponent {
     const list = document.getElementById('dashboard-activity-list');
     if (!list) return;
 
-    const logs = (window.appState.get('auditLogs') || []).slice(0, 5);
+    const logs = (window.appState.get('auditLogs') || [])
+      .filter(log => this.isWithinTimeRange(log.timestamp))
+      .slice(0, 5);
     list.innerHTML = logs.map(log => `
       <div class="activity-item">
         <div class="activity-icon" style="background: rgba(37, 211, 102, 0.15); color: #25d366;">
