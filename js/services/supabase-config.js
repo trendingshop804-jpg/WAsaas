@@ -25,6 +25,17 @@ const SUPABASE_CONFIG = {
   anonKey: '',
 
   /**
+   * Meta App ID for Facebook Login OAuth.
+   * Set META_APP_ID in your environment to enable pre-configured OAuth.
+   */
+  metaAppId: '',
+
+  /**
+   * Meta Graph API version for OAuth flows.
+   */
+  metaApiVersion: 'v21.0',
+
+  /**
    * The Edge Function name that handles integration-key CRUD.
    * Deployed at: <projectUrl>/functions/v1/<functionName>
    */
@@ -43,9 +54,13 @@ async function loadPublicSupabaseConfig() {
     if (config.projectUrl && config.anonKey) {
       SUPABASE_CONFIG.projectUrl = config.projectUrl;
       SUPABASE_CONFIG.anonKey = config.anonKey;
+      SUPABASE_CONFIG.metaAppId = config.metaAppId || '';
+      SUPABASE_CONFIG.metaApiVersion = config.metaApiVersion || 'v21.0';
       Object.assign(window.supabaseConfig, {
         projectUrl: config.projectUrl,
         anonKey: config.anonKey,
+        metaAppId: config.metaAppId || '',
+        metaApiVersion: config.metaApiVersion || 'v21.0',
       });
     }
   } catch (error) {

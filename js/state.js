@@ -32,6 +32,10 @@ class StateStore {
             existing.wabaId = primaryOrg.wabaId;
             existing.about = primaryOrg.about;
             existing.profilePictureUrl = primaryOrg.profilePictureUrl;
+            existing.instagramConnected = primaryOrg.instagramConnected;
+            existing.instagramUsername = primaryOrg.instagramUsername;
+            existing.instagramBusinessId = primaryOrg.instagramBusinessId;
+            existing.instagramPageId = primaryOrg.instagramPageId;
           }
         }
 

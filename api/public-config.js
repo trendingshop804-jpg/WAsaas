@@ -16,5 +16,10 @@ export default function handler(req, res) {
   }
 
   res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=300');
-  return res.status(200).json({ projectUrl, anonKey });
+  return res.status(200).json({
+    projectUrl,
+    anonKey,
+    metaAppId: process.env.META_APP_ID || '',
+    metaApiVersion: 'v21.0'
+  });
 }

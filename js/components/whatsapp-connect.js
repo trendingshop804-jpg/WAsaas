@@ -217,6 +217,314 @@ class WhatsAppConnectComponent {
     });
   }
 
+  /* ── Start Meta OAuth Connection (pre-configured App ID) ─────────────── */
+  async startMetaOAuthConnection() {
+    if (!window.supabaseConfig || !window.supabaseConfig.isSupabaseConfigured()) {
+      this._showDemoModeModal();
+      return;
+    }
+
+    const metaAppId = window.supabaseConfig.metaAppId;
+    if (!metaAppId) {
+      alert('Meta App ID is not configured. Please set META_APP_ID in your environment.');
+      return;
+    }
+
+    try {
+      await this._loadFbSdk();
+
+      FB.init({
+        appId: metaAppId,
+        cookie: true,
+        xfbml: true,
+        version: 'v21.0'
+      });
+
+      FB.login(async (response) => {
+        if (response.authResponse) {
+          await this._handleFbLoginSuccess(response.authResponse.accessToken);
+        } else {
+          console.info('[Meta OAuth]: User cancelled login or did not fully authorize.');
+        }
+      }, {
+        scope: 'whatsapp_business_management,whatsapp_business_messaging,instagram_basic,instagram_manage_messages,pages_show_list,pages_read_engagement'
+      });
+    } catch (err) {
+      alert('Failed to load Facebook SDK: ' + err.message);
+    }
+  }
+
+  async _handleFbLoginSuccess(accessToken) {
+    const discoveryResult = await this._discoverAccounts(accessToken);
+    if (!discoveryResult) return;
+    this._showAccountPicker(discoveryResult);
+  }
+
+  async _discoverAccounts(accessToken) {
+    try {
+      const org = window.appState.getCurrentOrg();
+      const edgeUrl = window.supabaseConfig.getEdgeFunctionUrl('meta-oauth-exchange');
+      if (!edgeUrl) return null;
+
+      const response = await fetch(edgeUrl, {
+        method: 'POST',
+        headers: window.supabaseConfig.getAuthHeaders(),
+        body: JSON.stringify({
+          accessToken,
+          organizationId: org.id,
+          mode: 'discover'
+        })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Discovery failed');
+      return result;
+    } catch (e) {
+      alert('Account discovery failed: ' + e.message);
+      return null;
+    }
+  }
+
+  async _saveSelectedAccounts(encryptedToken, wabaIndex, phoneIndex, instagramIndices) {
+    try {
+      const org = window.appState.getCurrentOrg();
+      const edgeUrl = window.supabaseConfig.getEdgeFunctionUrl('meta-oauth-exchange');
+      if (!edgeUrl) return null;
+
+      const response = await fetch(edgeUrl, {
+        method: 'POST',
+        headers: window.supabaseConfig.getAuthHeaders(),
+        body: JSON.stringify({
+          accessToken: encryptedToken,
+          organizationId: org.id,
+          mode: 'save_selected',
+          wabaIndex,
+          phoneIndex,
+          instagramIndices
+        })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Save failed');
+      return result;
+    } catch (e) {
+      alert('Save failed: ' + e.message);
+      return null;
+    }
+  }
+
+  _showAccountPicker(discovery) {
+    const modal = document.getElementById('meta-account-picker-modal');
+    if (!modal) {
+      this._createAccountPickerModal();
+      return this._showAccountPicker(discovery);
+    }
+
+    const wabaOptions = modal.querySelector('#meta-picker-waba-options');
+    const igOptions = modal.querySelector('#meta-picker-ig-options');
+
+    if (wabaOptions) {
+      wabaOptions.innerHTML = '';
+      let idx = 0;
+      discovery.wabas.forEach((waba, wabaIdx) => {
+        waba.phoneNumbers.forEach((phone, phoneIdx) => {
+          wabaOptions.insertAdjacentHTML('beforeend', `
+            <label class="meta-picker-option">
+              <input type="radio" name="meta-waba-select" value="${wabaIdx}-${phoneIdx}" ${idx === 0 ? 'checked' : ''}>
+              <div class="meta-picker-option-content">
+                <div class="meta-picker-option-title">${phone.display_phone_number}</div>
+                <div class="meta-picker-option-sub">${waba.wabaName} · ${phone.verified_name || 'Verified'}</div>
+              </div>
+            </label>
+          `);
+          idx++;
+        });
+      });
+      if (idx === 0) {
+        wabaOptions.innerHTML = '<div class="meta-picker-empty">No WhatsApp Business accounts found</div>';
+      }
+    }
+
+    if (igOptions) {
+      igOptions.innerHTML = '';
+      if (discovery.instagram.length === 0) {
+        igOptions.innerHTML = '<div class="meta-picker-empty">No Instagram Professional accounts linked to your Pages</div>';
+      } else {
+        discovery.instagram.forEach((ig, i) => {
+          igOptions.insertAdjacentHTML('beforeend', `
+            <label class="meta-picker-option">
+              <input type="checkbox" name="meta-ig-select" value="${i}">
+              <div class="meta-picker-option-content">
+                <div class="meta-picker-option-title">@${ig.username}</div>
+                <div class="meta-picker-option-sub">Page: ${ig.pageName}</div>
+              </div>
+            </label>
+          `);
+        });
+      }
+    }
+
+    modal.discovery = discovery;
+    modal.classList.add('active');
+
+    const confirmBtn = modal.querySelector('#meta-picker-confirm-btn');
+    if (confirmBtn) {
+      confirmBtn.onclick = async () => {
+        const selectedWaba = modal.querySelector('input[name="meta-waba-select"]:checked');
+        const selectedIg = Array.from(modal.querySelectorAll('input[name="meta-ig-select"]:checked'));
+
+        if (!selectedWaba && selectedIg.length === 0) {
+          alert('Please select at least one account to connect.');
+          return;
+        }
+
+        const [wabaIdx, phoneIdx] = selectedWaba ? selectedWaba.value.split('-').map(Number) : [0, 0];
+        const igIndices = selectedIg.map(input => Number(input.value));
+
+        confirmBtn.disabled = true;
+        confirmBtn.innerHTML = '<span class="spinner-xs"></span> Connecting...';
+
+        const result = await this._saveSelectedAccounts(
+          discovery.long_lived_token,
+          wabaIdx,
+          phoneIdx,
+          igIndices
+        );
+
+        confirmBtn.disabled = false;
+        confirmBtn.innerHTML = 'Connect Selected';
+
+        if (result) {
+          modal.classList.remove('active');
+          this._applyConnectionResult(result, discovery);
+        }
+      };
+    }
+  }
+
+  _createAccountPickerModal() {
+    const modal = document.createElement('div');
+    modal.id = 'meta-account-picker-modal';
+    modal.className = 'modal-backdrop';
+    modal.innerHTML = `
+      <div class="modal-dialog meta-picker-dialog">
+        <div class="modal-header">
+          <h3>Select Accounts to Connect</h3>
+          <button class="modal-close" data-close-modal>&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="meta-picker-section">
+            <div class="meta-picker-section-title">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+              WhatsApp Business Number
+            </div>
+            <div class="meta-picker-options" id="meta-picker-waba-options"></div>
+          </div>
+          <div class="meta-picker-section">
+            <div class="meta-picker-section-title">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg>
+              Instagram Professional Accounts
+            </div>
+            <div class="meta-picker-options" id="meta-picker-ig-options"></div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" data-close-modal>Cancel</button>
+          <button class="btn btn-primary" id="meta-picker-confirm-btn">Connect Selected</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+  }
+
+  _applyConnectionResult(result, discovery) {
+    const org = window.appState.getCurrentOrg();
+
+    if (result.saved?.whatsapp && discovery.wabas?.length > 0) {
+      const wabaIdx = result.saved.whatsapp ? 0 : -1;
+      org.whatsappConnected = true;
+      const waba = discovery.wabas[0];
+      if (waba?.phoneNumbers?.[0]) {
+        org.whatsappNumber = waba.phoneNumbers[0].display_phone_number;
+        org.whatsappProvider = 'Meta Cloud API (Official OAuth)';
+        org.phoneId = waba.phoneNumbers[0].id;
+        org.wabaId = waba.wabaId;
+      }
+      window.appState.emit('whatsappConnectionChanged', { status: 'CONNECTED' });
+    }
+
+    if (result.saved?.instagram > 0 && discovery.instagram?.length > 0) {
+      const ig = discovery.instagram[0];
+      org.instagramConnected = true;
+      org.instagramBusinessId = ig.instagramBusinessId;
+      org.instagramUsername = ig.username;
+      org.instagramPageId = ig.pageId;
+      window.appState.emit('instagramConnectionChanged', { status: 'CONNECTED', account: ig });
+      window.appState.addAuditLog(
+        'Instagram Meta OAuth Connected',
+        ig.username,
+        `Linked Instagram professional account through Meta Page ${ig.pageName}.`,
+        'Connected'
+      );
+    }
+
+    window.appState.saveState();
+    alert('Account(s) connected successfully!');
+  }
+
+  _showDemoModeModal() {
+    const modal = document.getElementById('meta-demo-modal');
+    if (!modal) {
+      this._createDemoModal();
+      return this._showDemoModeModal();
+    }
+    modal.classList.add('active');
+  }
+
+  _createDemoModal() {
+    const modal = document.createElement('div');
+    modal.id = 'meta-demo-modal';
+    modal.className = 'modal-backdrop';
+    modal.innerHTML = `
+      <div class="modal-dialog meta-demo-dialog">
+        <div class="modal-header">
+          <h3>Meta OAuth Connection</h3>
+          <button class="modal-close" data-close-modal>&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="demo-info-icon">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          </div>
+          <h4>Demo Mode Active</h4>
+          <p>The "Continue with Facebook" feature requires a configured Supabase project with Meta App credentials.</p>
+          <p>In demo mode, you can explore the account picker UI with simulated data. Configure <code>supabase-config.js</code> and set <code>META_APP_ID</code> in your environment to enable live OAuth.</p>
+          <button class="btn btn-primary" id="meta-demo-simulate-btn">Simulate Account Picker</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+
+    const simulateBtn = modal.querySelector('#meta-demo-simulate-btn');
+    if (simulateBtn) {
+      simulateBtn.onclick = () => {
+        modal.classList.remove('active');
+        this._showAccountPicker({
+          long_lived_token: 'demo_token',
+          wabas: [
+            {
+              wabaId: 'DEMO_WABA_001',
+              wabaName: 'Demo Business',
+              phoneNumbers: [
+                { id: 'DEMO_PH_001', display_phone_number: '+1 555-0123', verified_name: 'Demo Business' }
+              ]
+            }
+          ],
+          instagram: [
+            { instagramBusinessId: 'DEMO_IG_001', username: 'demo_business', pageId: 'DEMO_PAGE_001', pageName: 'Demo Business Page' }
+          ]
+        });
+      };
+    }
+  }
+
   /* ── Handler: Trigger Login window for Facebook ──────────────────────── */
   async handleRealMetaLogin() {
     const appId = document.getElementById('meta-real-app-id')?.value.trim();

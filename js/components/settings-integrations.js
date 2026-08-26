@@ -26,6 +26,7 @@ class SettingsIntegrationsComponent {
         status:      'disconnected',
         dbId:        null,   // row id in user_integration_keys
         maskedValue: null,
+        instagramUsername: null,
       },
       {
         id:          'openai_api_key',
@@ -100,7 +101,17 @@ class SettingsIntegrationsComponent {
         } else {
           ig.status = 'disconnected';
           ig.maskedValue = null;
+          ig.instagramUsername = null;
         }
+      }
+      this._renderCards();
+    });
+
+    window.appState.on('instagramConnectionChanged', (state) => {
+      const currentOrg = window.appState.getCurrentOrg();
+      const ig = this.integrations.find(i => i.id === 'whatsapp_business');
+      if (ig) {
+        ig.instagramUsername = currentOrg.instagramUsername || null;
       }
       this._renderCards();
     });
@@ -199,10 +210,24 @@ class SettingsIntegrationsComponent {
 
     /* WhatsApp OAuth connect button */
     const oauthSection = ig.type === 'oauth' && !isConnected ? `
-      <button class="btn-oauth-connect" id="btn-oauth-${ig.id}">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
-        Connect WhatsApp Business
+      <button class="btn-oauth-connect btn-meta-facebook" id="btn-oauth-${ig.id}">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+        Continue with Facebook
       </button>` : '';
+
+    /* Connected account display for WhatsApp */
+    const connectedAccountBlock = ig.type === 'oauth' && isConnected ? `
+      <div class="connected-account-display" id="connected-account-${ig.id}">
+        <div class="connected-account-info">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+          <span class="connected-account-value">${ig.maskedValue || 'WhatsApp Connected'}</span>
+        </div>
+        ${ig.instagramUsername ? `
+        <div class="connected-account-info instagram">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg>
+          <span class="connected-account-value">@${ig.instagramUsername}</span>
+        </div>` : ''}
+      </div>` : '';
 
     /* Test Connection button + result badge (only when connected) */
     const testBtn = isConnected ? `
@@ -231,6 +256,7 @@ class SettingsIntegrationsComponent {
       </div>
 
       ${maskedBlock}
+      ${connectedAccountBlock}
       ${inputSection}
       ${oauthSection}
 
@@ -286,7 +312,7 @@ class SettingsIntegrationsComponent {
       /* OAuth Connect */
       document.getElementById(`btn-oauth-${ig.id}`)?.addEventListener('click', () => {
         if (ig.id === 'whatsapp_business' && window.whatsappConnectComponent) {
-          window.whatsappConnectComponent.openMetaOAuthModal();
+          window.whatsappConnectComponent.startMetaOAuthConnection();
         } else {
           this._openOAuthModal(ig.id);
         }

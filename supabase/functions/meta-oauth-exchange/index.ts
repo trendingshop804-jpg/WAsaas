@@ -64,6 +64,135 @@ async function encryptToken(plaintext: string): Promise<string> {
   return btoa(String.fromCharCode(...combined));
 }
 
+interface DiscoveryResult {
+  wabas: Array<{
+    wabaId: string;
+    wabaName: string;
+    phoneNumbers: Array<{ id: string; display_phone_number: string; verified_name?: string }>;
+  }>;
+  instagram: Array<{
+    instagramBusinessId: string;
+    username: string;
+    pageId: string;
+    pageName: string;
+  }>;
+}
+
+async function discoverAccounts(longLivedToken: string): Promise<DiscoveryResult> {
+  const discoveredWABAs: DiscoveryResult["wabas"] = [];
+  const discoveredInstagram: DiscoveryResult["instagram"] = [];
+
+  try {
+    const bizRes = await fetch(`https://graph.facebook.com/v21.0/me/businesses?access_token=${longLivedToken}`);
+    const bizData = await bizRes.json();
+
+    if (bizData.data && Array.isArray(bizData.data)) {
+      for (const biz of bizData.data) {
+        const wabaRes = await fetch(`https://graph.facebook.com/v21.0/${biz.id}/client_whatsapp_business_accounts?access_token=${longLivedToken}`);
+        const wabaData = await wabaRes.json();
+
+        if (wabaData.data && Array.isArray(wabaData.data)) {
+          for (const waba of wabaData.data) {
+            const phoneRes = await fetch(`https://graph.facebook.com/v21.0/${waba.id}/phone_numbers?access_token=${longLivedToken}`);
+            const phoneData = await phoneRes.json();
+
+            discoveredWABAs.push({
+              wabaId: waba.id,
+              wabaName: waba.name || biz.name,
+              phoneNumbers: phoneData.data || []
+            });
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.error("[Graph API WABA Discovery]:", err);
+  }
+
+  try {
+    const pagesRes = await fetch(`https://graph.facebook.com/v21.0/me/accounts?fields=id,name,access_token,instagram_business_account{id,username}&access_token=${longLivedToken}`);
+    const pagesData = await pagesRes.json();
+
+    if (pagesData.data && Array.isArray(pagesData.data)) {
+      for (const page of pagesData.data) {
+        if (page.instagram_business_account?.id) {
+          discoveredInstagram.push({
+            instagramBusinessId: page.instagram_business_account.id,
+            username: page.instagram_business_account.username || page.name,
+            pageId: page.id,
+            pageName: page.name
+          });
+        }
+      }
+    }
+  } catch (err) {
+    console.error("[Graph API Instagram Discovery]:", err);
+  }
+
+  return { wabas: discoveredWABAs, instagram: discoveredInstagram };
+}
+
+async function saveSelectedAccounts(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  organizationId: string,
+  encryptedToken: string,
+  discovery: DiscoveryResult,
+  wabaIndex: number,
+  phoneIndex: number,
+  instagramIndices: number[]
+): Promise<{ whatsapp: boolean; instagram: number }> {
+  let whatsappSaved = false;
+  let instagramSaved = 0;
+
+  if (discovery.wabas[wabaIndex] && discovery.wabas[wabaIndex].phoneNumbers[phoneIndex]) {
+    const waba = discovery.wabas[wabaIndex];
+    const phone = waba.phoneNumbers[phoneIndex];
+
+    await supabaseAdmin.from("whatsapp_connections").upsert({
+      organization_id: organizationId,
+      provider: "META_CLOUD_API",
+      phone_number: phone.display_phone_number,
+      display_name: phone.verified_name || waba.wabaName,
+      waba_id: waba.wabaId,
+      phone_number_id: phone.id,
+      access_token_encrypted: encryptedToken,
+      is_active: true,
+      updated_at: new Date().toISOString()
+    }, { onConflict: "organization_id, phone_number_id" });
+    whatsappSaved = true;
+  }
+
+  for (const idx of instagramIndices) {
+    if (discovery.instagram[idx]) {
+      const ig = discovery.instagram[idx];
+      await supabaseAdmin.from("instagram_connections").upsert({
+        organization_id: organizationId,
+        instagram_business_id: ig.instagramBusinessId,
+        instagram_username: ig.username,
+        page_id: ig.pageId,
+        access_token_encrypted: encryptedToken,
+        is_active: true,
+        updated_at: new Date().toISOString()
+      }, { onConflict: "organization_id, instagram_business_id" });
+      instagramSaved++;
+    }
+  }
+
+  return { whatsapp: whatsappSaved, instagram: instagramSaved };
+}
+
+async function savePrimaryAccounts(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  organizationId: string,
+  encryptedToken: string,
+  discovery: DiscoveryResult
+): Promise<{ whatsapp: boolean; instagram: number }> {
+  const wabaIndex = discovery.wabas.findIndex(w => w.phoneNumbers.length > 0);
+  const phoneIndex = wabaIndex >= 0 ? 0 : -1;
+  const instagramIndices = discovery.instagram.map((_, i) => i);
+  return saveSelectedAccounts(supabaseAdmin, organizationId, encryptedToken, discovery, wabaIndex, phoneIndex, instagramIndices);
+}
+
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -89,7 +218,7 @@ serve(async (req: Request) => {
       return jsonResponse({ error: "Unauthorized user session" }, 401);
     }
 
-    const { accessToken, organizationId } = await req.json();
+    const { accessToken, organizationId, mode = "save", wabaIndex = 0, phoneIndex = 0, instagramIndices = [] } = await req.json();
     if (!accessToken || !organizationId) {
       return jsonResponse({ error: "accessToken and organizationId are required" }, 400);
     }
@@ -121,96 +250,45 @@ serve(async (req: Request) => {
       }
     }
 
-    // 3. Query WhatsApp Business Accounts (WABAs)
-    const discoveredWABAs: Array<{ wabaId: string; wabaName: string; phoneNumbers: Array<{ id: string; display_phone_number: string; verified_name?: string }> }> = [];
+    // 3. Discover accounts
+    const discovery = await discoverAccounts(longLivedToken);
 
-    try {
-      const bizRes = await fetch(`https://graph.facebook.com/v21.0/me/businesses?access_token=${longLivedToken}`);
-      const bizData = await bizRes.json();
-
-      if (bizData.data && Array.isArray(bizData.data)) {
-        for (const biz of bizData.data) {
-          const wabaRes = await fetch(`https://graph.facebook.com/v21.0/${biz.id}/client_whatsapp_business_accounts?access_token=${longLivedToken}`);
-          const wabaData = await wabaRes.json();
-
-          if (wabaData.data && Array.isArray(wabaData.data)) {
-            for (const waba of wabaData.data) {
-              const phoneRes = await fetch(`https://graph.facebook.com/v21.0/${waba.id}/phone_numbers?access_token=${longLivedToken}`);
-              const phoneData = await phoneRes.json();
-
-              discoveredWABAs.push({
-                wabaId: waba.id,
-                wabaName: waba.name || biz.name,
-                phoneNumbers: phoneData.data || []
-              });
-            }
-          }
-        }
-      }
-    } catch (err) {
-      console.error("[Graph API WABA Discovery]:", err);
+    // 4. Handle modes
+    if (mode === "discover") {
+      const encryptedToken = await encryptToken(longLivedToken);
+      return jsonResponse({
+        success: true,
+        long_lived_token: encryptedToken,
+        wabas: discovery.wabas,
+        instagram: discovery.instagram,
+        message: "Accounts discovered. Use save_selected to persist chosen accounts."
+      });
     }
 
-    // 4. Query Facebook Pages & Connected Instagram Business Accounts
-    const discoveredInstagram: Array<{ instagramBusinessId: string; username: string; pageId: string; pageName: string }> = [];
-
-    try {
-      const pagesRes = await fetch(`https://graph.facebook.com/v21.0/me/accounts?fields=id,name,access_token,instagram_business_account{id,username}&access_token=${longLivedToken}`);
-      const pagesData = await pagesRes.json();
-
-      if (pagesData.data && Array.isArray(pagesData.data)) {
-        for (const page of pagesData.data) {
-          if (page.instagram_business_account?.id) {
-            discoveredInstagram.push({
-              instagramBusinessId: page.instagram_business_account.id,
-              username: page.instagram_business_account.username || page.name,
-              pageId: page.id,
-              pageName: page.name
-            });
-          }
-        }
-      }
-    } catch (err) {
-      console.error("[Graph API Instagram Discovery]:", err);
-    }
-
-    // 5. Encrypt and save the primary connection if detected
+    // 5. Encrypt token for save operations
     const encryptedToken = await encryptToken(longLivedToken);
 
-    if (discoveredWABAs.length > 0 && discoveredWABAs[0].phoneNumbers.length > 0) {
-      const primaryWABA = discoveredWABAs[0];
-      const primaryPhone = primaryWABA.phoneNumbers[0];
-
-      await supabaseAdmin.from("whatsapp_connections").upsert({
-        organization_id: organizationId,
-        provider: "META_CLOUD_API",
-        phone_number: primaryPhone.display_phone_number,
-        display_name: primaryPhone.verified_name || primaryWABA.wabaName,
-        waba_id: primaryWABA.wabaId,
-        phone_number_id: primaryPhone.id,
-        access_token_encrypted: encryptedToken,
-        is_active: true,
-        updated_at: new Date().toISOString()
-      }, { onConflict: "organization_id, phone_number_id" });
-    }
-
-    if (discoveredInstagram.length > 0) {
-      const primaryIG = discoveredInstagram[0];
-      await supabaseAdmin.from("instagram_connections").upsert({
-        organization_id: organizationId,
-        instagram_business_id: primaryIG.instagramBusinessId,
-        instagram_username: primaryIG.username,
-        page_id: primaryIG.pageId,
-        access_token_encrypted: encryptedToken,
-        is_active: true,
-        updated_at: new Date().toISOString()
-      }, { onConflict: "organization_id, instagram_business_id" });
+    let result;
+    if (mode === "save_selected") {
+      result = await saveSelectedAccounts(
+        supabaseAdmin,
+        organizationId,
+        encryptedToken,
+        discovery,
+        wabaIndex,
+        phoneIndex,
+        instagramIndices
+      );
+    } else {
+      // Default: save mode (backward compatible)
+      result = await savePrimaryAccounts(supabaseAdmin, organizationId, encryptedToken, discovery);
     }
 
     return jsonResponse({
       success: true,
-      wabas: discoveredWABAs,
-      instagram: discoveredInstagram,
+      wabas: discovery.wabas,
+      instagram: discovery.instagram,
+      saved: result,
       message: "Meta credentials exchanged and stored securely with AES-GCM encryption."
     });
   } catch (err) {
