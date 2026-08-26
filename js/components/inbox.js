@@ -828,19 +828,22 @@ class InboxComponent {
     setTimeout(() => {
       const btns = document.querySelectorAll('.media-view-btn');
       btns.forEach(btn => {
-        btn.replaceWith(btn.cloneNode(true));
-        btn.addEventListener('click', (e) => {
-          const url = btn.getAttribute('data-media-url');
-          const type = btn.getAttribute('data-media-type');
-          this.showMediaPreview(url, type, btn.getAttribute('data-media-name') || '');
+        const newBtn = btn.cloneNode(true);
+        btn.replaceWith(newBtn);
+        newBtn.addEventListener('click', (e) => {
+          const url = newBtn.getAttribute('data-media-url');
+          const type = newBtn.getAttribute('data-media-type');
+          this.showMediaPreview(url, type, newBtn.getAttribute('data-media-name') || '');
         });
       });
 
       const previewImgs = document.querySelectorAll('img[data-media-url][data-media-type="image"]');
       previewImgs.forEach(img => {
-        img.replaceWith(img.cloneNode(true));
-        img.addEventListener('click', () => {
-          this.showMediaPreview(img.getAttribute('data-media-url'), 'image', '');
+        const newImg = img.cloneNode(true);
+        img.replaceWith(newImg);
+        newImg.style.cursor = 'pointer';
+        newImg.addEventListener('click', () => {
+          this.showMediaPreview(newImg.getAttribute('data-media-url'), 'image', '');
         });
       });
     }, 0);

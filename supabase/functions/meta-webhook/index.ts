@@ -56,7 +56,18 @@ async function processInboundMedia(msg: any, mediaType: string, supabaseAdmin: a
       return null;
     }
 
-    return { mediaUrl: storagePath, mediaMimeType: mimeType, fileName };
+    // Step 4: Get public URL from Supabase Storage
+    const { data: publicUrlData } = supabaseAdmin.storage
+      .from("whatsapp-media")
+      .getPublicUrl(storagePath);
+
+    const publicUrl = publicUrlData?.publicUrl;
+    if (!publicUrl) {
+      console.error("Failed to get public URL for:", storagePath);
+      return null;
+    }
+
+    return { mediaUrl: publicUrl, mediaMimeType: mimeType, fileName };
   } catch (err) {
     console.error("Media processing error:", err);
     return null;

@@ -66,15 +66,15 @@ EXCEPTION WHEN OTHERS THEN NULL;
 END $$;
 
 -- ---------------------------------------------------------------------------
--- 4. Create private storage bucket for WhatsApp media
---    This bucket is NOT public — files require a signed URL (via /api/messages)
+-- 4. Create PUBLIC storage bucket for WhatsApp media
+--    This bucket is PUBLIC so media URLs can be rendered directly in <img> tags
 -- ---------------------------------------------------------------------------
 
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 VALUES (
   'whatsapp-media',
   'whatsapp-media',
-  FALSE,
+  TRUE,
   52428800,
   ARRAY[
     'image/jpeg', 'image/png', 'image/webp', 'image/gif',
@@ -83,21 +83,22 @@ VALUES (
     'application/pdf', 'application/zip',
     'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    'text/plain', 'application/msword'
+    'text/plain', 'application/msword', 'application/msword'
   ]
 ) ON CONFLICT (id) DO UPDATE
-    SET file_size_limit = EXCLUDED.file_size_limit;
+    SET public = TRUE,
+        file_size_limit = EXCLUDED.file_size_limit;
 
 -- ---------------------------------------------------------------------------
 -- 5. RLS Policies on storage.objects for the whatsapp-media bucket
 --    (Storage buckets in Supabase use the storage.objects table for RLS)
 -- ---------------------------------------------------------------------------
 
--- Authenticated users can READ media files (via signed URLs from /api/messages)
-CREATE POLICY "Authenticated users can read WhatsApp media"
+-- Public can READ media files (bucket is public for direct <img> src)
+CREATE POLICY "Public can read WhatsApp media"
 ON storage.objects
 FOR SELECT
-TO authenticated
+TO public
 USING (bucket_id = 'whatsapp-media');
 
 -- Service role can INSERT/UPDATE/DELETE (used by webhook handler)
