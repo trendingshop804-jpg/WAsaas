@@ -37,22 +37,33 @@ ALTER TABLE IF EXISTS public.messages
 
 -- ---------------------------------------------------------------------------
 -- 3. Migrate existing data: map legacy columns if needed
---    If the table was created with 'body' instead of 'content', copy it
---    If it used 'meta_message_id' instead of 'wa_message_id', copy it
---    If it used 'created_at' instead of 'received_at', copy it
+--    Use DO blocks with exception handling so this is safe even if
+--    the legacy columns (body, meta_message_id, created_at) don't exist
 -- ---------------------------------------------------------------------------
 
-UPDATE public.messages
-    SET content = body
-WHERE content IS NULL AND body IS NOT NULL;
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'messages' AND column_name = 'body') THEN
+        UPDATE public.messages SET content = body WHERE content IS NULL AND body IS NOT NULL;
+    END IF;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
 
-UPDATE public.messages
-    SET wa_message_id = meta_message_id
-WHERE wa_message_id IS NULL AND meta_message_id IS NOT NULL;
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'messages' AND column_name = 'meta_message_id') THEN
+        UPDATE public.messages SET wa_message_id = meta_message_id WHERE wa_message_id IS NULL AND meta_message_id IS NOT NULL;
+    END IF;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
 
-UPDATE public.messages
-    SET received_at = created_at
-WHERE received_at IS NULL AND created_at IS NOT NULL;
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'messages' AND column_name = 'created_at') THEN
+        UPDATE public.messages SET received_at = created_at WHERE received_at IS NULL AND created_at IS NOT NULL;
+    END IF;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
 
 -- ---------------------------------------------------------------------------
 -- 4. Create private storage bucket for WhatsApp media
@@ -119,7 +130,6 @@ CREATE INDEX IF NOT EXISTS idx_messages_media_type ON public.messages(message_ty
 DO $$
 BEGIN
     IF EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
-        PERFORM pg_catalog.pg_replication_origin_advance('supabase_realtime', 0);
         IF NOT EXISTS (
             SELECT 1 FROM pg_publication_tables
             WHERE pubname = 'supabase_realtime' AND tablename = 'messages'
