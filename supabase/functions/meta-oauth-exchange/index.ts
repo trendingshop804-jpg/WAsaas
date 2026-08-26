@@ -193,6 +193,23 @@ async function savePrimaryAccounts(
   return saveSelectedAccounts(supabaseAdmin, organizationId, encryptedToken, discovery, wabaIndex, phoneIndex, instagramIndices);
 }
 
+async function autoConnectAccounts(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  organizationId: string,
+  encryptedToken: string,
+  discovery: DiscoveryResult
+): Promise<{ autoConnected: boolean; needsPicker: boolean; whatsapp: boolean; instagram: number }> {
+  const totalPhones = discovery.wabas.reduce((sum, w) => sum + w.phoneNumbers.length, 0);
+  const totalIg = discovery.instagram.length;
+
+  if (totalPhones <= 1 && totalIg <= 1) {
+    const result = await savePrimaryAccounts(supabaseAdmin, organizationId, encryptedToken, discovery);
+    return { autoConnected: true, needsPicker: false, ...result };
+  }
+
+  return { autoConnected: false, needsPicker: true, whatsapp: false, instagram: 0 };
+}
+
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -262,6 +279,22 @@ serve(async (req: Request) => {
         wabas: discovery.wabas,
         instagram: discovery.instagram,
         message: "Accounts discovered. Use save_selected to persist chosen accounts."
+      });
+    }
+
+    if (mode === "auto") {
+      const encryptedToken = await encryptToken(longLivedToken);
+      const autoResult = await autoConnectAccounts(supabaseAdmin, organizationId, encryptedToken, discovery);
+      return jsonResponse({
+        success: true,
+        autoConnected: autoResult.autoConnected,
+        needsPicker: autoResult.needsPicker,
+        wabas: discovery.wabas,
+        instagram: discovery.instagram,
+        saved: { whatsapp: autoResult.whatsapp, instagram: autoResult.instagram },
+        message: autoResult.autoConnected
+          ? "Accounts auto-connected successfully."
+          : "Multiple accounts found — picker required."
       });
     }
 

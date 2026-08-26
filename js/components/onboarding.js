@@ -69,20 +69,16 @@ class OnboardingComponent {
         `
       },
       {
-        title: 'Step 2: Connect WhatsApp Account',
-        desc: 'Choose between Official Meta Cloud OAuth or authorized QR connection.',
-        content: `
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-            <div class="card" style="padding: 14px; text-align: center; border-color: var(--brand-whatsapp);">
-              <div style="font-weight: 700; color: var(--brand-whatsapp); margin-bottom: 4px;">Method A: Meta OAuth</div>
-              <div style="font-size: 11.5px; color: var(--text-secondary);">Direct WABA Cloud API integration</div>
-            </div>
-            <div class="card" style="padding: 14px; text-align: center;">
-              <div style="font-weight: 700; color: #a78bfa; margin-bottom: 4px;">Method B: QR Code</div>
-              <div style="font-size: 11.5px; color: var(--text-secondary);">Authorized Gateway QR scan</div>
-            </div>
-          </div>
-        `
+        title: 'Step 2: Connect WhatsApp & Instagram',
+        desc: 'One-click connection to your WhatsApp Business and Instagram accounts via Facebook.',
+        content: '<div id="onboarding-meta-step"></div>',
+        onRender: () => {
+          const container = document.getElementById('onboarding-meta-step');
+          if (container && window.metaOnboardingComponent) {
+            window.metaOnboardingComponent.state = 'idle';
+            window.metaOnboardingComponent.render(container);
+          }
+        }
       },
       {
         title: 'Step 3: Discover & Import Leads',
@@ -151,6 +147,7 @@ class OnboardingComponent {
     if (titleEl) titleEl.textContent = cur.title;
     if (descEl) descEl.textContent = cur.desc;
     if (bodyEl) bodyEl.innerHTML = cur.content;
+    if (cur.onRender) cur.onRender();
   }
 
   nextStep() {
