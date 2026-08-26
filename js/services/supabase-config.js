@@ -60,15 +60,15 @@ async function loadPublicSupabaseConfig() {
     if (config.projectUrl && config.anonKey) {
       SUPABASE_CONFIG.projectUrl = config.projectUrl;
       SUPABASE_CONFIG.anonKey = config.anonKey;
-      SUPABASE_CONFIG.metaAppId = config.metaAppId || '';
-      SUPABASE_CONFIG.metaApiVersion = config.metaApiVersion || 'v21.0';
-      SUPABASE_CONFIG.whatsappConfigId = config.whatsappConfigId || '';
+      if (config.metaAppId) SUPABASE_CONFIG.metaAppId = config.metaAppId;
+      if (config.metaApiVersion) SUPABASE_CONFIG.metaApiVersion = config.metaApiVersion;
+      if (config.whatsappConfigId) SUPABASE_CONFIG.whatsappConfigId = config.whatsappConfigId;
       Object.assign(window.supabaseConfig, {
         projectUrl: config.projectUrl,
         anonKey: config.anonKey,
-        metaAppId: config.metaAppId || '',
-        metaApiVersion: config.metaApiVersion || 'v21.0',
-        whatsappConfigId: config.whatsappConfigId || '',
+        metaAppId: SUPABASE_CONFIG.metaAppId,
+        metaApiVersion: SUPABASE_CONFIG.metaApiVersion,
+        whatsappConfigId: SUPABASE_CONFIG.whatsappConfigId,
       });
     }
   } catch (error) {
