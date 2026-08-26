@@ -39,7 +39,7 @@ const SUPABASE_CONFIG = {
    * WhatsApp Embedded Signup Config ID from Meta App Dashboard.
    * Found at: Meta App Dashboard → WhatsApp → Configuration → Embedded Signup
    */
-  whatsappConfigId: '2399089357170046',
+  whatsappConfigId: '1530177935103547',
 
   /**
    * The Edge Function name that handles integration-key CRUD.
