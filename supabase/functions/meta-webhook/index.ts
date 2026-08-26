@@ -2,10 +2,33 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
-const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 const MEDIA_TYPES = ["image", "video", "audio", "document", "sticker"];
+
+const MIME_TO_EXT: Record<string, string> = {
+  "image/jpeg": "jpg", "image/png": "png", "image/gif": "gif", "image/webp": "webp",
+  "video/mp4": "mp4", "video/3gpp": "3gp", "video/quicktime": "mov",
+  "audio/mpeg": "mp3", "audio/ogg": "ogg", "audio/wav": "wav", "audio/mp4": "m4a", "audio/aac": "aac",
+  "application/pdf": "pdf", "application/msword": "doc",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+  "application/vnd.ms-excel": "xls",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
+  "text/plain": "txt", "text/csv": "csv", "application/zip": "zip",
+};
+
+function extFromMime(mimeType: string): string {
+  const clean = String(mimeType || "").split(";")[0].trim().toLowerCase();
+  if (MIME_TO_EXT[clean]) return MIME_TO_EXT[clean];
+  const sub = clean.split("/")[1] || "bin";
+  return /^[a-z0-9]{1,8}$/.test(sub) ? sub : "bin";
+}
+
+function buildStoragePath(cleanPhone: string, mediaId: string, fileName: string, mimeType: string): string {
+  const safeName = String(fileName || `media_${mediaId}`).replace(/[^a-zA-Z0-9._-]/g, "_");
+  const hasExt = /\.[a-zA-Z0-9]{1,8}$/.test(safeName);
+  const suffix = hasExt ? "" : `.${extFromMime(mimeType)}`;
+  return `${cleanPhone}/${mediaId}/${mediaId}_${safeName}${suffix}`;
+}
 
 async function processInboundMedia(msg: any, mediaType: string, supabaseAdmin: any) {
   const mediaId = msg[mediaType]?.id;
@@ -17,39 +40,48 @@ async function processInboundMedia(msg: any, mediaType: string, supabaseAdmin: a
     return null;
   }
 
-  let metaRes;
-  let downloadRes;
-  let uploadResult;
-
   try {
-    metaRes = await fetch(`https://graph.facebook.com/v21.0/${mediaId}?access_token=${accessToken}`);
-    if (!metaRes.ok) return null;
+    const metaRes = await fetch(
+      `https://graph.facebook.com/v21.0/${mediaId}`,
+      { headers: { Authorization: `Bearer ${accessToken}` } },
+    );
+    if (!metaRes.ok) {
+      console.error(`[Media] Meta lookup failed ${metaRes.status}:`, await metaRes.text());
+      return null;
+    }
     const meta = await metaRes.json();
     if (!meta.url) return null;
 
-    downloadRes = await fetch(meta.url, { headers: { 'Authorization': `Bearer ${accessToken}` } });
-    if (!downloadRes.ok) return null;
+    const downloadRes = await fetch(meta.url, { headers: { Authorization: `Bearer ${accessToken}` } });
+    if (!downloadRes.ok) {
+      console.error(`[Media] Download failed ${downloadRes.status}`);
+      return null;
+    }
     const buffer = await downloadRes.arrayBuffer();
-    const mimeType = meta.content_type || downloadRes.headers.get("content-type") || "application/octet-stream";
-    const fileName = meta.filename || `${mediaId}`;
+    const mimeType = meta.mime_type || meta.content_type || downloadRes.headers.get("content-type") ||
+      "application/octet-stream";
+    const fileName = meta.filename || msg[mediaType]?.filename || `${mediaId}`;
 
-    const cleanPhone = String(msg.from || "").replace(/[^0-9]/g, "").slice(-10);
-    const ext = (mimeType.split("/")[1] || "bin").split(";")[0];
-    const safeFileName = `${mediaId}_${fileName.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
-    const storagePath = `${cleanPhone}/${mediaId}/${safeFileName}.${ext}`;
+    const cleanPhone = String(msg.from || "").replace(/[^0-9]/g, "").slice(-10) || "unknown";
+    const storagePath = buildStoragePath(cleanPhone, mediaId, fileName, mimeType);
 
     const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
       .from("whatsapp-media")
       .upload(storagePath, new Uint8Array(buffer), { contentType: mimeType, upsert: true });
 
-    uploadResult = uploadData;
-    if (uploadError) return null;
+    if (uploadError) {
+      console.error("[Media] Storage upload error:", uploadError);
+      return null;
+    }
 
-    const { data: publicUrlData } = supabaseAdmin.storage.from("whatsapp-media").getPublicUrl(storagePath);
-    const publicUrl = publicUrlData?.publicUrl;
-    if (!publicUrl) return null;
-
-    return { mediaUrl: publicUrl, mediaMimeType: mimeType, fileName };
+    // Store the storage PATH (not a URL) so it matches what api/meta-webhook.js
+    // writes and what api/messages.js expects when it mints signed URLs.
+    return {
+      mediaUrl: uploadData?.path || storagePath,
+      mediaMimeType: mimeType,
+      fileName,
+      mediaSize: buffer.byteLength,
+    };
   } catch (err) {
     console.error("[Media] Processing error:", err);
     return null;
@@ -77,10 +109,16 @@ async function handler(request: Request): Promise<Response> {
       const payload = await request.json();
       const messages = payload?.entry?.[0]?.changes?.[0]?.value?.messages ?? [];
 
+      const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+      if (!serviceRoleKey) {
+        console.error("[Webhook] SUPABASE_SERVICE_ROLE_KEY not configured — cannot persist messages");
+        return new Response(null, { status: 200 });
+      }
+
       const supabaseAdmin = createClient(
         supabaseUrl,
-        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
-        { db: { schema: "public" }, auth: { persistSession: false } }
+        serviceRoleKey,
+        { db: { schema: "public" }, auth: { persistSession: false } },
       );
 
       for (const msg of messages) {
@@ -88,6 +126,19 @@ async function handler(request: Request): Promise<Response> {
         const type = msg.type ?? "";
         const content = msg.text?.body ?? "";
         const isMedia = MEDIA_TYPES.includes(type);
+
+        // Meta retries deliveries it considers failed, so skip messages we already stored.
+        if (msg.id) {
+          const { data: existing } = await supabaseAdmin
+            .from("messages")
+            .select("id")
+            .eq("wa_message_id", msg.id)
+            .limit(1);
+          if (existing && existing.length > 0) {
+            console.log("[Webhook] Duplicate message, skipping:", msg.id);
+            continue;
+          }
+        }
 
         let mediaInfo = null;
         let caption = "";
@@ -110,16 +161,20 @@ async function handler(request: Request): Promise<Response> {
           media_mime_type: mediaInfo?.mediaMimeType ?? null,
           file_name: mediaInfo?.fileName ?? null,
           media_caption: isMedia ? caption : null,
+          media_size: mediaInfo?.mediaSize ?? 0,
         };
 
-        const { error } = await supabase.from("messages").insert(messageRecord);
+        // Must use the service-role client: RLS on public.messages rejects anon inserts.
+        const { error } = await supabaseAdmin.from("messages").insert(messageRecord);
         if (error) console.error("[Webhook] Supabase insert error:", error);
       }
 
       return new Response(null, { status: 200 });
     } catch (err) {
+      // Always ack with 200. A non-2xx makes Meta retry the same payload and can
+      // eventually disable the webhook subscription.
       console.error("[Webhook] Processing error:", err);
-      return new Response("Server error", { status: 500 });
+      return new Response(null, { status: 200 });
     }
   }
 

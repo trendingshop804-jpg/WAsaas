@@ -34,11 +34,14 @@ function getMimeTypeFromExt(ext) {
   return map[ext] || 'application/octet-stream';
 }
 
-async function uploadMediaToMeta(phoneNumberId, accessToken, fileBuffer, mimeType) {
-  const ext = mimeType.split('/')[1] || 'bin';
+async function uploadMediaToMeta(phoneNumberId, accessToken, fileBuffer, mimeType, fileName) {
   const formData = new FormData();
-  formData.append('file', new Blob([fileBuffer], { type: mimeType }), `media.${ext}`);
+  const uploadName = fileName && /\.[a-zA-Z0-9]{1,8}$/.test(fileName)
+    ? fileName
+    : `media.${extFromMime(mimeType)}`;
+  formData.append('file', new Blob([fileBuffer], { type: mimeType }), uploadName);
   formData.append('messaging_product', 'whatsapp');
+  formData.append('type', mimeType);
 
   const res = await fetch(`https://graph.facebook.com/v21.0/${phoneNumberId}/media`, {
     method: 'POST',
@@ -56,7 +59,7 @@ async function uploadMediaToMeta(phoneNumberId, accessToken, fileBuffer, mimeTyp
   return data.id;
 }
 
-async function sendMediaMessage(phoneNumberId, accessToken, toNumber, messageType, mediaId, caption) {
+async function sendMediaMessage(phoneNumberId, accessToken, toNumber, messageType, mediaId, caption, fileName) {
   const metaType = getMetaMediaType(messageType);
   const body = {
     messaging_product: 'whatsapp',
@@ -67,6 +70,11 @@ async function sendMediaMessage(phoneNumberId, accessToken, toNumber, messageTyp
 
   if (caption && ['image', 'video', 'document'].includes(metaType)) {
     body[metaType].caption = caption;
+  }
+
+  // Meta requires `filename` for documents, otherwise the recipient sees a generic name.
+  if (metaType === 'document' && fileName) {
+    body[metaType].filename = fileName;
   }
 
   const res = await fetch(`https://graph.facebook.com/v21.0/${phoneNumberId}/messages`, {
@@ -87,10 +95,8 @@ async function sendMediaMessage(phoneNumberId, accessToken, toNumber, messageTyp
 }
 
 async function uploadToSupabaseStorage(senderNumber, fileBuffer, fileName, mimeType, mediaId) {
-  const cleanPhone = String(senderNumber || '').replace(/[^0-9]/g, '').slice(-10);
-  const ext = mimeType.split('/')[1] || 'bin';
-  const safeFileName = `${mediaId}_${fileName.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
-  const storagePath = `${cleanPhone}/${mediaId}/${safeFileName}.${ext}`;
+  const cleanPhone = String(senderNumber || '').replace(/[^0-9]/g, '').slice(-10) || 'unknown';
+  const storagePath = buildStoragePath(cleanPhone, mediaId, fileName, mimeType);
 
   const { data: uploadData, error: uploadError } = await supabase.storage
     .from('whatsapp-media')
@@ -101,7 +107,38 @@ async function uploadToSupabaseStorage(senderNumber, fileBuffer, fileName, mimeT
     return null;
   }
 
-  return storagePath;
+  return uploadData?.path || storagePath;
+}
+
+/**
+ * Build a safe storage path. Keeps the original extension when the file name
+ * already has one, so we never produce names like "invoice.pdf.pdf" or
+ * "sheet.xlsx.vnd.openxmlformats-officedocument.spreadsheetml.sheet".
+ */
+function buildStoragePath(cleanPhone, mediaId, fileName, mimeType) {
+  const safeName = String(fileName || `media_${mediaId}`).replace(/[^a-zA-Z0-9._-]/g, '_');
+  const hasExt = /\.[a-zA-Z0-9]{1,8}$/.test(safeName);
+  const suffix = hasExt ? '' : `.${extFromMime(mimeType)}`;
+  return `${cleanPhone}/${mediaId}/${mediaId}_${safeName}${suffix}`;
+}
+
+const MIME_TO_EXT = {
+  'image/jpeg': 'jpg', 'image/png': 'png', 'image/gif': 'gif', 'image/webp': 'webp',
+  'video/mp4': 'mp4', 'video/3gpp': '3gp', 'video/quicktime': 'mov',
+  'audio/mpeg': 'mp3', 'audio/ogg': 'ogg', 'audio/wav': 'wav', 'audio/mp4': 'm4a', 'audio/aac': 'aac',
+  'application/pdf': 'pdf', 'application/msword': 'doc',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+  'application/vnd.ms-excel': 'xls',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+  'text/plain': 'txt', 'text/csv': 'csv', 'application/zip': 'zip'
+};
+
+function extFromMime(mimeType) {
+  const clean = String(mimeType || '').split(';')[0].trim().toLowerCase();
+  if (MIME_TO_EXT[clean]) return MIME_TO_EXT[clean];
+  const sub = clean.split('/')[1] || 'bin';
+  // Reject long vendor sub-types like "vnd.openxmlformats-...", they are not extensions.
+  return /^[a-z0-9]{1,8}$/.test(sub) ? sub : 'bin';
 }
 
 export default async function handler(req, res) {
@@ -118,7 +155,10 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { file: fileBase64, messageType, text, leadId, senderNumber, caption, fileName, mimeType } = req.body;
+    const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
+    // The frontend posts `fileBase64`; `file` is accepted as a legacy alias.
+    const { messageType, text, leadId, senderNumber, caption, fileName, mimeType } = body;
+    const fileBase64 = body.fileBase64 || body.file;
 
     if (!fileBase64 || !senderNumber || !leadId) {
       return res.status(400).json({ error: 'fileBase64, senderNumber, and leadId are required' });
@@ -128,7 +168,15 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'WhatsApp credentials not configured on server' });
     }
 
+    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+      return res.status(500).json({ error: 'Supabase credentials not configured on server' });
+    }
+
     const fileBuffer = Buffer.from(fileBase64, 'base64');
+    if (!fileBuffer.length) {
+      return res.status(400).json({ error: 'Uploaded file is empty or not valid base64' });
+    }
+
     const resolvedMimeType = mimeType || getMimeTypeFromExt(fileName?.split('.').pop()?.toLowerCase()) || 'application/octet-stream';
     const resolvedMessageType = messageType || getMediaMessageTypeFromMime(resolvedMimeType, fileName) || 'document';
 
@@ -136,14 +184,22 @@ export default async function handler(req, res) {
     let storagePath = null;
 
     try {
-      mediaId = await uploadMediaToMeta(PHONE_NUMBER_ID, WHATSAPP_ACCESS_TOKEN, fileBuffer, resolvedMimeType);
+      mediaId = await uploadMediaToMeta(PHONE_NUMBER_ID, WHATSAPP_ACCESS_TOKEN, fileBuffer, resolvedMimeType, fileName);
     } catch (err) {
       console.error('Meta media upload failed:', err);
       return res.status(502).json({ error: `Meta upload failed: ${err.message}` });
     }
 
     try {
-      const sendResult = await sendMediaMessage(PHONE_NUMBER_ID, WHATSAPP_ACCESS_TOKEN, senderNumber, resolvedMessageType, mediaId, caption || text || '');
+      const sendResult = await sendMediaMessage(
+        PHONE_NUMBER_ID,
+        WHATSAPP_ACCESS_TOKEN,
+        senderNumber,
+        resolvedMessageType,
+        mediaId,
+        caption || text || '',
+        fileName
+      );
       const waMessageId = sendResult.messages?.[0]?.id || null;
 
       try {
@@ -174,12 +230,25 @@ export default async function handler(req, res) {
         console.error('Supabase insert error:', dbError);
       }
 
+      // The DB keeps the storage path; the client needs a fetchable URL for its
+      // optimistic bubble, so resolve one here.
+      let mediaPublicUrl = null;
+      if (storagePath) {
+        const { data: signed } = await supabase.storage
+          .from('whatsapp-media')
+          .createSignedUrl(storagePath, 60 * 60 * 24);
+        mediaPublicUrl = signed?.signedUrl
+          || supabase.storage.from('whatsapp-media').getPublicUrl(storagePath).data?.publicUrl
+          || null;
+      }
+
       return res.status(200).json({
         success: true,
         messageId: waMessageId,
         mediaId,
         storagePath,
-        message: messageRecord
+        mediaPublicUrl,
+        message: { ...messageRecord, media_public_url: mediaPublicUrl }
       });
     } catch (err) {
       console.error('Send media message failed:', err);

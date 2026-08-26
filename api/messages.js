@@ -29,22 +29,27 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: error.message });
     }
 
-    // For messages with media, generate a signed URL from private storage
+    // For messages with media, resolve the stored storage path into a fetchable URL.
     const messages = await Promise.all((data || []).map(async (msg) => {
-      if (msg.media_url && msg.message_type !== 'text') {
-        const { data: urlData, error: urlError } = await supabase
-          .storage
-          .from('whatsapp-media')
-          .createSignedUrl(msg.media_url, SIGNED_URL_TTL);
+      if (!msg.media_url || msg.message_type === 'text') return msg;
 
-        if (urlError) {
-          console.warn(`Failed to create signed URL for ${msg.media_url}:`, urlError.message);
-          return { ...msg, media_url: null };
-        }
+      // Legacy rows (and the older Edge Function) stored a full URL rather than a
+      // storage path. Passing that to createSignedUrl fails, so hand it back as-is.
+      if (/^https?:\/\//i.test(msg.media_url)) return msg;
 
-        return { ...msg, media_url: urlData?.signedUrl || null };
+      const { data: urlData, error: urlError } = await supabase
+        .storage
+        .from('whatsapp-media')
+        .createSignedUrl(msg.media_url, SIGNED_URL_TTL);
+
+      if (urlError || !urlData?.signedUrl) {
+        console.warn(`Failed to create signed URL for ${msg.media_url}:`, urlError?.message);
+        // Bucket is public, so fall back to the public URL before giving up.
+        const publicUrl = supabase.storage.from('whatsapp-media').getPublicUrl(msg.media_url).data?.publicUrl;
+        return { ...msg, media_url: publicUrl || null };
       }
-      return msg;
+
+      return { ...msg, media_url: urlData.signedUrl };
     }));
 
     return res.status(200).json({ count: messages.length, messages });

@@ -533,9 +533,14 @@ class InboxComponent {
       optimisticMsg.wa_message_id = data.messageId;
       optimisticMsg.isOptimistic = false;
 
-      if (data.message && data.message.media_url) {
-        optimisticMsg.media_url = data.message.media_url;
-        optimisticMsg.mediaUrl = data.message.media_url;
+      // Only swap the local blob preview for a real fetchable URL. The API also
+      // returns `message.media_url`, but that is a bare storage path which the
+      // browser cannot render.
+      const resolvedUrl = data.mediaPublicUrl || data.message?.media_public_url;
+      if (resolvedUrl && /^https?:\/\//i.test(resolvedUrl)) {
+        optimisticMsg.media_url = resolvedUrl;
+        optimisticMsg.mediaUrl = resolvedUrl;
+        URL.revokeObjectURL(mediaUrl);
       }
     } catch (err) {
       console.error('Media send failed:', err);
@@ -552,7 +557,12 @@ class InboxComponent {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => {
-        const base64 = (reader.result as string).split(',')[1];
+        const result = String(reader.result || '');
+        const base64 = result.includes(',') ? result.split(',')[1] : result;
+        if (!base64) {
+          reject(new Error('Failed to read file contents'));
+          return;
+        }
         resolve(base64);
       };
       reader.onerror = reject;
@@ -843,6 +853,21 @@ class InboxComponent {
     return div.innerHTML;
   }
 
+  /**
+   * Escape for use inside a double-quoted HTML attribute.
+   * escapeHtml() does not escape quotes, so it is unsafe for attributes —
+   * sender-controlled values like a WhatsApp document filename could otherwise
+   * break out of the attribute and inject markup.
+   */
+  escapeAttr(value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
   renderMediaBubble(msg, msgType, isOutbound) {
     const mediaUrl = msg.mediaUrl || msg.media_url || '';
     const mimeType = msg.mimeType || msg.media_mime_type || '';
@@ -877,10 +902,11 @@ class InboxComponent {
     }
 
     const captionColor = isOutbound ? 'rgba(255,255,255,0.85)' : 'var(--text-secondary)';
+    const safeUrl = this.escapeAttr(mediaUrl);
     return `
       <div class="media-image-container">
-        <div class="media-loading-shimmer" data-shimmer-for="${this.escapeHtml(mediaUrl)}"></div>
-        <img src="${mediaUrl}" alt="Image" data-media-url="${mediaUrl}" data-media-type="image"
+        <div class="media-loading-shimmer" data-shimmer-for="${safeUrl}"></div>
+        <img src="${safeUrl}" alt="Image" data-media-url="${safeUrl}" data-media-type="image"
              style="max-width: 100%; max-height: 320px; object-fit: cover; display: block; border-radius: 8px; cursor: pointer; opacity: 0; transition: opacity 0.3s ease;"
              loading="lazy"
              onload="this.style.opacity='1'; const shim=this.parentElement.querySelector('.media-loading-shimmer'); if(shim) shim.style.display='none';"
@@ -914,7 +940,7 @@ class InboxComponent {
           ${this.generateWaveformBars()}
         </div>
         <span class="audio-duration" data-duration-for="${audioId}">${durationText}</span>
-        <audio id="${audioId}" src="${mediaUrl}" type="${mimeType || 'audio/mpeg'}" preload="none" style="display:none;"></audio>
+        <audio id="${audioId}" src="${this.escapeAttr(mediaUrl)}" type="${this.escapeAttr(mimeType || 'audio/mpeg')}" preload="none" style="display:none;"></audio>
       </div>
     `;
   }
@@ -931,12 +957,14 @@ class InboxComponent {
 
     const duration = msg.duration || '';
     const captionColor = isOutbound ? 'rgba(255,255,255,0.85)' : 'var(--text-secondary)';
+    const safeUrl = this.escapeAttr(mediaUrl);
+    const safeMime = this.escapeAttr(mimeType || 'video/mp4');
     return `
-      <div class="msg-video-container" data-video-url="${mediaUrl}" data-video-type="${mimeType || 'video/mp4'}">
+      <div class="msg-video-container" data-video-url="${safeUrl}" data-video-type="${safeMime}">
         <video class="msg-video-poster" preload="metadata" muted playsinline
-               poster="${mediaUrl}#t=0.5"
+               poster="${safeUrl}#t=0.5"
                onerror="this.parentElement.innerHTML='<div class=\\'media-video-placeholder\\' style=\\'display:flex;align-items:center;justify-content:center;padding:16px;color:var(--text-muted);\\'><span>⚠️ Video failed to load</span></div>'">
-          <source src="${mediaUrl}" type="${mimeType || 'video/mp4'}">
+          <source src="${safeUrl}" type="${safeMime}">
         </video>
         <div class="msg-video-overlay">
           <div class="msg-video-play-btn">
@@ -950,8 +978,10 @@ class InboxComponent {
   }
 
   renderDocumentBubble(msg, isOutbound, mediaUrl, fileName, mimeType, mediaSize, caption) {
-    const ext = fileName.split('.').pop()?.toUpperCase() || 'FILE';
-    const iconLetter = ext.slice(0, 4);
+    const safeName = String(fileName || 'document');
+    const ext = safeName.split('.').pop()?.toUpperCase() || 'FILE';
+    // Filenames come from the sender, so keep only alphanumerics for the badge.
+    const iconLetter = (ext.replace(/[^A-Z0-9]/gi, '') || 'FILE').slice(0, 4);
     const sizeStr = mediaSize ? this.formatFileSize(mediaSize) : '';
     const isUnavailable = !mediaUrl;
     const cardClass = isUnavailable ? 'msg-document-card disabled' : 'msg-document-card';
@@ -971,7 +1001,7 @@ class InboxComponent {
     }
 
     return `
-      <a href="${mediaUrl}" target="_blank" rel="noopener noreferrer" class="${cardClass}" download="${this.escapeHtml(fileName)}">
+      <a href="${this.escapeAttr(mediaUrl)}" target="_blank" rel="noopener noreferrer" class="${cardClass}" download="${this.escapeAttr(fileName)}">
         <div class="msg-document-icon" style="background: ${iconBg}; color: ${iconColor};">${iconLetter}</div>
         <div class="msg-document-info">
           <div class="msg-document-name">${this.escapeHtml(fileName)}</div>
@@ -995,8 +1025,8 @@ class InboxComponent {
 
     return `
       <div class="msg-bubble-sticker" style="padding: 0; background: transparent; border: none; box-shadow: none; border-radius: 0;">
-        <img src="${mediaUrl}" alt="Sticker" class="msg-sticker"
-             data-media-url="${mediaUrl}" data-media-type="sticker"
+        <img src="${this.escapeAttr(mediaUrl)}" alt="Sticker" class="msg-sticker"
+             data-media-url="${this.escapeAttr(mediaUrl)}" data-media-type="sticker"
              loading="lazy"
              onerror="this.parentElement.innerHTML='<div style=\\'display:flex;align-items:center;justify-content:center;padding:8px;color:var(--text-muted);font-size:12px;\\'>🩷 Sticker</div>'">
       </div>
@@ -1048,14 +1078,15 @@ class InboxComponent {
   /**
    * Format bytes to human-readable file size.
    */
-   formatFileSize(bytes) {
-     if (!bytes || bytes === 0) return '';
-     const units = ['B', 'KB', 'MB', 'GB'];
-     const i = Math.floor(Math.log(bytes) / Math.log(1024));
-     const val = bytes / Math.pow(1024, i);
-     const formatted = i === 0 ? val.toFixed(0) : parseFloat(val.toFixed(1)).toString();
-     return formatted + ' ' + units[i];
-    }
+  formatFileSize(bytes) {
+    const n = Number(bytes);
+    if (!Number.isFinite(n) || n <= 0) return '';
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.min(Math.floor(Math.log(n) / Math.log(1024)), units.length - 1);
+    const val = n / Math.pow(1024, i);
+    const formatted = i === 0 ? val.toFixed(0) : parseFloat(val.toFixed(1)).toString();
+    return formatted + ' ' + units[i];
+  }
 
   /**
    * Bind click handlers on "View" and "Download" buttons for media messages.
@@ -1187,14 +1218,15 @@ class InboxComponent {
     `;
 
     let innerContent = '';
+    const safeUrl = this.escapeAttr(url);
     if (type === 'image') {
-      innerContent = `<img src="${url}" alt="Preview" style="max-width:90vw;max-height:75vh;object-fit:contain;border-radius:8px;">`;
+      innerContent = `<img src="${safeUrl}" alt="Preview" style="max-width:90vw;max-height:75vh;object-fit:contain;border-radius:8px;">`;
     } else if (type === 'video') {
-      innerContent = `<video controls autoplay style="max-width:90vw;max-height:75vh;border-radius:8px;background:#000;"><source src="${url}"><p style="color:#fff;">Video playback not supported</p></video>`;
+      innerContent = `<video controls autoplay style="max-width:90vw;max-height:75vh;border-radius:8px;background:#000;"><source src="${safeUrl}"><p style="color:#fff;">Video playback not supported</p></video>`;
     } else if (type === 'audio') {
-      innerContent = `<div style="display:flex;flex-direction:column;align-items:center;gap:20px;color:#fff;"><div style="font-size:48px;">🎵</div><audio controls style="width:100%;max-width:400px;"><source src="${url}"></audio>${fileName ? `<span style="font-size:14px;">${fileName}</span>` : ''}</div>`;
+      innerContent = `<div style="display:flex;flex-direction:column;align-items:center;gap:20px;color:#fff;"><div style="font-size:48px;">🎵</div><audio controls style="width:100%;max-width:400px;"><source src="${safeUrl}"></audio>${fileName ? `<span style="font-size:14px;">${this.escapeHtml(fileName)}</span>` : ''}</div>`;
     } else if (type === 'sticker') {
-      innerContent = `<img src="${url}" alt="Sticker Preview" style="max-width:60vw;max-height:60vh;object-fit:contain;">`;
+      innerContent = `<img src="${safeUrl}" alt="Sticker Preview" style="max-width:60vw;max-height:60vh;object-fit:contain;">`;
     }
 
     const downloadBtnHtml = (type === 'image' || type === 'video' || type === 'audio')

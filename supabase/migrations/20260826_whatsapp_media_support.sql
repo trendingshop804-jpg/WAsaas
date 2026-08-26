@@ -78,21 +78,30 @@ VALUES (
   52428800,
   ARRAY[
     'image/jpeg', 'image/png', 'image/webp', 'image/gif',
-    'video/mp4', 'video/3gpp',
-    'audio/mpeg', 'audio/ogg', 'audio/aac',
-    'application/pdf', 'application/zip',
+    'video/mp4', 'video/3gpp', 'video/quicktime', 'video/webm', 'video/x-msvideo',
+    'audio/mpeg', 'audio/ogg', 'audio/aac', 'audio/mp4', 'audio/wav', 'audio/webm', 'audio/amr',
+    'application/pdf', 'application/zip', 'application/octet-stream',
     'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    'text/plain', 'application/msword', 'application/msword'
+    'application/vnd.ms-powerpoint', 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    'text/plain', 'text/csv', 'application/msword'
   ]
 ) ON CONFLICT (id) DO UPDATE
     SET public = TRUE,
-        file_size_limit = EXCLUDED.file_size_limit;
+        file_size_limit = EXCLUDED.file_size_limit,
+        allowed_mime_types = EXCLUDED.allowed_mime_types;
 
 -- ---------------------------------------------------------------------------
 -- 5. RLS Policies on storage.objects for the whatsapp-media bucket
 --    (Storage buckets in Supabase use the storage.objects table for RLS)
+--    Postgres has no CREATE POLICY IF NOT EXISTS, so drop first to keep this
+--    migration re-runnable.
 -- ---------------------------------------------------------------------------
+
+DROP POLICY IF EXISTS "Public can read WhatsApp media" ON storage.objects;
+DROP POLICY IF EXISTS "Service role can manage WhatsApp media" ON storage.objects;
+DROP POLICY IF EXISTS "Service role can update WhatsApp media" ON storage.objects;
+DROP POLICY IF EXISTS "Service role can delete WhatsApp media" ON storage.objects;
 
 -- Public can READ media files (bucket is public for direct <img> src)
 CREATE POLICY "Public can read WhatsApp media"
@@ -112,6 +121,13 @@ CREATE POLICY "Service role can update WhatsApp media"
 ON storage.objects
 FOR UPDATE
 TO service_role
+USING (bucket_id = 'whatsapp-media')
+WITH CHECK (bucket_id = 'whatsapp-media');
+
+CREATE POLICY "Service role can delete WhatsApp media"
+ON storage.objects
+FOR DELETE
+TO service_role
 USING (bucket_id = 'whatsapp-media');
 
 -- ---------------------------------------------------------------------------
@@ -123,6 +139,26 @@ CREATE INDEX IF NOT EXISTS idx_messages_sender_number ON public.messages(sender_
 CREATE INDEX IF NOT EXISTS idx_messages_received_at ON public.messages(received_at DESC);
 CREATE INDEX IF NOT EXISTS idx_messages_media_url ON public.messages(media_url) WHERE media_url IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_messages_media_type ON public.messages(message_type) WHERE message_type != 'text';
+
+-- Meta retries webhook deliveries, and the handler's SELECT-then-INSERT check can
+-- lose a race. A unique index makes the duplicate impossible at the DB level.
+-- Only created when the table is already free of duplicates, so this never fails
+-- a deploy and never deletes existing rows.
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM public.messages
+        WHERE wa_message_id IS NOT NULL
+        GROUP BY wa_message_id HAVING count(*) > 1
+    ) THEN
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_messages_wa_message_id
+            ON public.messages(wa_message_id) WHERE wa_message_id IS NOT NULL;
+    ELSE
+        RAISE NOTICE 'Skipping uq_messages_wa_message_id: duplicate wa_message_id rows exist. Clean them up, then re-run.';
+    END IF;
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'Could not create uq_messages_wa_message_id: %', SQLERRM;
+END $$;
 
 -- ---------------------------------------------------------------------------
 -- 7. Enable Supabase Realtime for the messages table (for live updates)

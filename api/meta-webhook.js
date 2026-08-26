@@ -19,8 +19,9 @@ const MEDIA_TYPES = new Set(['image', 'video', 'audio', 'document', 'sticker']);
  * Step 2: GET {url} → returns binary data
  */
 async function downloadMediaFromMeta(mediaId) {
-  const metaUrl = `https://graph.facebook.com/v21.0/${mediaId}?access_token=${WHATSAPP_ACCESS_TOKEN}`;
-  const metaRes = await fetch(metaUrl);
+  const metaRes = await fetch(`https://graph.facebook.com/v21.0/${mediaId}`, {
+    headers: { Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}` }
+  });
   if (!metaRes.ok) {
     const err = await metaRes.text();
     throw new Error(`Meta Media API error ${metaRes.status}: ${err}`);
@@ -30,27 +31,49 @@ async function downloadMediaFromMeta(mediaId) {
   const downloadUrl = meta.url;
   if (!downloadUrl) throw new Error(`No download URL returned for media ${mediaId}`);
 
-  const downloadRes = await fetch(downloadUrl);
+  // The lookaside.fbsbx.com download URL requires the bearer token too —
+  // without it Meta answers 401 and every inbound media file is lost.
+  const downloadRes = await fetch(downloadUrl, {
+    headers: { Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}` }
+  });
   if (!downloadRes.ok) {
-    throw new Error(`Failed to download media from ${downloadUrl}: ${downloadRes.status}`);
+    throw new Error(`Failed to download media ${mediaId}: ${downloadRes.status}`);
   }
 
   const buffer = await downloadRes.arrayBuffer();
-  const mimeType = meta.content_type || downloadRes.headers.get('content-type') || 'application/octet-stream';
+  const mimeType = meta.mime_type || meta.content_type || downloadRes.headers.get('content-type') || 'application/octet-stream';
   const fileName = meta.filename || `${mediaId}`;
 
   return { buffer, mimeType, fileName };
 }
 
+const MIME_TO_EXT = {
+  'image/jpeg': 'jpg', 'image/png': 'png', 'image/gif': 'gif', 'image/webp': 'webp',
+  'video/mp4': 'mp4', 'video/3gpp': '3gp', 'video/quicktime': 'mov',
+  'audio/mpeg': 'mp3', 'audio/ogg': 'ogg', 'audio/wav': 'wav', 'audio/mp4': 'm4a', 'audio/aac': 'aac',
+  'application/pdf': 'pdf', 'application/msword': 'doc',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+  'application/vnd.ms-excel': 'xls',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+  'text/plain': 'txt', 'text/csv': 'csv', 'application/zip': 'zip'
+};
+
+function extFromMime(mimeType) {
+  const clean = String(mimeType || '').split(';')[0].trim().toLowerCase();
+  if (MIME_TO_EXT[clean]) return MIME_TO_EXT[clean];
+  const sub = clean.split('/')[1] || 'bin';
+  return /^[a-z0-9]{1,8}$/.test(sub) ? sub : 'bin';
+}
+
 /**
- * Upload media buffer to Supabase Storage (private bucket 'whatsapp-media').
+ * Upload media buffer to Supabase Storage bucket 'whatsapp-media'.
  * Returns the storage path for later signed-URL generation.
  */
 async function uploadMediaToStorage(senderNumber, mediaId, fileName, mimeType, buffer) {
-  const cleanPhone = String(senderNumber || '').replace(/[^0-9]/g, '').slice(-10);
-  const ext = (mimeType.split('/')[1] || 'bin').split(';')[0];
-  const safeFileName = `${mediaId}_${fileName.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
-  const storagePath = `${cleanPhone}/${mediaId}/${safeFileName}.${ext}`;
+  const cleanPhone = String(senderNumber || '').replace(/[^0-9]/g, '').slice(-10) || 'unknown';
+  const safeName = String(fileName || `media_${mediaId}`).replace(/[^a-zA-Z0-9._-]/g, '_');
+  const hasExt = /\.[a-zA-Z0-9]{1,8}$/.test(safeName);
+  const storagePath = `${cleanPhone}/${mediaId}/${mediaId}_${safeName}${hasExt ? '' : `.${extFromMime(mimeType)}`}`;
 
   const { data: uploadData, error: uploadError } = await supabase
     .storage
@@ -64,7 +87,7 @@ async function uploadMediaToStorage(senderNumber, mediaId, fileName, mimeType, b
     throw new Error(`Supabase Storage upload error: ${uploadError.message}`);
   }
 
-  return uploadData.path;
+  return uploadData?.path || storagePath;
 }
 
 /**
@@ -221,6 +244,20 @@ export default async function handler(req, res) {
           const msgType = msg.type || 'text';
           const isMedia = MEDIA_TYPES.has(msgType);
 
+          // ---- Duplicate check (before media download, so Meta retries stay cheap) ----
+          if (msg.id) {
+            const { data: existing } = await supabase
+              .from('messages')
+              .select('id')
+              .eq('wa_message_id', msg.id)
+              .limit(1);
+
+            if (existing && existing.length > 0) {
+              console.log('Duplicate message, skipping:', msg.id);
+              continue;
+            }
+          }
+
           // ---- Media messages: download from Meta, upload to Supabase Storage ----
           let mediaInfo = null;
           if (isMedia) {
@@ -233,18 +270,6 @@ export default async function handler(req, res) {
           // ---- Extract content/caption for display ----
           const caption = msg[msgType]?.caption || msg.caption || '';
           const userText = isMedia ? caption : (msg.text?.body || '');
-
-          // ---- Duplicate check ----
-          const { data: existing } = await supabase
-            .from('messages')
-            .select('id')
-            .eq('wa_message_id', msg.id)
-            .limit(1);
-
-          if (existing && existing.length > 0) {
-            console.log('Duplicate message, skipping:', msg.id);
-            continue;
-          }
 
           // ---- Save inbound message (with media fields if applicable) ----
           const { error } = await supabase.from('messages').insert({
@@ -268,9 +293,10 @@ export default async function handler(req, res) {
           // AI reply via OpenRouter (text messages only)
           if (userText && msgType === 'text') {
             const aiReply = await generateAIReply(userText);
-            await sendWhatsAppMessage(phoneNumberId, msg.from, aiReply);
+            const sendResult = await sendWhatsAppMessage(phoneNumberId, msg.from, aiReply);
 
             await supabase.from('messages').insert({
+              wa_message_id: sendResult?.messages?.[0]?.id || null,
               sender_number: msg.from,
               content: aiReply,
               message_type: 'text',
