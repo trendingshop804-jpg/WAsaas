@@ -616,17 +616,16 @@ class InboxComponent {
       return;
     }
 
-    const MEDIA_TYPES = ['image', 'video', 'audio', 'document', 'sticker'];
-
-    scrollArea.innerHTML = msgs.map((msg) => {
+    scrollArea.innerHTML = msgs.map((msg, index) => {
       const isOutbound = msg.direction === 'OUTBOUND' || msg.sender === 'outbound';
       const isSystem = msg.direction === 'SYSTEM' || msg.sender === 'system' || msg.isSystem;
-      const msgType = msg.type || 'text';
-      const isMedia = MEDIA_TYPES.includes(msgType);
+      const msgType = (msg.type || msg.message_type || 'text').toLowerCase();
+      const isMedia = ['image', 'video', 'audio', 'document', 'sticker'].includes(msgType);
+      const isUnsupported = msgType === 'unsupported';
 
       if (isSystem) {
         return `
-          <div class="msg-row justify-center flex my-2" style="display: flex; justify-content: center; margin: 12px 0;">
+          <div class="msg-row justify-center flex" style="display: flex; justify-content: center; margin: 12px 0;">
             <div class="msg-bubble system-bubble" style="background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.1); color: var(--text-secondary); font-size: 11.5px; padding: 5px 16px; border-radius: 20px; text-align: center;">
               ${msg.text || msg.body || ''}
             </div>
@@ -634,45 +633,47 @@ class InboxComponent {
         `;
       }
 
-      const bubbleClass = isOutbound ? 'msg-bubble-outbound' : 'msg-bubble-inbound';
-      const bubbleBg = isOutbound ? 'linear-gradient(135deg, #005c4b, #075e54)' : 'var(--bg-secondary)';
-      const bubbleColor = isOutbound ? '#ffffff' : 'var(--text-primary)';
+      const prevMsg = index > 0 ? msgs[index - 1] : null;
+      const isConsecutive = this.isConsecutiveMessage(prevMsg, msg);
 
-      if (isMedia) {
-        const mediaHtml = this.renderMediaMessage(msg, msgType, isOutbound);
-        const isSticker = msgType === 'sticker';
+      const alignClass = isOutbound ? 'justify-end' : 'justify-start';
+      const wrapClass = `msg-bubble-wrap ${isOutbound ? 'outbound' : 'inbound'}${isConsecutive ? ' consecutive' : ''}`;
+      const rowClass = `msg-row ${alignClass} flex${isConsecutive ? ' consecutive' : ''}`;
+      const maxWidth = msgType === 'sticker' ? '40%' : '72%';
 
-        return `
-          <div class="msg-row ${isOutbound ? 'justify-end' : 'justify-start'} flex" style="margin-bottom: 12px; display: flex; justify-content: ${isOutbound ? 'flex-end' : 'flex-start'};">
-            <div class="msg-bubble-wrap ${isOutbound ? 'outbound' : 'inbound'}" style="max-width: ${isSticker ? '40%' : '72%'};">
-              <div class="msg-bubble ${bubbleClass} p-3 rounded-lg text-sm shadow" style="background: ${bubbleBg}; color: ${bubbleColor}; padding: 8px 12px; border-radius: ${isSticker ? '8px' : '12px'}; font-size: 13.5px; line-height: 1.45;">
-                ${mediaHtml}
-              </div>
-              <div class="msg-footer flex items-center justify-between gap-3 mt-1 text-xs" style="font-size: 10.5px; color: var(--text-muted); display: flex; align-items: center; justify-content: ${isOutbound ? 'space-between' : 'flex-end'}; margin-top: 4px; padding: 0 2px;">
-                ${isOutbound ? `<span class="ai-tag-pill" style="background: rgba(139, 92, 246, 0.3); color: #c4b5fd; padding: 1px 6px; border-radius: 3px; font-weight: 700; text-transform: uppercase;">${msg.sentByHuman ? 'HUMAN' : 'AI AGENT'}</span>` : ''}
-                <span class="msg-meta flex items-center gap-1">
-                  <span>${msg.timestamp || '19:44'}${isOutbound ? ' · DELIVERED' : ''}</span>
-                  ${isOutbound ? '<span class="msg-tick read" style="color: #38bdf8; font-weight: 700; margin-left: 3px;">✓✓</span>' : ''}
-                </span>
-              </div>
-            </div>
-          </div>
-        `;
+      const timestamp = this.formatTimestamp(msg.timestamp || msg.received_at);
+
+      let contentHtml = '';
+      if (isUnsupported) {
+        contentHtml = this.renderUnsupportedBubble();
+      } else if (isMedia) {
+        contentHtml = this.renderMediaBubble(msg, msgType, isOutbound);
+      } else {
+        contentHtml = `<div class="msg-body">${this.escapeHtml(msg.text || msg.body || '')}</div>`;
       }
 
+      const aiTag = isOutbound ? `<span class="ai-tag-pill" style="background: rgba(139, 92, 246, 0.3); color: #c4b5fd; padding: 1px 6px; border-radius: 3px; font-weight: 700; text-transform: uppercase;">${msg.sentByHuman ? 'HUMAN' : 'AI AGENT'}</span>` : '';
+      const tick = isOutbound ? '<span class="msg-tick read" style="color: #38bdf8; font-weight: 700; margin-left: 3px;">✓✓</span>' : '';
+      const delivered = isOutbound ? ' · DELIVERED' : '';
+
+      const isSticker = msgType === 'sticker';
+      const bubbleClass = isSticker ? 'msg-bubble-sticker-bubble' : 'msg-bubble';
+
       return `
-        <div class="msg-row ${isOutbound ? 'justify-end' : 'justify-start'} flex" style="margin-bottom: 12px; display: flex; justify-content: ${isOutbound ? 'flex-end' : 'flex-start'};">
-          <div class="msg-bubble-wrap ${isOutbound ? 'outbound' : 'inbound'}" style="max-width: 72%;">
-            <div class="msg-bubble ${bubbleClass} p-3 rounded-lg text-sm shadow" style="background: ${bubbleBg}; color: ${bubbleColor}; padding: 12px 16px; border-radius: 12px; font-size: 13.5px; line-height: 1.45;">
-              <div class="msg-body">${msg.text || msg.body || ''}</div>
+        <div class="${rowClass}" style="margin-bottom: ${isConsecutive ? '2px' : '12px'}; display: flex; justify-content: ${isOutbound ? 'flex-end' : 'flex-start'};">
+          <div class="${wrapClass}" style="max-width: ${maxWidth};">
+            <div class="${bubbleClass}" style="padding: ${isSticker ? '0' : '8px 12px'}; border-radius: ${isConsecutive ? '12px' : '12px'}; font-size: 13.5px; line-height: 1.45;">
+              ${contentHtml}
             </div>
+            ${!isSticker ? `
             <div class="msg-footer flex items-center justify-between gap-3 mt-1 text-xs" style="font-size: 10.5px; color: var(--text-muted); display: flex; align-items: center; justify-content: ${isOutbound ? 'space-between' : 'flex-end'}; margin-top: 4px; padding: 0 2px;">
-              ${isOutbound ? `<span class="ai-tag-pill" style="background: rgba(139, 92, 246, 0.3); color: #c4b5fd; padding: 1px 6px; border-radius: 3px; font-weight: 700; text-transform: uppercase;">${msg.sentByHuman ? 'HUMAN' : 'AI AGENT'}</span>` : ''}
+              ${aiTag}
               <span class="msg-meta flex items-center gap-1">
-                <span>${msg.timestamp || '19:44'}${isOutbound ? ' · DELIVERED' : ''}</span>
-                ${isOutbound ? '<span class="msg-tick read" style="color: #38bdf8; font-weight: 700; margin-left: 3px;">✓✓</span>' : ''}
+                <span>${timestamp}${delivered}</span>
+                ${tick}
               </span>
             </div>
+            ` : ''}
           </div>
         </div>
       `;
@@ -681,123 +682,220 @@ class InboxComponent {
     this.bindMediaPreviewHandlers();
   }
 
-  /**
-   * Render the HTML body for a media message (image, video, audio, document, sticker).
-   */
-  renderMediaMessage(msg, msgType, isOutbound) {
+  isConsecutiveMessage(prevMsg, currMsg) {
+    if (!prevMsg) return false;
+    const prevIsSystem = prevMsg.direction === 'SYSTEM' || prevMsg.sender === 'system' || prevMsg.isSystem;
+    const currIsSystem = currMsg.direction === 'SYSTEM' || currMsg.sender === 'system' || currMsg.isSystem;
+    const prevIsSticker = (prevMsg.type || prevMsg.message_type || '').toLowerCase() === 'sticker';
+    const currIsSticker = (currMsg.type || currMsg.message_type || '').toLowerCase() === 'sticker';
+
+    if (prevIsSystem || currIsSystem || prevIsSticker || currIsSticker) return false;
+
+    const prevDir = (prevMsg.direction || '').toUpperCase();
+    const currDir = (currMsg.direction || '').toUpperCase();
+    const prevSender = (prevMsg.sender || '').toLowerCase();
+    const currSender = (currMsg.sender || '').toLowerCase();
+
+    return (prevDir && currDir && prevDir === currDir) || (prevSender && currSender && prevSender === currSender);
+  }
+
+  formatTimestamp(ts) {
+    if (!ts) return '--:--';
+    const d = new Date(ts);
+    if (isNaN(d.getTime())) return '--:--';
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
+  escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  renderMediaBubble(msg, msgType, isOutbound) {
     const mediaUrl = msg.mediaUrl || msg.media_url || '';
     const mimeType = msg.mimeType || msg.media_mime_type || '';
     const fileName = msg.fileName || msg.file_name || (msgType === 'document' ? 'document' : `${msgType}`);
-    const caption = msg.caption || '';
-
-    if (!mediaUrl) {
-      return this.renderMediaPlaceholder(msgType, fileName);
-    }
-
-    let mediaHtml = '';
+    const caption = msg.caption || msg.media_caption || '';
+    const mediaSize = msg.mediaSize || msg.media_size || 0;
 
     switch (msgType) {
       case 'image':
-        mediaHtml = `
-          <div class="media-image-container" style="position: relative; display: inline-block; max-width: 280px;">
-            <img src="${mediaUrl}" alt="Image" class="media-image" style="max-width: 100%; border-radius: 8px; display: block; cursor: pointer;"
-                 data-media-url="${mediaUrl}" data-media-type="image"
-                 loading="lazy" onload="this.style.opacity='1'; const l=this.parentElement.querySelector('.media-loading'); if(l)l.style.display='none';"
-                 onerror="this.parentElement.innerHTML='<div class=\\'media-error\\' style=\\'display:flex;align-items:center;justify-content:center;padding:16px;color:var(--text-muted);\\'><span>⚠️ Image failed to load</span></div>'">
-            <div class="media-loading" style="position:absolute;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.1);border-radius:8px;">
-              <div class="spinner-border" style="width:20px;height:20px;border:2px solid var(--border-medium);border-top-color:var(--text-muted);border-radius:50%;animation:spin 0.8s linear infinite;"></div>
-            </div>
-            <div class="media-actions" style="position:absolute;top:4px;right:4px;display:flex;gap:4px;">
-              <button class="media-action-btn media-download-btn" data-media-url="${mediaUrl}" data-file-name="${fileName || 'image'}"
-                      style="background:rgba(0,0,0,0.6);border:none;border-radius:4px;padding:4px 6px;cursor:pointer;color:#fff;font-size:14px;line-height:1;"
-                      title="Download">⬇</button>
-              <button class="media-action-btn media-view-btn" data-media-url="${mediaUrl}" data-media-type="image"
-                      style="background:rgba(0,0,0,0.6);border:none;border-radius:4px;padding:4px 8px;cursor:pointer;color:#fff;font-size:11px;"
-                      title="View full size">⊕</button>
-            </div>
-          </div>
-          ${caption ? `<div class="media-caption" style="font-size:13px;color:${isOutbound ? '#ffffffcc' : 'var(--text-secondary)'};margin-top:6px;max-width:280px;">${caption}</div>` : ''}
-        `;
-        break;
-
-      case 'video':
-        mediaHtml = `
-          <div class="media-video-container" style="position: relative; display: inline-block; max-width: 280px;">
-            <video preload="metadata" muted playsinline style="max-width: 100%; border-radius: 8px; display: block; background: #000;"
-                   data-media-url="${mediaUrl}" data-media-type="video"
-                   onerror="this.parentElement.innerHTML='<div class=\\'media-error\\' style=\\'display:flex;align-items:center;justify-content:center;padding:16px;color:var(--text-muted);\\'><span>⚠️ Video failed to load</span></div>'">
-              <source src="${mediaUrl}#t=0.1" type="${mimeType || 'video/mp4'}">
-            </video>
-            <div class="media-video-overlay" style="position:absolute;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.2);border-radius:8px;pointer-events:none;">
-              <div style="width:48px;height:48px;border-radius:50%;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;">
-                <span style="color:#fff;font-size:20px;">▶</span>
-              </div>
-            </div>
-            <div class="media-actions" style="position:absolute;top:4px;right:4px;display:flex;gap:4px;">
-              <button class="media-action-btn media-download-btn" data-media-url="${mediaUrl}" data-file-name="${fileName || 'video'}"
-                      style="background:rgba(0,0,0,0.6);border:none;border-radius:4px;padding:4px 6px;cursor:pointer;color:#fff;font-size:14px;line-height:1;"
-                      title="Download">⬇</button>
-              <button class="media-action-btn media-view-btn" data-media-url="${mediaUrl}" data-media-type="video"
-                      style="background:rgba(0,0,0,0.6);border:none;border-radius:4px;padding:4px 8px;cursor:pointer;color:#fff;font-size:11px;"
-                      title="Play full screen">⊕</button>
-            </div>
-          </div>
-          ${caption ? `<div class="media-caption" style="font-size:13px;color:${isOutbound ? '#ffffffcc' : 'var(--text-secondary)'};margin-top:6px;max-width:280px;">${caption}</div>` : ''}
-        `;
-        break;
-
+        return this.renderImageBubble(msg, isOutbound, mediaUrl, caption);
       case 'audio':
-        mediaHtml = `
-          <div class="media-audio-container" style="display:flex;align-items:center;gap:10px;background:rgba(0,0,0,0.05);border-radius:8px;padding:8px 12px;min-width:200px;max-width:280px;">
-            <audio controls preload="none" style="flex:1;height:36px;" data-media-url="${mediaUrl}" data-media-type="audio"
-                   onerror="this.parentElement.innerHTML='<span style=\\'color:var(--text-muted);font-size:12px;\\'>⚠️ Audio failed to load</span>'">
-              <source src="${mediaUrl}" type="${mimeType || 'audio/mpeg'}">
-            </audio>
-            <button class="media-action-btn media-download-btn" data-media-url="${mediaUrl}" data-file-name="${fileName || 'audio'}"
-                    style="background:rgba(0,0,0,0.5);border:none;border-radius:4px;padding:4px 6px;cursor:pointer;color:#fff;font-size:14px;line-height:1;flex-shrink:0;"
-                    title="Download">⬇</button>
-          </div>
-        `;
-        break;
-
+        return this.renderAudioBubble(msg, isOutbound, mediaUrl, mimeType, mediaSize);
+      case 'video':
+        return this.renderVideoBubble(msg, isOutbound, mediaUrl, mimeType, caption);
       case 'document':
-        const sizeStr = msg.mediaSize ? this.formatFileSize(msg.mediaSize) : '';
-        const iconLetter = fileName.split('.').pop()?.[0]?.toUpperCase() || 'D';
-        mediaHtml = `
-          <div class="media-document-container" style="display:flex;align-items:center;gap:10px;background:rgba(0,0,0,0.05);border-radius:8px;padding:8px 12px;min-width:200px;max-width:280px;">
-            <div style="display:flex;align-items:center;justify-content:center;width:40px;height:40px;background:rgba(100,116,204,0.2);border-radius:8px;font-size:18px;font-weight:700;color:#6366f1;flex-shrink:0;">
-              ${iconLetter}
-            </div>
-            <div style="flex:1;min-width:0;">
-              <div class="media-doc-name" style="font-size:13px;font-weight:500;color:${isOutbound ? '#ffffff' : 'var(--text-primary)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-                ${fileName}
-              </div>
-              ${sizeStr ? `<div class="media-doc-size" style="font-size:11px;color:var(--text-muted);">${sizeStr}</div>` : ''}
-            </div>
-            <a href="${mediaUrl}" download="${fileName}" class="media-doc-download"
-               style="background:var(--border-medium);border:none;border-radius:4px;padding:6px 10px;cursor:pointer;color:var(--text-secondary);font-size:12px;text-decoration:none;flex-shrink:0;"
-               title="Download">⬇</a>
-          </div>
-          ${caption ? `<div class="media-caption" style="font-size:13px;color:${isOutbound ? '#ffffffcc' : 'var(--text-secondary)'};margin-top:6px;max-width:280px;">${caption}</div>` : ''}
-        `;
-        break;
-
+        return this.renderDocumentBubble(msg, isOutbound, mediaUrl, fileName, mimeType, mediaSize, caption);
       case 'sticker':
-        mediaHtml = `
-          <div class="media-sticker-container" style="display: inline-block;">
-            <img src="${mediaUrl}" alt="Sticker" class="media-sticker" style="width:120px;height:auto;display:block;"
-                 data-media-url="${mediaUrl}" data-media-type="sticker"
-                 loading="lazy"
-                 onerror="this.parentElement.innerHTML='<div style=\\'display:flex;align-items:center;justify-content:center;padding:8px;color:var(--text-muted);font-size:12px;\\'>🩷 Sticker</div>'">
-          </div>
-        `;
-        break;
-
+        return this.renderStickerBubble(msg, mediaUrl);
       default:
-        return this.renderMediaPlaceholder(msgType, fileName);
+        return this.renderUnsupportedBubble();
+    }
+  }
+
+  renderImageBubble(msg, isOutbound, mediaUrl, caption) {
+    if (!mediaUrl) {
+      return `
+        <div class="media-image-placeholder">
+          <span style="font-size: 24px;">🖼️</span>
+          <span>Photo unavailable</span>
+        </div>
+      `;
     }
 
-    return mediaHtml;
+    const captionColor = isOutbound ? 'rgba(255,255,255,0.85)' : 'var(--text-secondary)';
+    return `
+      <div class="media-image-container">
+        <div class="media-loading-shimmer" data-shimmer-for="${this.escapeHtml(mediaUrl)}"></div>
+        <img src="${mediaUrl}" alt="Image" data-media-url="${mediaUrl}" data-media-type="image"
+             style="max-width: 100%; max-height: 320px; object-fit: cover; display: block; border-radius: 8px; cursor: pointer; opacity: 0; transition: opacity 0.3s ease;"
+             loading="lazy"
+             onload="this.style.opacity='1'; const shim=this.parentElement.querySelector('.media-loading-shimmer'); if(shim) shim.style.display='none';"
+             onerror="this.style.display='none'; this.parentElement.innerHTML='<div class=\\'media-image-placeholder\\' style=\\'display:flex;align-items:center;justify-content:center;padding:16px;color:var(--text-muted);\\'><span>⚠️ Image failed to load</span></div>';">
+        ${caption ? `<div class="msg-media-caption" style="font-size: 12.5px; color: ${captionColor}; margin-top: 6px; max-width: 280px; line-height: 1.4; opacity: 0.92;">${this.escapeHtml(caption)}</div>` : ''}
+      </div>
+    `;
+  }
+
+  renderAudioBubble(msg, isOutbound, mediaUrl, mimeType, mediaSize) {
+    if (!mediaUrl) {
+      return `
+        <div class="audio-unavailable">
+          <span>🎤</span>
+          <span>Voice message unavailable</span>
+        </div>
+      `;
+    }
+
+    const duration = msg.duration || this.estimateAudioDuration(mediaSize);
+    const durationText = this.formatDuration(duration);
+    const waveformId = `waveform-${msg.id || Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const audioId = `audio-${msg.id || Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+    return `
+      <div class="audio-player-whatsapp" data-audio-id="${audioId}" data-waveform-id="${waveformId}">
+        <button class="audio-play-btn" data-audio-id="${audioId}" data-waveform-id="${waveformId}" title="Play">
+          <span class="audio-play-icon" data-audio-id="${audioId}">▶</span>
+        </button>
+        <div class="audio-waveform" id="${waveformId}">
+          ${this.generateWaveformBars()}
+        </div>
+        <span class="audio-duration" data-duration-for="${audioId}">${durationText}</span>
+        <audio id="${audioId}" src="${mediaUrl}" type="${mimeType || 'audio/mpeg'}" preload="none" style="display:none;"></audio>
+      </div>
+    `;
+  }
+
+  renderVideoBubble(msg, isOutbound, mediaUrl, mimeType, caption) {
+    if (!mediaUrl) {
+      return `
+        <div class="media-video-placeholder">
+          <span style="font-size: 24px;">🎬</span>
+          <span>Video unavailable</span>
+        </div>
+      `;
+    }
+
+    const duration = msg.duration || '';
+    const captionColor = isOutbound ? 'rgba(255,255,255,0.85)' : 'var(--text-secondary)';
+    return `
+      <div class="msg-video-container" data-video-url="${mediaUrl}" data-video-type="${mimeType || 'video/mp4'}">
+        <video class="msg-video-poster" preload="metadata" muted playsinline
+               poster="${mediaUrl}#t=0.5"
+               onerror="this.parentElement.innerHTML='<div class=\\'media-video-placeholder\\' style=\\'display:flex;align-items:center;justify-content:center;padding:16px;color:var(--text-muted);\\'><span>⚠️ Video failed to load</span></div>'">
+          <source src="${mediaUrl}" type="${mimeType || 'video/mp4'}">
+        </video>
+        <div class="msg-video-overlay">
+          <div class="msg-video-play-btn">
+            <span style="color: #000; font-size: 18px; margin-left: 3px;">▶</span>
+          </div>
+        </div>
+        ${duration ? `<div class="msg-video-duration">${this.formatDuration(duration)}</div>` : ''}
+        ${caption ? `<div class="msg-media-caption" style="font-size: 12.5px; color: ${captionColor}; margin-top: 6px; max-width: 280px; line-height: 1.4; opacity: 0.92;">${this.escapeHtml(caption)}</div>` : ''}
+      </div>
+    `;
+  }
+
+  renderDocumentBubble(msg, isOutbound, mediaUrl, fileName, mimeType, mediaSize, caption) {
+    const ext = fileName.split('.').pop()?.toUpperCase() || 'FILE';
+    const iconLetter = ext.slice(0, 4);
+    const sizeStr = mediaSize ? this.formatFileSize(mediaSize) : '';
+    const isUnavailable = !mediaUrl;
+    const cardClass = isUnavailable ? 'msg-document-card disabled' : 'msg-document-card';
+    const iconBg = isUnavailable ? 'rgba(107, 114, 128, 0.15)' : 'rgba(37, 211, 102, 0.15)';
+    const iconColor = isUnavailable ? '#6b7280' : '#25d366';
+
+    if (isUnavailable) {
+      return `
+        <div class="${cardClass}">
+          <div class="msg-document-icon" style="background: ${iconBg}; color: ${iconColor};">${iconLetter}</div>
+          <div class="msg-document-info">
+            <div class="msg-document-name">${this.escapeHtml(fileName)}</div>
+            <div class="msg-document-unavailable">Unavailable</div>
+          </div>
+        </div>
+      `;
+    }
+
+    return `
+      <a href="${mediaUrl}" target="_blank" rel="noopener noreferrer" class="${cardClass}" download="${this.escapeHtml(fileName)}">
+        <div class="msg-document-icon" style="background: ${iconBg}; color: ${iconColor};">${iconLetter}</div>
+        <div class="msg-document-info">
+          <div class="msg-document-name">${this.escapeHtml(fileName)}</div>
+          ${sizeStr ? `<div class="msg-document-size">${sizeStr}</div>` : ''}
+        </div>
+        <span style="color: ${iconColor}; font-size: 18px;">⬇</span>
+      </a>
+      ${caption ? `<div class="msg-media-caption" style="font-size: 12.5px; color: ${isOutbound ? 'rgba(255,255,255,0.85)' : 'var(--text-secondary)'}; margin-top: 6px; max-width: 280px; line-height: 1.4; opacity: 0.92;">${this.escapeHtml(caption)}</div>` : ''}
+    `;
+  }
+
+  renderStickerBubble(msg, mediaUrl) {
+    if (!mediaUrl) {
+      return `
+        <div class="media-image-placeholder" style="min-height: 120px; max-height: 160px;">
+          <span>🩷</span>
+          <span>Sticker unavailable</span>
+        </div>
+      `;
+    }
+
+    return `
+      <div class="msg-bubble-sticker" style="padding: 0; background: transparent; border: none; box-shadow: none; border-radius: 0;">
+        <img src="${mediaUrl}" alt="Sticker" class="msg-sticker"
+             data-media-url="${mediaUrl}" data-media-type="sticker"
+             loading="lazy"
+             onerror="this.parentElement.innerHTML='<div style=\\'display:flex;align-items:center;justify-content:center;padding:8px;color:var(--text-muted);font-size:12px;\\'>🩷 Sticker</div>'">
+      </div>
+    `;
+  }
+
+  renderUnsupportedBubble() {
+    return `<div class="msg-unsupported">This message type isn't supported</div>`;
+  }
+
+  generateWaveformBars(count = 28) {
+    const bars = [];
+    for (let i = 0; i < count; i++) {
+      const height = Math.floor(Math.random() * 16) + 4;
+      bars.push(`<div class="audio-waveform-bar" style="height: ${height}px;"></div>`);
+    }
+    return bars.join('');
+  }
+
+  estimateAudioDuration(mediaSizeBytes) {
+    if (!mediaSizeBytes || mediaSizeBytes <= 0) return 12;
+    const approxSeconds = Math.floor(mediaSizeBytes / 16000);
+    return Math.min(Math.max(approxSeconds, 1), 600);
+  }
+
+  formatDuration(seconds) {
+    if (!seconds || seconds <= 0) return '0:00';
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    return `${m}:${s.toString().padStart(2, '0')}`;
   }
 
   /**
@@ -820,31 +918,19 @@ class InboxComponent {
    * Format bytes to human-readable file size.
    */
    formatFileSize(bytes) {
-    if (!bytes || bytes === 0) return '';
-    const units = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(1024));
-    const val = bytes / Math.pow(1024, i);
-    const formatted = i === 0 ? val.toFixed(0) : parseFloat(val.toFixed(1)).toString();
-    return formatted + ' ' + units[i];
-   }
+     if (!bytes || bytes === 0) return '';
+     const units = ['B', 'KB', 'MB', 'GB'];
+     const i = Math.floor(Math.log(bytes) / Math.log(1024));
+     const val = bytes / Math.pow(1024, i);
+     const formatted = i === 0 ? val.toFixed(0) : parseFloat(val.toFixed(1)).toString();
+     return formatted + ' ' + units[i];
+    }
 
   /**
    * Bind click handlers on "View" and "Download" buttons for media messages.
    */
   bindMediaPreviewHandlers() {
     setTimeout(() => {
-      const btns = document.querySelectorAll('.media-view-btn');
-      btns.forEach(btn => {
-        const newBtn = btn.cloneNode(true);
-        btn.replaceWith(newBtn);
-        newBtn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          const url = newBtn.getAttribute('data-media-url');
-          const type = newBtn.getAttribute('data-media-type');
-          this.showMediaPreview(url, type, newBtn.getAttribute('data-media-name') || '');
-        });
-      });
-
       const downloadBtns = document.querySelectorAll('.media-download-btn');
       downloadBtns.forEach(btn => {
         const newBtn = btn.cloneNode(true);
@@ -857,16 +943,102 @@ class InboxComponent {
         });
       });
 
-      const previewImgs = document.querySelectorAll('img[data-media-url][data-media-type="image"]');
+      const previewImgs = document.querySelectorAll('img[data-media-url][data-media-type="image"], img[data-media-url][data-media-type="sticker"]');
       previewImgs.forEach(img => {
         const newImg = img.cloneNode(true);
         img.replaceWith(newImg);
         newImg.style.cursor = 'pointer';
         newImg.addEventListener('click', () => {
-          this.showMediaPreview(newImg.getAttribute('data-media-url'), 'image', '');
+          const type = newImg.getAttribute('data-media-type') || 'image';
+          this.showMediaPreview(newImg.getAttribute('data-media-url'), type, '');
+        });
+      });
+
+      const videoContainers = document.querySelectorAll('.msg-video-container');
+      videoContainers.forEach(container => {
+        const newContainer = container.cloneNode(true);
+        container.replaceWith(newContainer);
+        newContainer.addEventListener('click', () => {
+          const video = newContainer.querySelector('video');
+          const source = newContainer.querySelector('source');
+          if (video && source) {
+            video.removeAttribute('poster');
+            video.setAttribute('controls', '');
+            video.setAttribute('autoplay', '');
+            video.style.maxHeight = '320px';
+            video.style.borderRadius = '8px';
+            const overlay = newContainer.querySelector('.msg-video-overlay');
+            if (overlay) overlay.style.display = 'none';
+          }
+        });
+      });
+
+      const audioPlayBtns = document.querySelectorAll('.audio-play-btn');
+      audioPlayBtns.forEach(btn => {
+        const newBtn = btn.cloneNode(true);
+        btn.replaceWith(newBtn);
+        newBtn.addEventListener('click', () => {
+          const audioId = newBtn.getAttribute('data-audio-id');
+          const waveformId = newBtn.getAttribute('data-waveform-id');
+          const audio = document.getElementById(audioId);
+          const playIcon = newBtn.querySelector('.audio-play-icon');
+          const waveform = document.getElementById(waveformId);
+          const bars = waveform ? waveform.querySelectorAll('.audio-waveform-bar') : [];
+
+          if (!audio) return;
+
+          if (audio.paused) {
+            audio.play().catch(() => {});
+            if (playIcon) playIcon.textContent = '⏸';
+            this.animateWaveform(bars, true);
+          } else {
+            audio.pause();
+            if (playIcon) playIcon.textContent = '▶';
+            this.animateWaveform(bars, false);
+          }
+        });
+      });
+
+      const audioElements = document.querySelectorAll('.audio-player-whatsapp audio');
+      audioElements.forEach(audio => {
+        audio.addEventListener('ended', () => {
+          const playBtn = document.querySelector(`.audio-play-btn[data-audio-id="${audio.id}"]`);
+          const playIcon = playBtn ? playBtn.querySelector('.audio-play-icon') : null;
+          const waveformId = playBtn ? playBtn.getAttribute('data-waveform-id') : null;
+          const waveform = document.getElementById(waveformId);
+          const bars = waveform ? waveform.querySelectorAll('.audio-waveform-bar') : [];
+          if (playIcon) playIcon.textContent = '▶';
+          this.animateWaveform(bars, false);
+          const durationEl = document.querySelector(`[data-duration-for="${audio.id}"]`);
+          if (durationEl) durationEl.textContent = this.formatDuration(this.estimateAudioDuration(0));
+        });
+
+        audio.addEventListener('timeupdate', () => {
+          const durationEl = document.querySelector(`[data-duration-for="${audio.id}"]`);
+          if (durationEl && audio.duration && isFinite(audio.duration)) {
+            const remaining = Math.max(0, Math.floor(audio.duration - audio.currentTime));
+            durationEl.textContent = this.formatDuration(remaining);
+          }
         });
       });
     }, 0);
+  }
+
+  animateWaveform(bars, isPlaying) {
+    bars.forEach((bar, i) => {
+      if (!isPlaying) {
+        bar.classList.remove('active');
+        const originalHeight = bar.getAttribute('data-original-height') || bar.style.height;
+        bar.setAttribute('data-original-height', originalHeight);
+        bar.style.height = originalHeight;
+        return;
+      }
+      bar.classList.add('active');
+      const baseHeight = parseFloat(bar.getAttribute('data-original-height')) || parseFloat(bar.style.height) || 8;
+      const animated = baseHeight + (Math.random() * 10 - 5);
+      const clamped = Math.min(Math.max(animated, 4), 24);
+      bar.style.height = `${clamped}px`;
+    });
   }
 
   /**
@@ -890,6 +1062,8 @@ class InboxComponent {
       innerContent = `<video controls autoplay style="max-width:90vw;max-height:75vh;border-radius:8px;background:#000;"><source src="${url}"><p style="color:#fff;">Video playback not supported</p></video>`;
     } else if (type === 'audio') {
       innerContent = `<div style="display:flex;flex-direction:column;align-items:center;gap:20px;color:#fff;"><div style="font-size:48px;">🎵</div><audio controls style="width:100%;max-width:400px;"><source src="${url}"></audio>${fileName ? `<span style="font-size:14px;">${fileName}</span>` : ''}</div>`;
+    } else if (type === 'sticker') {
+      innerContent = `<img src="${url}" alt="Sticker Preview" style="max-width:60vw;max-height:60vh;object-fit:contain;">`;
     }
 
     const downloadBtnHtml = (type === 'image' || type === 'video' || type === 'audio')
