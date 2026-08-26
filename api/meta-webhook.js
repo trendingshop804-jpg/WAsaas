@@ -250,7 +250,7 @@ export default async function handler(req, res) {
           const { error } = await supabase.from('messages').insert({
             wa_message_id: msg.id,
             sender_number: msg.from,
-            content: userText || (isMedia ? (msgType === 'audio' ? '🎤 Voice message' : `📎 ${msgType} message`) : ''),
+            content: userText || (isMedia ? (msgType === 'audio' ? 'Voice message' : `${msgType} message`) : ''),
             message_type: msgType,
             direction: 'inbound',
             received_at: new Date().toISOString(),

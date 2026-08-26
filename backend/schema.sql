@@ -137,7 +137,17 @@ CREATE TABLE messages (
     body TEXT NOT NULL,
     status VARCHAR(50) DEFAULT 'SENT',
     meta_message_id VARCHAR(100),
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    -- WhatsApp media support columns
+    wa_message_id VARCHAR(100) UNIQUE,
+    sender_number VARCHAR(50),
+    message_type VARCHAR(20) DEFAULT 'text',
+    received_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    media_url TEXT,
+    media_mime_type VARCHAR(100),
+    file_name VARCHAR(255),
+    media_caption TEXT,
+    media_size BIGINT DEFAULT 0
 );
 
 -- Opt-Out Blacklist
