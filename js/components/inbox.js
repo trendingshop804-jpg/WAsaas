@@ -57,10 +57,15 @@ class InboxComponent {
             (payload) => {
               const newMsg = payload.new;
               if (newMsg && window.whatsappService) {
-                window.whatsappService.receiveSimulatedInbound(
-                  newMsg.sender_number || '+91 94470 12345',
-                  newMsg.body || newMsg.content || ''
-                );
+                const phone = newMsg.sender_number || '+91 94470 12345';
+                const conversation = (window.appState.get('conversations') || [])
+                  .find(c => window.whatsappService.normalizePhone(c.phone) === window.whatsappService.normalizePhone(phone));
+                if (conversation?.leadId) {
+                  window.whatsappService.receiveSimulatedInbound({
+                    leadId: conversation.leadId,
+                    text: newMsg.body || newMsg.content || ''
+                  });
+                }
               }
             }
           )
@@ -256,8 +261,9 @@ class InboxComponent {
         if (text && this.selectedConvId) {
           const convs = window.appState.get('conversations') || [];
           const conv = convs.find(c => c.id === this.selectedConvId);
-          const phone = conv ? conv.phone : '+91 94470 12345';
-          window.whatsappService.receiveSimulatedInbound(phone, text);
+          if (conv?.leadId) {
+            window.whatsappService.receiveSimulatedInbound({ leadId: conv.leadId, text });
+          }
           if (input) input.value = '';
         }
       });
@@ -406,7 +412,16 @@ class InboxComponent {
 
     if (!text || !this.selectedConvId) return;
 
-    window.whatsappService.sendMessage(this.selectedConvId, text);
+    const conv = (window.appState.get('conversations') || []).find(c => c.id === this.selectedConvId);
+    if (!conv?.leadId) {
+      alert('This conversation is not linked to a lead, so the message cannot be sent.');
+      return;
+    }
+
+    window.whatsappService.sendMessage({ leadId: conv.leadId, text }).catch(error => {
+      console.error('Inbox message send failed:', error);
+      alert(error.message || 'Unable to send message.');
+    });
 
     if (input && !suggestedText) {
       input.value = '';
