@@ -27,8 +27,9 @@ const SUPABASE_CONFIG = {
   /**
    * Meta App ID for Facebook Login OAuth.
    * Set META_APP_ID in your environment to enable pre-configured OAuth.
+   * Found at: Meta App Dashboard → Settings → Basic → App ID
    */
-  metaAppId: '',
+  metaAppId: '1480548923617105',
 
   /**
    * Meta Graph API version for OAuth flows.
