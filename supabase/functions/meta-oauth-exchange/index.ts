@@ -210,6 +210,87 @@ async function autoConnectAccounts(
   return { autoConnected: false, needsPicker: true, whatsapp: false, instagram: 0 };
 }
 
+async function handleEmbeddedSignup(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  organizationId: string,
+  code: string,
+  wabaId: string,
+  phoneNumberId: string
+): Promise<{ success: boolean; phone_number: string; waba_id: string }> {
+  // 1. Exchange code for long-lived token
+  let accessToken = '';
+  if (META_APP_ID && META_APP_SECRET) {
+    const tokenUrl = `https://graph.facebook.com/v21.0/oauth/access_token?client_id=${META_APP_ID}&client_secret=${META_APP_SECRET}&code=${code}`;
+    const tokenRes = await fetch(tokenUrl);
+    const tokenData = await tokenRes.json();
+    if (tokenData.access_token) {
+      accessToken = tokenData.access_token;
+    } else {
+      throw new Error(tokenData.error?.message || 'Failed to exchange code for token');
+    }
+  } else {
+    throw new Error('META_APP_ID and META_APP_SECRET must be configured');
+  }
+
+  // 2. Exchange for long-lived token
+  let longLivedToken = accessToken;
+  try {
+    const exchangeUrl = `https://graph.facebook.com/v21.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${META_APP_ID}&client_secret=${META_APP_SECRET}&fb_exchange_token=${accessToken}`;
+    const exRes = await fetch(exchangeUrl);
+    const exData = await exRes.json();
+    if (exData.access_token) {
+      longLivedToken = exData.access_token;
+    }
+  } catch (e) {
+    console.warn("[Embedded Signup]: long-lived exchange failed, using short-lived", e);
+  }
+
+  // 3. Verify WABA details
+  const wabaRes = await fetch(`https://graph.facebook.com/v21.0/${wabaId}?fields=name,timezone_id&access_token=${longLivedToken}`);
+  const wabaData = await wabaRes.json();
+  if (wabaData.error) {
+    throw new Error(wabaData.error.message || 'Failed to verify WABA');
+  }
+
+  // 4. Verify phone number details
+  const phoneRes = await fetch(`https://graph.facebook.com/v21.0/${phoneNumberId}?fields=verified_name,display_phone_number&access_token=${longLivedToken}`);
+  const phoneData = await phoneRes.json();
+  if (phoneData.error) {
+    throw new Error(phoneData.error.message || 'Failed to verify phone number');
+  }
+
+  // 5. Encrypt and store token
+  const encryptedToken = await encryptToken(longLivedToken);
+
+  await supabaseAdmin.from("whatsapp_connections").upsert({
+    organization_id: organizationId,
+    provider: "META_EMBEDDED_SIGNUP",
+    phone_number: phoneData.display_phone_number,
+    display_name: phoneData.verified_name || wabaData.name,
+    waba_id: wabaId,
+    phone_number_id: phoneNumberId,
+    access_token_encrypted: encryptedToken,
+    is_active: true,
+    updated_at: new Date().toISOString()
+  }, { onConflict: "organization_id, phone_number_id" });
+
+  // 6. Subscribe to webhooks
+  try {
+    await fetch(`https://graph.facebook.com/v21.0/${wabaId}/subscribed_apps`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${longLivedToken}` }
+    });
+  } catch (e) {
+    console.warn("[Embedded Signup]: webhook subscription failed", e);
+  }
+
+  return {
+    success: true,
+    phone_number: phoneData.display_phone_number,
+    waba_id: wabaId
+  };
+}
+
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -235,9 +316,26 @@ serve(async (req: Request) => {
       return jsonResponse({ error: "Unauthorized user session" }, 401);
     }
 
-    const { accessToken, organizationId, mode = "save", wabaIndex = 0, phoneIndex = 0, instagramIndices = [] } = await req.json();
-    if (!accessToken || !organizationId) {
-      return jsonResponse({ error: "accessToken and organizationId are required" }, 400);
+    const { accessToken, organizationId, mode = "save", wabaIndex = 0, phoneIndex = 0, instagramIndices = [], code, wabaId, phoneNumberId } = await req.json();
+    if (!organizationId) {
+      return jsonResponse({ error: "organizationId is required" }, 400);
+    }
+
+    // Handle embedded signup mode
+    if (mode === "embedded_signup") {
+      if (!code || !wabaId || !phoneNumberId) {
+        return jsonResponse({ error: "code, wabaId, and phoneNumberId are required for embedded_signup" }, 400);
+      }
+      try {
+        const result = await handleEmbeddedSignup(supabaseAdmin, organizationId, code, wabaId, phoneNumberId);
+        return jsonResponse(result);
+      } catch (err) {
+        return jsonResponse({ error: (err as Error).message }, 400);
+      }
+    }
+
+    if (!accessToken) {
+      return jsonResponse({ error: "accessToken is required" }, 400);
     }
 
     // 1. Verify user belongs to the organization

@@ -36,6 +36,12 @@ const SUPABASE_CONFIG = {
   metaApiVersion: 'v21.0',
 
   /**
+   * WhatsApp Embedded Signup Config ID from Meta App Dashboard.
+   * Found at: Meta App Dashboard → WhatsApp → Configuration → Embedded Signup
+   */
+  whatsappConfigId: '',
+
+  /**
    * The Edge Function name that handles integration-key CRUD.
    * Deployed at: <projectUrl>/functions/v1/<functionName>
    */
@@ -56,11 +62,13 @@ async function loadPublicSupabaseConfig() {
       SUPABASE_CONFIG.anonKey = config.anonKey;
       SUPABASE_CONFIG.metaAppId = config.metaAppId || '';
       SUPABASE_CONFIG.metaApiVersion = config.metaApiVersion || 'v21.0';
+      SUPABASE_CONFIG.whatsappConfigId = config.whatsappConfigId || '';
       Object.assign(window.supabaseConfig, {
         projectUrl: config.projectUrl,
         anonKey: config.anonKey,
         metaAppId: config.metaAppId || '',
         metaApiVersion: config.metaApiVersion || 'v21.0',
+        whatsappConfigId: config.whatsappConfigId || '',
       });
     }
   } catch (error) {

@@ -20,6 +20,7 @@ export default function handler(req, res) {
     projectUrl,
     anonKey,
     metaAppId: process.env.META_APP_ID || '',
-    metaApiVersion: 'v21.0'
+    metaApiVersion: 'v21.0',
+    whatsappConfigId: process.env.WHATSAPP_CONFIG_ID || ''
   });
 }

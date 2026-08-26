@@ -81,6 +81,8 @@ class SettingsIntegrationsComponent {
     this._buildIntegrationsPanel();
     this._bindSettingsTabs();
     this._bindModalClose();
+    this._loadFbSdk();
+    this._bindFbMessageListener();
 
     // Align WhatsApp Business card status with active appState on boot
     const org = window.appState.getCurrentOrg();
@@ -311,8 +313,8 @@ class SettingsIntegrationsComponent {
 
       /* OAuth Connect */
       document.getElementById(`btn-oauth-${ig.id}`)?.addEventListener('click', () => {
-        if (ig.id === 'whatsapp_business' && window.whatsappConnectComponent) {
-          window.whatsappConnectComponent.startMetaOAuthConnection();
+        if (ig.id === 'whatsapp_business') {
+          this._handleEmbeddedSignup();
         } else {
           this._openOAuthModal(ig.id);
         }
@@ -609,6 +611,138 @@ class SettingsIntegrationsComponent {
       }
       if (e.target.classList.contains('modal-backdrop')) {
         e.target.classList.remove('active');
+      }
+    });
+  }
+
+  /* ══════════════════════════════════════════════════════════════════════
+     FACEBOOK SDK — Embedded Signup for WhatsApp
+     ══════════════════════════════════════════════════════════════════════ */
+  _loadFbSdk() {
+    if (window.FB) return;
+    const script = document.createElement('script');
+    script.src = 'https://connect.facebook.net/en_US/sdk.js';
+    script.async = true;
+    script.onload = () => {
+      const appId = window.supabaseConfig?.metaAppId || '';
+      if (appId) {
+        window.FB.init({
+          appId: appId,
+          autoLogAppEvents: true,
+          xfbml: false,
+          version: 'v21.0'
+        });
+      }
+    };
+    document.body.appendChild(script);
+  }
+
+  _bindFbMessageListener() {
+    window.addEventListener('message', (event) => {
+      if (event.origin !== 'https://www.facebook.com') return;
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'WA_EMBEDDED_SIGNUP') {
+          if (data.event === 'FINISH') {
+            const { phone_number_id, waba_id } = data.data;
+            window.__wa_signup_result = { phone_number_id, waba_id };
+          }
+          if (data.event === 'CANCEL' || data.event === 'ERROR') {
+            this._waSignupError = data.data?.error_message || 'Signup cancelled';
+            window.__wa_signup_cancelled = true;
+          }
+        }
+      } catch (e) {}
+    });
+  }
+
+  async _handleEmbeddedSignup() {
+    if (!window.supabaseConfig?.isSupabaseConfigured()) {
+      this._toast('Supabase not configured. Please set up your environment.', 'error');
+      return;
+    }
+
+    const configId = window.supabaseConfig?.whatsappConfigId;
+    if (!configId) {
+      this._toast('WhatsApp config ID not configured.', 'error');
+      return;
+    }
+
+    window.__wa_signup_result = null;
+    window.__wa_signup_cancelled = false;
+    this._waSignupError = null;
+
+    const timeout = setTimeout(() => {
+      this._toast('Connection timed out, please try again', 'error');
+    }, 60000);
+
+    window.FB.login((response) => {
+      if (!response.authResponse) {
+        clearTimeout(timeout);
+        this._toast('Login was cancelled or failed', 'error');
+        return;
+      }
+
+      const code = response.authResponse.code;
+
+      const waitForSignupData = setInterval(async () => {
+        if (window.__wa_signup_cancelled) {
+          clearInterval(waitForSignupData);
+          clearTimeout(timeout);
+          this._toast(this._waSignupError || 'Signup cancelled', 'error');
+          return;
+        }
+
+        if (window.__wa_signup_result) {
+          clearInterval(waitForSignupData);
+          clearTimeout(timeout);
+          const { waba_id, phone_number_id } = window.__wa_signup_result;
+          delete window.__wa_signup_result;
+
+          try {
+            const org = window.appState.getCurrentOrg();
+            const edgeUrl = window.supabaseConfig.getEdgeFunctionUrl('meta-oauth-exchange');
+            if (!edgeUrl) throw new Error('Edge function URL not configured');
+
+            const res = await fetch(edgeUrl, {
+              method: 'POST',
+              headers: window.supabaseConfig.getAuthHeaders(),
+              body: JSON.stringify({
+                mode: 'embedded_signup',
+                code,
+                wabaId: waba_id,
+                phoneNumberId: phone_number_id,
+                organizationId: org.id
+              })
+            });
+
+            const data = await res.json();
+            if (!res.ok || !data.success) {
+              throw new Error(data.error || 'Failed to complete connection');
+            }
+
+            const currentOrg = window.appState.getCurrentOrg();
+            currentOrg.whatsappConnected = true;
+            currentOrg.whatsappNumber = data.phone_number;
+            currentOrg.wabaId = data.waba_id;
+            currentOrg.whatsappProvider = 'Meta Embedded Signup';
+            window.appState.saveState();
+            window.appState.emit('whatsappConnectionChanged', { status: 'CONNECTED' });
+            this._toast(`WhatsApp connected: ${data.phone_number}`, 'success');
+            this._renderCards();
+          } catch (err) {
+            this._toast(err.message || 'Failed to complete connection', 'error');
+          }
+        }
+      }, 500);
+    }, {
+      config_id: configId,
+      response_type: 'code',
+      override_default_response_type: true,
+      extras: {
+        setup: {},
+        feature: 'whatsapp_embedded_signup',
+        sessionInfoVersion: '3'
       }
     });
   }
