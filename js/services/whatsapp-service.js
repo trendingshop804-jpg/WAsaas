@@ -342,7 +342,7 @@ class WhatsAppService {
         window.appState.addAuditLog('Inbound Message Received', lead.contactName, text, 'Success');
       }
     }
-    const lead = leads.find(l => l.id === leadId);
+    let lead = leads.find(l => l.id === leadId);
     if (!lead) {
       lead = {
         id: leadId,
