@@ -76,6 +76,9 @@ model Organization {
   creditsUsed       Int                    @default(0)
   creditsLimit      Int                    @default(5000)
   isPaused          Boolean                @default(false)
+  productDescription String?
+  pricingSummary    String?
+  bookingLink       String?
   createdAt         DateTime               @default(now())
   updatedAt         DateTime               @updatedAt
 

@@ -10,42 +10,7 @@ const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || '';
 const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN || '';
 const SUPABASE_URL = process.env.SUPABASE_URL;
 
-// WhatsApp media message types that carry a media_id (Meta returns media_id, not URL)
 const MEDIA_TYPES = new Set(['image', 'video', 'audio', 'document', 'sticker']);
-
-/**
- * Download media from Meta's Graph API.
- * Step 1: GET /{media_id}?access_token=… → returns { url, content_type?, ... }
- * Step 2: GET {url} → returns binary data
- */
-async function downloadMediaFromMeta(mediaId) {
-  const metaRes = await fetch(`https://graph.facebook.com/v21.0/${mediaId}`, {
-    headers: { Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}` }
-  });
-  if (!metaRes.ok) {
-    const err = await metaRes.text();
-    throw new Error(`Meta Media API error ${metaRes.status}: ${err}`);
-  }
-  const meta = await metaRes.json();
-
-  const downloadUrl = meta.url;
-  if (!downloadUrl) throw new Error(`No download URL returned for media ${mediaId}`);
-
-  // The lookaside.fbsbx.com download URL requires the bearer token too —
-  // without it Meta answers 401 and every inbound media file is lost.
-  const downloadRes = await fetch(downloadUrl, {
-    headers: { Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}` }
-  });
-  if (!downloadRes.ok) {
-    throw new Error(`Failed to download media ${mediaId}: ${downloadRes.status}`);
-  }
-
-  const buffer = await downloadRes.arrayBuffer();
-  const mimeType = meta.mime_type || meta.content_type || downloadRes.headers.get('content-type') || 'application/octet-stream';
-  const fileName = meta.filename || `${mediaId}`;
-
-  return { buffer, mimeType, fileName };
-}
 
 const MIME_TO_EXT = {
   'image/jpeg': 'jpg', 'image/png': 'png', 'image/gif': 'gif', 'image/webp': 'webp',
@@ -65,10 +30,32 @@ function extFromMime(mimeType) {
   return /^[a-z0-9]{1,8}$/.test(sub) ? sub : 'bin';
 }
 
-/**
- * Upload media buffer to Supabase Storage bucket 'whatsapp-media'.
- * Returns the storage path for later signed-URL generation.
- */
+async function downloadMediaFromMeta(mediaId) {
+  const metaRes = await fetch(`https://graph.facebook.com/v21.0/${mediaId}`, {
+    headers: { Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}` }
+  });
+  if (!metaRes.ok) {
+    const err = await metaRes.text();
+    throw new Error(`Meta Media API error ${metaRes.status}: ${err}`);
+  }
+  const meta = await metaRes.json();
+  const downloadUrl = meta.url;
+  if (!downloadUrl) throw new Error(`No download URL returned for media ${mediaId}`);
+
+  const downloadRes = await fetch(downloadUrl, {
+    headers: { Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}` }
+  });
+  if (!downloadRes.ok) {
+    throw new Error(`Failed to download media ${mediaId}: ${downloadRes.status}`);
+  }
+
+  const buffer = await downloadRes.arrayBuffer();
+  const mimeType = meta.mime_type || meta.content_type || downloadRes.headers.get('content-type') || 'application/octet-stream';
+  const fileName = meta.filename || `${mediaId}`;
+
+  return { buffer, mimeType, fileName };
+}
+
 async function uploadMediaToStorage(senderNumber, mediaId, fileName, mimeType, buffer) {
   const cleanPhone = String(senderNumber || '').replace(/[^0-9]/g, '').slice(-10) || 'unknown';
   const safeName = String(fileName || `media_${mediaId}`).replace(/[^a-zA-Z0-9._-]/g, '_');
@@ -90,10 +77,6 @@ async function uploadMediaToStorage(senderNumber, mediaId, fileName, mimeType, b
   return uploadData?.path || storagePath;
 }
 
-/**
- * Download media from Meta, upload to Supabase Storage.
- * Returns { mediaUrl, mediaMimeType, fileName } or null on failure.
- */
 async function processInboundMedia(msg, mediaType) {
   const mediaId = msg[mediaType]?.id;
   if (!mediaId) {
@@ -116,81 +99,246 @@ async function processInboundMedia(msg, mediaType) {
   }
 }
 
+async function getOrganizationId(phoneNumberId) {
+  const { data } = await supabase
+    .from('whatsapp_connections')
+    .select('organization_id')
+    .eq('phone_number_id', phoneNumberId)
+    .eq('is_active', true)
+    .limit(1);
 
-const SYSTEM_PROMPT = `=== 1. ROLE & IDENTITY ===
-You are a World-Class Sales Executive specializing in Websites, Custom SaaS, and Enterprise Software solutions.
-Your sole mission is to understand client requirements, demonstrate maximum business value, handle objections with precision, and CLOSE the deal fast on WhatsApp.
+  return data?.[0]?.organization_id || null;
+}
 
-OUR SERVICES & OFFERINGS:
-- High-Converting Business Websites (React, Next.js, WordPress): Starts at ₹10,000 / $150
-- Custom SaaS & Web Application Development: Starts at ₹45,000 / $600
-- Custom AI Agents & Automation Software: Starts at ₹15,000 / $200
+async function findOrCreateLead(organizationId, phoneNumber) {
+  const { data: existing } = await supabase
+    .from('leads')
+    .select('id')
+    .eq('organization_id', organizationId)
+    .eq('phone', phoneNumber)
+    .limit(1);
 
-=== 2. THINKING FRAMEWORK (INTERNAL EXECUTION) ===
-For every inbound customer message, process your response internally through these 3 steps:
+  if (existing && existing.length > 0) {
+    return existing[0].id;
+  }
 
-STEP A: UNDERSTAND
-- Identify client needs (Website, SaaS, Software, or Custom AI Agent).
-- Detect the customer's language (Tanglish, Tamil, or English) and reply in the same language naturally.
+  const { data: newLead, error } = await supabase
+    .from('leads')
+    .insert({
+      organization_id: organizationId,
+      company_name: 'WhatsApp Lead',
+      contact_name: '',
+      phone: phoneNumber,
+      source: 'WhatsApp',
+      status: 'NEW',
+      score: 50,
+      score_category: 'WARM',
+    })
+    .select('id')
+    .single();
 
-STEP B: HANDLE OBJECTIONS
-- If "Costly": Position software as a 24/7 asset that generates revenue and cuts operational costs, not an expense.
-- If "Need Time": Offer a free demo / quick 5-min video, or create urgency with a limited-time bonus/discount.
+  if (error) {
+    console.error('Lead creation error:', error);
+    throw new Error(`Failed to create lead: ${error.message}`);
+  }
 
-STEP C: CLOSE
-- Always push for a concrete next step: Google Meet Call, Demo Link, or Advance Payment.
+  return newLead.id;
+}
 
-=== 3. SELF-CORRECTION & REFINEMENT (CONSTRAINTS) ===
-Before outputting the message, enforce these strict criteria:
-- Is it short? (MUST be under 3 sentences / 50 words max).
-- Is it high-converting? (No fluff, clear ROI value proposition).
-- Does it end with a closing CTA? (ALWAYS end with a direct question like "Shall I send the payment link?" or "Can we hop on a quick 10-min Google Meet call?").
+async function findOrCreateConversation(organizationId, leadId) {
+  const { data: existing } = await supabase
+    .from('conversations')
+    .select('id')
+    .eq('lead_id', leadId)
+    .limit(1);
 
-OUTPUT ONLY THE FINAL WHATSAPP MESSAGE TO THE CLIENT.`;
+  if (existing && existing.length > 0) {
+    return existing[0].id;
+  }
 
-async function generateAIReply(userMessage) {
-  try {
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
-        'HTTP-Referer': 'https://nexuslead.ai',
-        'X-Title': 'NexusLead AI Agent',
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: 'openai/gpt-4o-mini',
-        messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
-          { role: 'user', content: userMessage }
-        ],
-        temperature: 0.7,
-        max_tokens: 150
-      })
-    });
+  const { data: newConv, error } = await supabase
+    .from('conversations')
+    .insert({
+      organization_id: organizationId,
+      lead_id: leadId,
+      mode: 'AI',
+      unread_count: 0,
+    })
+    .select('id')
+    .single();
 
-    if (!response.ok) {
-      const errText = await response.text();
-      console.error('[OpenRouter API Error]:', response.status, errText);
-      throw new Error(`OpenRouter API error ${response.status}`);
+  if (error) {
+    console.error('Conversation creation error:', error);
+    throw new Error(`Failed to create conversation: ${error.message}`);
+  }
+
+  return newConv.id;
+}
+
+async function fetchChatHistory(conversationId, limit = 20) {
+  const { data } = await supabase
+    .from('messages')
+    .select('direction, body, message_type, received_at')
+    .eq('conversation_id', conversationId)
+    .order('received_at', { ascending: true })
+    .limit(limit);
+
+  return data || [];
+}
+
+function buildSystemPrompt(organization) {
+  const businessName = organization?.name || 'our business';
+  const productDescription = organization?.product_description || 'our services';
+  const pricingSummary = organization?.pricing_summary || 'contact us for pricing details';
+  const bookingLink = organization?.booking_link || '';
+
+  return `You are ${businessName}'s WhatsApp assistant. Your job is to greet inbound leads, qualify them, and either book them in or hand them off to a human — all inside a normal WhatsApp chat.
+
+## Voice & format
+- Sound like a helpful person on WhatsApp, not a form. Short messages (1-3 lines max).
+- One question at a time. Never dump multiple questions in one message.
+- Use the lead's name once you have it. Light emoji is fine, don't overdo it.
+- Reply in the language the lead writes in (English, Tamil, Malayalam, or mixed).
+
+## Conversation flow
+1. **Greet + discover intent** — Ask what brought them here in one friendly line.
+2. **Qualify** — Naturally collect, over the course of the chat (not as a checklist):
+   - Name
+   - Business/industry
+   - What problem they're trying to solve / what they're interested in
+   - Budget range (ask softly, e.g. "roughly what budget are you working with?")
+   - Timeline (immediate / this month / just exploring)
+3. **Score the lead** internally as HOT (ready to buy, has budget + timeline), WARM (interested, needs nurturing), or COLD (just browsing/no fit).
+4. **Route**:
+   - HOT → offer to book a call/demo right away, share ${bookingLink}, and flag for human follow-up.
+   - WARM → answer their questions, share relevant info/pricing, ask if they'd like a callback.
+   - COLD → answer politely, add to nurture list, don't push for a call.
+5. **Handoff** — If the lead asks something you're unsure of, asks for a human, or gets frustrated, say so plainly and tag for human takeover. Never pretend to be human if directly asked.
+
+## Hard rules
+- Never invent pricing, features, or timelines you weren't given — say you'll confirm and get back to them.
+- Never ask for sensitive info (passwords, OTPs, card numbers) over chat.
+- Don't repeat a question the lead already answered earlier in the chat.
+- If the lead goes silent, don't follow up more than twice.
+
+## Output for the CRM (structured, not shown to the lead)
+After each exchange, also produce:
+{
+  "lead_status": "HOT | WARM | COLD",
+  "captured_fields": { "name": "", "industry": "", "need": "", "budget": "", "timeline": "" },
+  "next_action": "book_call | send_info | human_handoff | nurture",
+  "notes": ""
+}
+
+## Context
+- Business: ${businessName}
+- Product/Service: ${productDescription}
+- Pricing: ${pricingSummary}
+- Booking link: ${bookingLink}`;
+}
+
+function parseAIResponse(rawContent) {
+  const text = (rawContent || '').trim();
+
+  const jsonMatch = text.match(/(\{[\s\S]*\})\s*$/);
+  let replyText = text;
+  let crmData = null;
+
+  if (jsonMatch) {
+    try {
+      crmData = JSON.parse(jsonMatch[1]);
+      replyText = text.slice(0, jsonMatch.index).trim();
+    } catch (e) {
+      console.warn('Failed to parse AI CRM JSON:', e.message);
     }
+  }
 
-    const data = await response.json();
-    const content = data?.choices?.[0]?.message?.content?.trim();
-    if (content) {
-      return content;
+  return { replyText, crmData };
+}
+
+async function updateLeadFromCRM(leadId, crmData) {
+  if (!crmData || !leadId) return;
+
+  const updates = {};
+
+  if (crmData.captured_fields) {
+    const fields = crmData.captured_fields;
+    if (fields.name && !updates.contact_name) updates.contact_name = fields.name;
+    if (fields.industry && !updates.industry) updates.industry = fields.industry;
+    if (fields.need && !updates.ai_summary) updates.ai_summary = fields.need;
+  }
+
+  if (crmData.lead_status) {
+    const statusMap = {
+      'HOT': 'QUALIFIED',
+      'WARM': 'REPLIED',
+      'COLD': 'NEW'
+    };
+    updates.status = statusMap[crmData.lead_status] || updates.status;
+    updates.score_category = crmData.lead_status;
+  }
+
+  if (crmData.notes) {
+    updates.notes = crmData.notes;
+  }
+
+  if (Object.keys(updates).length > 0) {
+    const { error } = await supabase
+      .from('leads')
+      .update(updates)
+      .eq('id', leadId);
+
+    if (error) {
+      console.error('Lead CRM update error:', error);
     }
-    throw new Error('Empty completion returned');
-  } catch (err) {
-    console.error('[AI Agent Webhook Fallback]:', err.message);
-    const msgLower = userMessage.toLowerCase();
-    if (msgLower.includes('price') || msgLower.includes('cost') || msgLower.includes('rate') || msgLower.includes('how much')) {
-      return "Hi! Our high-converting business websites start at ₹10,000 and custom SaaS starts at ₹45,000—built to scale your revenue 24/7. Shall we jump on a quick 10-min Google Meet call to discuss your project?";
-    }
-    return "Hi there! I'd love to help you build your website, custom SaaS, or AI automation. Could you tell me a bit more about your project goals, or shall I book a quick 15-min Google Meet demo call for us?";
   }
 }
 
+async function generateAIReply(organization, history, userMessage) {
+  if (!OPENROUTER_API_KEY) {
+    throw new Error('OpenRouter API key not configured');
+  }
+
+  const systemPrompt = buildSystemPrompt(organization);
+
+  const messages = [
+    { role: 'system', content: systemPrompt },
+    ...history.map(m => ({
+      role: m.direction === 'inbound' ? 'user' : 'assistant',
+      content: m.body || ''
+    })),
+    { role: 'user', content: userMessage }
+  ];
+
+  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+      'HTTP-Referer': 'https://nexuslead.ai',
+      'X-Title': 'NexusLead AI Agent',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: 'openai/gpt-4o-mini',
+      messages,
+      temperature: 0.7,
+      max_tokens: 600
+    })
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    console.error('[OpenRouter API Error]:', response.status, errText);
+    throw new Error(`OpenRouter API error ${response.status}`);
+  }
+
+  const data = await response.json();
+  const content = data?.choices?.[0]?.message?.content?.trim();
+  if (content) {
+    return content;
+  }
+  throw new Error('Empty completion returned');
+}
 
 async function sendWhatsAppMessage(phoneNumberId, toNumber, text) {
   const response = await fetch(
@@ -239,71 +387,139 @@ export default async function handler(req, res) {
       const messages = value?.messages;
       const phoneNumberId = value?.metadata?.phone_number_id;
 
-      if (messages && messages.length > 0) {
-        for (const msg of messages) {
-          const msgType = msg.type || 'text';
-          const isMedia = MEDIA_TYPES.has(msgType);
+      if (!messages || messages.length === 0) {
+        return res.status(200).json({ received: true });
+      }
 
-          // ---- Duplicate check (before media download, so Meta retries stay cheap) ----
-          if (msg.id) {
-            const { data: existing } = await supabase
-              .from('messages')
-              .select('id')
-              .eq('wa_message_id', msg.id)
-              .limit(1);
+      const organizationId = await getOrganizationId(phoneNumberId);
+      if (!organizationId) {
+        console.error('[Webhook] No active WhatsApp connection found for phone_number_id:', phoneNumberId);
+        return res.status(200).json({ received: true });
+      }
 
-            if (existing && existing.length > 0) {
-              console.log('Duplicate message, skipping:', msg.id);
-              continue;
+      let orgSettings = {};
+      try {
+        const { data } = await supabase
+          .from('organizations')
+          .select('*')
+          .eq('id', organizationId)
+          .limit(1);
+        orgSettings = data?.[0] || {};
+      } catch (err) {
+        console.warn('[Webhook] Could not fetch organization settings:', err.message);
+      }
+
+      for (const msg of messages) {
+        const msgType = msg.type || 'text';
+        const isMedia = MEDIA_TYPES.has(msgType);
+        const sender = msg.from || '';
+
+        if (msg.id) {
+          const { data: existing } = await supabase
+            .from('messages')
+            .select('id')
+            .eq('wa_message_id', msg.id)
+            .limit(1);
+
+          if (existing && existing.length > 0) {
+            console.log('Duplicate message, skipping:', msg.id);
+            continue;
+          }
+        }
+
+        let mediaInfo = null;
+        if (isMedia) {
+          mediaInfo = await processInboundMedia(msg, msgType);
+          if (!mediaInfo) {
+            console.warn(`Media download failed for ${msg.id} (${msgType}) — saving message metadata only`);
+          }
+        }
+
+        const caption = msg[msgType]?.caption || msg.caption || '';
+        const userText = isMedia ? caption : (msg.text?.body || '');
+
+        let leadId = null;
+        let conversationId = null;
+        let chatHistory = [];
+
+        try {
+          leadId = await findOrCreateLead(organizationId, sender);
+          conversationId = await findOrCreateConversation(organizationId, leadId);
+
+          if (userText && msgType === 'text') {
+            chatHistory = await fetchChatHistory(conversationId);
+          }
+        } catch (err) {
+          console.error('[Webhook] Lead/Conversation setup error:', err);
+        }
+
+        if (!conversationId) {
+          console.error('[Webhook] Skipping message — no conversation_id available');
+          continue;
+        }
+
+        const messageRecord = {
+          conversation_id: conversationId,
+          wa_message_id: msg.id,
+          sender_number: sender,
+          content: userText || (isMedia ? (msgType === 'audio' ? 'Voice message' : `${msgType} message`) : ''),
+          message_type: msgType,
+          direction: 'inbound',
+          received_at: new Date().toISOString(),
+          media_url: mediaInfo?.mediaUrl || null,
+          media_mime_type: mediaInfo?.mediaMimeType || null,
+          file_name: mediaInfo?.fileName || null,
+          media_caption: isMedia ? caption : null,
+          media_size: mediaInfo?.mediaSize || 0,
+          status: 'SENT',
+        };
+
+        const { error: msgError } = await supabase.from('messages').insert(messageRecord);
+        if (msgError) {
+          console.error('[Webhook] Supabase insert error:', msgError);
+        }
+
+        if (userText && msgType === 'text' && leadId) {
+          let aiRaw = null;
+          let replyText = "Hi there! I'd love to help you. Could you tell me a bit more about what you're looking for?";
+          let crmData = null;
+
+          try {
+            aiRaw = await generateAIReply(orgSettings, chatHistory, userText);
+            const parsed = parseAIResponse(aiRaw);
+            replyText = parsed.replyText || replyText;
+            crmData = parsed.crmData;
+          } catch (err) {
+            console.error('[AI Agent Webhook Fallback]:', err.message);
+            const msgLower = userText.toLowerCase();
+            if (msgLower.includes('price') || msgLower.includes('cost') || msgLower.includes('rate') || msgLower.includes('how much')) {
+              replyText = "Hi! Our offerings are tailored to your needs — I can share details and pricing on a quick call. Shall we hop on a 10-min chat?";
             }
           }
 
-          // ---- Media messages: download from Meta, upload to Supabase Storage ----
-          let mediaInfo = null;
-          if (isMedia) {
-            mediaInfo = await processInboundMedia(msg, msgType);
-            if (!mediaInfo) {
-              console.warn(`Media download failed for ${msg.id} (${msgType}) — saving message metadata only`);
-            }
-          }
+          const sendResult = await sendWhatsAppMessage(phoneNumberId, sender, replyText);
 
-          // ---- Extract content/caption for display ----
-          const caption = msg[msgType]?.caption || msg.caption || '';
-          const userText = isMedia ? caption : (msg.text?.body || '');
-
-          // ---- Save inbound message (with media fields if applicable) ----
-          const { error } = await supabase.from('messages').insert({
-            wa_message_id: msg.id,
-            sender_number: msg.from,
-            content: userText || (isMedia ? (msgType === 'audio' ? 'Voice message' : `${msgType} message`) : ''),
-            message_type: msgType,
-            direction: 'inbound',
+          await supabase.from('messages').insert({
+            conversation_id: conversationId,
+            wa_message_id: sendResult?.messages?.[0]?.id || null,
+            sender_number: sender,
+            content: replyText,
+            message_type: 'text',
+            direction: 'outbound',
             received_at: new Date().toISOString(),
-            media_url: mediaInfo?.mediaUrl || null,
-            media_mime_type: mediaInfo?.mediaMimeType || null,
-            file_name: mediaInfo?.fileName || null,
-            media_caption: isMedia ? caption : null,
-            media_size: mediaInfo?.mediaSize || 0,
+            is_ai: true,
+            status: 'SENT',
           });
 
-          if (error) {
-            console.error('Supabase insert error:', error);
-          }
+          await updateLeadFromCRM(leadId, crmData);
 
-          // AI reply via OpenRouter (text messages only)
-          if (userText && msgType === 'text') {
-            const aiReply = await generateAIReply(userText);
-            const sendResult = await sendWhatsAppMessage(phoneNumberId, msg.from, aiReply);
-
-            await supabase.from('messages').insert({
-              wa_message_id: sendResult?.messages?.[0]?.id || null,
-              sender_number: msg.from,
-              content: aiReply,
-              message_type: 'text',
-              direction: 'outbound',
-              received_at: new Date().toISOString(),
-            });
-          }
+          await supabase
+            .from('conversations')
+            .update({
+              last_message: replyText,
+              last_timestamp: new Date().toISOString()
+            })
+            .eq('id', conversationId);
         }
       }
     } catch (err) {
