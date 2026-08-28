@@ -20,7 +20,8 @@ export default async function handler(req, res) {
   try {
     const { data, error } = await supabase
       .from('messages')
-      .select('id, wa_message_id, sender_number, content, message_type, direction, received_at, media_url, media_mime_type, file_name, media_caption, media_size')
+      // Deliberately fetch both inbound and outbound messages for the thread.
+      .select('id, conversation_id, wa_message_id, sender_number, sender, body, message_body, content, message_type, direction, status, received_at, created_at, media_url, media_mime_type, file_name, media_caption, media_size')
       .order('received_at', { ascending: false })
       .limit(50);
 

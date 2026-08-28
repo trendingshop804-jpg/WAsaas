@@ -208,13 +208,27 @@ export default async function handler(req, res) {
         console.error('Supabase Storage upload failed:', storageErr);
       }
 
+      const { data: conversation, error: conversationError } = await supabase
+        .from('conversations').select('id').eq('lead_id', leadId).maybeSingle();
+      if (conversationError || !conversation) {
+        throw new Error(conversationError?.message || 'No conversation exists for this lead.');
+      }
+
+      const sentAt = new Date().toISOString();
+      const bodyText = text || caption || fileName || 'Media message';
       const messageRecord = {
+        conversation_id: conversation.id,
         wa_message_id: waMessageId,
         sender_number: senderNumber,
-        content: text || caption || fileName || 'Media message',
+        sender: 'user',
+        body: bodyText,
+        message_body: bodyText,
+        content: bodyText,
         message_type: resolvedMessageType,
         direction: 'outbound',
-        received_at: new Date().toISOString(),
+        received_at: sentAt,
+        created_at: sentAt,
+        status: 'sent',
         media_url: storagePath,
         media_mime_type: resolvedMimeType,
         file_name: fileName || `media_${mediaId}`,
@@ -226,9 +240,8 @@ export default async function handler(req, res) {
         .from('messages')
         .insert(messageRecord);
 
-      if (dbError) {
-        console.error('Supabase insert error:', dbError);
-      }
+      if (dbError) throw new Error('Supabase insert failed: ' + dbError.message);
+
 
       // The DB keeps the storage path; the client needs a fetchable URL for its
       // optimistic bubble, so resolve one here.

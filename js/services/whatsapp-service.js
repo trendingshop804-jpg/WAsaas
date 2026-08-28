@@ -248,19 +248,38 @@ class WhatsAppService {
       conv.leadId = lead.id;
     }
 
+    // Meta acceptance is the commit point for real sends: rejected sends are not persisted.
+    let metaMessageId = null;
+    if (org.whatsappToken && org.phoneId && lead?.phone) {
+      const cleanPhone = lead.phone.replace(/[^0-9]/g, '');
+      const metaRes = await fetch(`https://graph.facebook.com/v18.0/${org.phoneId}/messages`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${org.whatsappToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messaging_product: 'whatsapp', recipient_type: 'individual', to: cleanPhone, type: 'text', text: { preview_url: false, body: text } })
+      });
+      const metaData = await metaRes.json();
+      if (!metaRes.ok || !metaData.messages?.[0]?.id) {
+        throw new Error(metaData.error?.message || 'WhatsApp did not accept the message.');
+      }
+      metaMessageId = metaData.messages[0].id;
+    }
+
+    const now = new Date();
+    const nowISO = now.toISOString();
     const newMsg = {
       id: 'm_' + Date.now(),
       sender: 'outbound',
       isAI,
       text,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      timestamp: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      received_at: nowISO,
       status: 'SENT'
     };
 
     if (conv) {
       conv.messages.push(newMsg);
       conv.lastMessage = text;
-      conv.lastTimestamp = newMsg.timestamp;
+      conv.lastTimestamp = nowISO;
     } else if (lead) {
       conv = {
         id: 'conv_' + Date.now(),
@@ -272,7 +291,7 @@ class WhatsAppService {
         mode: isAI ? 'AI' : 'HUMAN',
         status: isAI ? 'AI Active' : 'Human Active',
         lastMessage: text,
-        lastTimestamp: newMsg.timestamp,
+        lastTimestamp: nowISO,
         messages: [newMsg],
         aiSuggestions: window.aiService.suggestReplies({ messages: [newMsg] })
       };
@@ -285,36 +304,63 @@ class WhatsAppService {
       if (lead.status === 'New') lead.status = 'Contacted';
     }
 
-    // Real Meta Cloud API Dispatch if real token & phoneId are present
-    if (org.whatsappToken && org.phoneId && lead && lead.phone) {
-      try {
-        const cleanPhone = lead.phone.replace(/[^0-9]/g, '');
-        const metaRes = await fetch(`https://graph.facebook.com/v18.0/${org.phoneId}/messages`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${org.whatsappToken}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            messaging_product: 'whatsapp',
-            recipient_type: 'individual',
-            to: cleanPhone,
-            type: 'text',
-            text: { preview_url: false, body: text }
-          })
-        });
-        const metaData = await metaRes.json();
-        if (metaData.messages && metaData.messages[0]) {
-          newMsg.metaMessageId = metaData.messages[0].id;
-          newMsg.status = 'SENT_TO_META';
-        }
-      } catch (err) {
-        console.warn('Real Meta Cloud API dispatch failed, fallback to local flow:', err);
-      }
-    }
+    if (metaMessageId) newMsg.id = metaMessageId;
 
     // Deduct usage credit
     org.creditsUsed = (org.creditsUsed || 0) + 1;
+
+    // Persist outbound message to Supabase for CRM visibility
+    if (window.supabaseConfig?.isSupabaseConfigured() && window.authService?.supabase && leadId) {
+      try {
+        const sb = window.authService.supabase;
+        let conversationId = null;
+
+        const { data: convData } = await sb
+          .from('conversations')
+          .select('id')
+          .eq('lead_id', leadId)
+          .limit(1);
+
+        conversationId = convData?.[0]?.id || null;
+
+        if (!conversationId && org?.id) {
+          const { data: newConv } = await sb
+            .from('conversations')
+            .insert({
+              organization_id: org.id,
+              lead_id: leadId,
+              mode: isAI ? 'AI' : 'HUMAN',
+              last_message: text,
+              last_timestamp: nowISO
+            })
+            .select('id')
+            .single();
+          conversationId = newConv?.id || null;
+        }
+
+        if (!conversationId) throw new Error('Unable to create a CRM conversation for this message.');
+
+        const { error: messageError } = await sb.from('messages').insert({
+          conversation_id: conversationId,
+          wa_message_id: metaMessageId,
+          sender_number: lead?.phone ? String(lead.phone).replace(/[^0-9]/g, '') : '',
+          sender: isAI ? 'agent' : 'user',
+          body: text,
+          message_body: text,
+          content: text,
+          message_type: 'text',
+          direction: 'outbound',
+          received_at: nowISO,
+          created_at: nowISO,
+          is_ai: isAI,
+          status: 'sent'
+        });
+        if (messageError) throw messageError;
+      } catch (err) {
+        console.warn('[WhatsAppService] Supabase outbound persist failed:', err);
+        throw err;
+      }
+    }
 
     window.appState.saveState();
     window.appState.emit('messageSent', { message: newMsg, leadId });
@@ -386,11 +432,14 @@ class WhatsAppService {
     }
     console.log('[Inbound] existing conv', conv ? conv.id : 'none');
 
+    const now = new Date();
+    const nowISO = now.toISOString();
     const inMsg = {
       id: 'm_in_' + Date.now(),
       sender: 'inbound',
       text,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      timestamp: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      received_at: nowISO
     };
 
     if (!conv) {
@@ -408,7 +457,7 @@ class WhatsAppService {
 
     conv.messages.push(inMsg);
     conv.lastMessage = text;
-    conv.lastTimestamp = inMsg.timestamp;
+    conv.lastTimestamp = nowISO;
     conv.unreadCount = (conv.unreadCount || 0) + 1;
     conv.aiSuggestions = window.aiService.suggestReplies(conv);
 
@@ -554,7 +603,8 @@ class WhatsAppService {
           locationAddress: waMsg?.location?.address,
           contactName: waMsg?.contacts?.[0]?.name?.formatted_name,
           contactPhone: waMsg?.contacts?.[0]?.phones?.[0]?.phone,
-          timestamp: formattedTime
+          timestamp: formattedTime,
+          received_at: msg.received_at
         };
 
         if (!conv) {
@@ -568,7 +618,7 @@ class WhatsAppService {
             mode: 'AI',
             status: 'AI Active',
             lastMessage: displayText || text || '📩 New message',
-            lastTimestamp: formattedTime,
+            lastTimestamp: msg.received_at || new Date().toISOString(),
             messages: [inMsg],
             aiSuggestions: window.aiService ? window.aiService.suggestReplies({ messages: [inMsg] }) : []
           };
@@ -577,7 +627,7 @@ class WhatsAppService {
           if (!conv.messages.some(m => m.id === inMsg.id || (m.text === inMsg.text && m.timestamp === formattedTime))) {
             conv.messages.push(inMsg);
             conv.lastMessage = displayText || text || '📩 New message';
-            conv.lastTimestamp = formattedTime;
+            conv.lastTimestamp = msg.received_at || new Date().toISOString();
             if (msg.direction !== 'outbound') {
               conv.unreadCount = (conv.unreadCount || 0) + 1;
             }

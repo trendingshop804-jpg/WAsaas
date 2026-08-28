@@ -56,17 +56,64 @@ class InboxComponent {
             { event: 'INSERT', schema: 'public', table: 'messages' },
             (payload) => {
               const newMsg = payload.new;
-              if (newMsg && window.whatsappService) {
-                const phone = newMsg.sender_number || '+91 94470 12345';
-                const conversation = (window.appState.get('conversations') || [])
-                  .find(c => window.whatsappService.normalizePhone(c.phone) === window.whatsappService.normalizePhone(phone));
-                if (conversation?.leadId) {
-                  window.whatsappService.receiveSimulatedInbound({
-                    leadId: conversation.leadId,
-                    text: newMsg.body || newMsg.content || ''
-                  });
+              if (!newMsg || !window.whatsappService) return;
+
+              const direction = String(newMsg.direction || '').toLowerCase();
+              const phone = newMsg.sender_number || '+91 94470 12345';
+              const conversations = window.appState.get('conversations') || [];
+              const conversation = conversations.find(c => c.id === newMsg.conversation_id)
+                || conversations.find(c => window.whatsappService.normalizePhone(c.phone) === window.whatsappService.normalizePhone(phone));
+
+              if (!conversation) return;
+
+              if (direction === 'outbound') {
+                const formattedTime = new Date(newMsg.received_at || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                const outMsg = {
+                  id: newMsg.wa_message_id || 'm_sb_' + Date.now(),
+                  sender: 'outbound',
+                  direction: 'outbound',
+                  type: (newMsg.message_type || 'text').toLowerCase(),
+                  text: newMsg.content || newMsg.body || '',
+                  body: newMsg.content || newMsg.body || '',
+                  caption: newMsg.media_caption || undefined,
+                  mediaUrl: newMsg.media_url || undefined,
+                  media_url: newMsg.media_url || undefined,
+                  mimeType: newMsg.media_mime_type || undefined,
+                  media_mime_type: newMsg.media_mime_type || undefined,
+                  fileName: newMsg.file_name || undefined,
+                  file_name: newMsg.file_name || undefined,
+                  mediaSize: newMsg.media_size || 0,
+                  media_size: newMsg.media_size || 0,
+                  timestamp: formattedTime,
+                  received_at: newMsg.received_at,
+                  status: newMsg.status || 'SENT',
+                  isAI: newMsg.is_ai || false,
+                  sentByHuman: !newMsg.is_ai,
+                  metaMessageId: newMsg.wa_message_id,
+                  wa_message_id: newMsg.wa_message_id,
+                };
+
+                if (!conversation.messages) conversation.messages = [];
+                if (!conversation.messages.some(m => m.id === outMsg.id || (outMsg.metaMessageId && m.metaMessageId === outMsg.metaMessageId) || (outMsg.wa_message_id && m.wa_message_id === outMsg.wa_message_id))) {
+                  conversation.messages.push(outMsg);
                 }
+                conversation.lastMessage = outMsg.text;
+                conversation.lastTimestamp = newMsg.received_at || formattedTime;
+                window.appState.saveState();
+
+                if (this.selectedConvId === conversation.id) {
+                  this.renderMessages(conversation.id);
+                  this.scrollToBottom(true);
+                } else {
+                  this.showScrollBottomButton(true);
+                }
+                return;
               }
+
+              window.whatsappService.receiveSimulatedInbound({
+                leadId: conversation.leadId,
+                text: newMsg.body || newMsg.content || ''
+              });
             }
           )
           .subscribe();
@@ -461,6 +508,7 @@ class InboxComponent {
 
     const tempId = 'm_media_' + Date.now();
     const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const timestampISO = new Date().toISOString();
     const mediaUrl = URL.createObjectURL(file);
     const mimeType = file.type || 'application/octet-stream';
     const fileName = file.name;
@@ -486,7 +534,7 @@ class InboxComponent {
       caption: text || '',
       media_caption: text || '',
       timestamp: timestamp,
-      received_at: new Date().toISOString(),
+      received_at: timestampISO,
       status: 'SENDING',
       sentByHuman: true,
       isOptimistic: true
@@ -498,7 +546,7 @@ class InboxComponent {
       conv.messages = [optimisticMsg];
     }
     conv.lastMessage = optimisticMsg.text;
-    conv.lastTimestamp = timestamp;
+    conv.lastTimestamp = timestampISO;
     window.appState.saveState();
     this.renderMessages(conv.id);
     this.scrollToBottom(true);
@@ -623,7 +671,7 @@ class InboxComponent {
           <div class="conversation-meta">
             <div class="conv-top-row">
               <span class="conv-name">${displayName}</span>
-              <span class="conv-time">${conv.lastTimestamp || ''}</span>
+              <span class="conv-time">${conv.lastTimestamp ? this.formatTimestamp(conv.lastTimestamp) : ''}</span>
             </div>
             <div class="conv-snippet">${conv.lastMessage || 'No messages yet'}</div>
             ${conv.unreadCount > 0 ? `<div class="badge badge-whatsapp" style="margin-top: 4px; font-size: 10px; padding: 2px 6px;">${conv.unreadCount} new</div>` : ''}
@@ -725,7 +773,10 @@ class InboxComponent {
     if (!banner || !conv) return;
 
     // Simulate 24-hr session window countdown
-    const lastTime = new Date(conv.lastTimestamp || Date.now());
+    let lastTime = new Date(conv.lastTimestamp || Date.now());
+    if (isNaN(lastTime.getTime())) {
+      lastTime = new Date();
+    }
     const windowExpiry = new Date(lastTime.getTime() + 24 * 60 * 60 * 1000);
     const diffMs = windowExpiry.getTime() - Date.now();
 
@@ -743,6 +794,19 @@ class InboxComponent {
     }
   }
 
+  getDateLabel(date) {
+    if (isNaN(date.getTime())) return '';
+    const now = new Date();
+    const isToday = date.toDateString() === now.toDateString();
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const isYesterday = date.toDateString() === yesterday.toDateString();
+
+    if (isToday) return 'Today';
+    if (isYesterday) return 'Yesterday';
+    return date.toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  }
+
   renderMessages(convId) {
     const scrollArea = document.getElementById('chat-messages-scroll');
     if (!scrollArea) return;
@@ -757,21 +821,35 @@ class InboxComponent {
       return;
     }
 
-    scrollArea.innerHTML = msgs.map((msg, index) => {
+    let messagesHtml = '';
+    msgs.forEach((msg, index) => {
       const isOutbound = msg.direction === 'OUTBOUND' || msg.sender === 'outbound';
       const isSystem = msg.direction === 'SYSTEM' || msg.sender === 'system' || msg.isSystem;
       const msgType = (msg.type || msg.message_type || 'text').toLowerCase();
       const isMedia = ['image', 'video', 'audio', 'document', 'sticker'].includes(msgType);
       const isUnsupported = msgType === 'unsupported';
 
+      // Date separator between days
+      if (!isSystem) {
+        const prevMsg = index > 0 ? msgs[index - 1] : null;
+        if (prevMsg && !(prevMsg.direction === 'SYSTEM' || prevMsg.sender === 'system' || prevMsg.isSystem)) {
+          const prevTime = new Date(prevMsg.received_at || prevMsg.timestamp);
+          const currTime = new Date(msg.received_at || msg.timestamp);
+          if (!isNaN(prevTime.getTime()) && !isNaN(currTime.getTime()) && prevTime.toDateString() !== currTime.toDateString()) {
+            messagesHtml += `<div class="date-separator" style="text-align: center; margin: 16px 0 12px; font-size: 11px; color: var(--text-muted); font-weight: 600;">${this.getDateLabel(currTime)}</div>`;
+          }
+        }
+      }
+
       if (isSystem) {
-        return `
+        messagesHtml += `
           <div class="msg-row justify-center flex" style="display: flex; justify-content: center; margin: 12px 0;">
             <div class="msg-bubble system-bubble" style="background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.1); color: var(--text-secondary); font-size: 11.5px; padding: 5px 16px; border-radius: 20px; text-align: center;">
               ${msg.text || msg.body || ''}
             </div>
           </div>
         `;
+        return;
       }
 
       const prevMsg = index > 0 ? msgs[index - 1] : null;
@@ -800,7 +878,7 @@ class InboxComponent {
       const isSticker = msgType === 'sticker';
       const bubbleClass = isSticker ? 'msg-bubble-sticker-bubble' : 'msg-bubble';
 
-      return `
+      messagesHtml += `
         <div class="${rowClass}" style="margin-bottom: ${isConsecutive ? '2px' : '12px'}; display: flex; justify-content: ${isOutbound ? 'flex-end' : 'flex-start'};">
           <div class="${wrapClass}" style="max-width: ${maxWidth};">
             <div class="${bubbleClass}" style="padding: ${isSticker ? '0' : '8px 12px'}; border-radius: ${isConsecutive ? '12px' : '12px'}; font-size: 13.5px; line-height: 1.45;">
@@ -818,8 +896,9 @@ class InboxComponent {
           </div>
         </div>
       `;
-    }).join('') + '<div id="messagesEndRef"></div>';
+    });
 
+    scrollArea.innerHTML = messagesHtml + '<div id="messagesEndRef"></div>';
     this.bindMediaPreviewHandlers();
   }
 
@@ -844,7 +923,27 @@ class InboxComponent {
     if (!ts) return '--:--';
     const d = new Date(ts);
     if (isNaN(d.getTime())) return '--:--';
-    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    const now = new Date();
+    const isToday = d.toDateString() === now.toDateString();
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const isYesterday = d.toDateString() === yesterday.toDateString();
+
+    if (isToday) {
+      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+
+    if (isYesterday) {
+      return 'Yesterday, ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+
+    return d.toLocaleString([], {
+      day: 'numeric',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
   }
 
   escapeHtml(text) {

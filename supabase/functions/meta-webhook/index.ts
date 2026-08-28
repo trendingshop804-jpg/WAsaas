@@ -2,6 +2,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+const openRouterApiKey = Deno.env.get("OPENROUTER_API_KEY") ?? "";
 
 const MEDIA_TYPES = ["image", "video", "audio", "document", "sticker"];
 
@@ -28,6 +29,111 @@ function buildStoragePath(cleanPhone: string, mediaId: string, fileName: string,
   const hasExt = /\.[a-zA-Z0-9]{1,8}$/.test(safeName);
   const suffix = hasExt ? "" : `.${extFromMime(mimeType)}`;
   return `${cleanPhone}/${mediaId}/${mediaId}_${safeName}${suffix}`;
+}
+
+function fallbackReply(message: string): string {
+  const normalized = message.toLowerCase();
+  if (/\b(price|pricing|cost|rate|how much)\b/.test(normalized)) {
+    return "Thanks for asking! I can share the right pricing once I understand what you need. What are you looking to achieve?";
+  }
+  if (/\b(demo|call|meeting|book)\b/.test(normalized)) {
+    return "Absolutely — I'd be happy to arrange a quick demo. What day and time work best for you?";
+  }
+  return "Hi! Thanks for getting in touch. How can I help you today?";
+}
+
+function isOptOut(message: string): boolean {
+  return /\b(stop|unsubscribe|remove me|do not contact|don't contact)\b/i.test(message);
+}
+
+async function generateAIReply(organization: Record<string, unknown>, history: Array<Record<string, unknown>>, userMessage: string): Promise<string> {
+  if (!openRouterApiKey) return fallbackReply(userMessage);
+
+  const businessName = organization?.name || 'our business';
+  const productDescription = organization?.product_description || 'our services';
+  const pricingSummary = organization?.pricing_summary || 'contact us for pricing details';
+  const bookingLink = organization?.booking_link || '';
+
+  const systemPrompt = `You are ${businessName}'s WhatsApp assistant. Your job is to greet inbound leads, qualify them, and either book them in or hand them off to a human — all inside a normal WhatsApp chat.
+
+## Voice & format
+- Sound like a helpful person on WhatsApp, not a form. Short messages (1-3 lines max).
+- One question at a time. Never dump multiple questions in one message.
+- Use the lead's name once you have it. Light emoji is fine, don't overdo it.
+- Reply in the language the lead writes in (English, Tamil, Malayalam, or mixed).
+
+## Conversation flow
+1. Greet + discover intent — Ask what brought them here in one friendly line.
+2. Qualify — Naturally collect, over the course of the chat (not as a checklist):
+   - Name
+   - Business/industry
+   - What problem they're trying to solve / what they're interested in
+   - Budget range (ask softly, e.g. "roughly what budget are you working with?")
+   - Timeline (immediate / this month / just exploring)
+3. Score the lead internally as HOT (ready to buy, has budget + timeline), WARM (interested, needs nurturing), or COLD (just browsing/no fit).
+4. Route:
+   - HOT → offer to book a call/demo right away, share ${bookingLink}, and flag for human follow-up.
+   - WARM → answer their questions, share relevant info/pricing, ask if they'd like a callback.
+   - COLD → answer politely, add to nurture list, don't push for a call.
+5. Handoff — If the lead asks something you're unsure of, asks for a human, or gets frustrated, say so plainly and tag for human takeover. Never pretend to be human if directly asked.
+
+## Hard rules
+- Never invent pricing, features, or timelines you weren't given — say you'll confirm and get back to them.
+- Never ask for sensitive info (passwords, OTPs, card numbers) over chat.
+- Don't repeat a question the lead already answered earlier in the chat.
+- If the lead goes silent, don't follow up more than twice.
+
+## Output for the CRM (structured, not shown to the lead)
+After each exchange, also produce:
+{
+  "lead_status": "HOT | WARM | COLD",
+  "captured_fields": { "name": "", "industry": "", "need": "", "budget": "", "timeline": "" },
+  "next_action": "book_call | send_info | human_handoff | nurture",
+  "notes": ""
+}
+
+## Context
+- Business: ${businessName}
+- Product/Service: ${productDescription}
+- Pricing: ${pricingSummary}
+- Booking link: ${bookingLink}`;
+
+  const messages = [
+    { role: 'system', content: systemPrompt },
+    ...history.map(m => ({
+      role: (m as Record<string, string>).direction === 'inbound' ? 'user' : 'assistant',
+      content: (m as Record<string, string>).body || ''
+    })),
+    { role: 'user', content: userMessage }
+  ];
+
+  try {
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${openRouterApiKey}`, "Content-Type": "application/json", "X-Title": "WAsaas AI Agent" },
+      body: JSON.stringify({ model: "openai/gpt-4o-mini", messages, temperature: 0.7, max_tokens: 600 })
+    });
+
+    const data = await response.json();
+    const reply = data?.choices?.[0]?.message?.content?.trim();
+    if (response.ok && reply) return reply;
+  } catch (error) {
+    console.error("[AI Agent] Reply generation failed:", error);
+  }
+  return fallbackReply(userMessage);
+}
+
+async function sendWhatsAppReply(phoneNumberId: string, to: string, body: string) {
+  const accessToken = Deno.env.get("WHATSAPP_ACCESS_TOKEN");
+  if (!accessToken || !phoneNumberId || !to) throw new Error("WhatsApp token, phone number ID, or recipient is missing");
+  const response = await fetch(`https://graph.facebook.com/v21.0/${phoneNumberId}/messages`, {
+    method: "POST",
+    headers: { "Authorization": `Bearer ${accessToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ messaging_product: "whatsapp", to, type: "text", text: { body } })
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(`WhatsApp send failed (${response.status}): ${JSON.stringify(data)}`);
+  return data;
 }
 
 async function processInboundMedia(msg: any, mediaType: string, supabaseAdmin: any) {
@@ -74,8 +180,6 @@ async function processInboundMedia(msg: any, mediaType: string, supabaseAdmin: a
       return null;
     }
 
-    // Store the storage PATH (not a URL) so it matches what api/meta-webhook.js
-    // writes and what api/messages.js expects when it mints signed URLs.
     return {
       mediaUrl: uploadData?.path || storagePath,
       mediaMimeType: mimeType,
@@ -85,6 +189,145 @@ async function processInboundMedia(msg: any, mediaType: string, supabaseAdmin: a
   } catch (err) {
     console.error("[Media] Processing error:", err);
     return null;
+  }
+}
+
+async function getOrganizationId(supabaseAdmin: any, phoneNumberId: string): Promise<string | null> {
+  const { data } = await supabaseAdmin
+    .from("whatsapp_connections")
+    .select("organization_id")
+    .eq("phone_number_id", phoneNumberId)
+    .eq("is_active", true)
+    .limit(1);
+
+  return data?.[0]?.organization_id || null;
+}
+
+async function findOrCreateLead(supabaseAdmin: any, organizationId: string, phoneNumber: string): Promise<string> {
+  const { data: existing } = await supabaseAdmin
+    .from("leads")
+    .select("id")
+    .eq("organization_id", organizationId)
+    .eq("phone", phoneNumber)
+    .limit(1);
+
+  if (existing && existing.length > 0) {
+    return existing[0].id;
+  }
+
+  const { data: newLead, error } = await supabaseAdmin
+    .from("leads")
+    .insert({
+      organization_id: organizationId,
+      company_name: "WhatsApp Lead",
+      contact_name: "",
+      phone: phoneNumber,
+      source: "WhatsApp",
+      status: "NEW",
+      score: 50,
+      score_category: "WARM",
+    })
+    .select("id")
+    .single();
+
+  if (error) {
+    console.error("Lead creation error:", error);
+    throw new Error(`Failed to create lead: ${error.message}`);
+  }
+
+  return newLead.id;
+}
+
+async function findOrCreateConversation(supabaseAdmin: any, organizationId: string, leadId: string): Promise<string> {
+  const { data: existing } = await supabaseAdmin
+    .from("conversations")
+    .select("id")
+    .eq("lead_id", leadId)
+    .limit(1);
+
+  if (existing && existing.length > 0) {
+    return existing[0].id;
+  }
+
+  const { data: newConv, error } = await supabaseAdmin
+    .from("conversations")
+    .insert({
+      organization_id: organizationId,
+      lead_id: leadId,
+      mode: "AI",
+      unread_count: 0,
+    })
+    .select("id")
+    .single();
+
+  if (error) {
+    console.error("Conversation creation error:", error);
+    throw new Error(`Failed to create conversation: ${error.message}`);
+  }
+
+  return newConv.id;
+}
+
+async function fetchChatHistory(supabaseAdmin: any, conversationId: string, limit = 20): Promise<Array<Record<string, unknown>>> {
+  const { data } = await supabaseAdmin
+    .from("messages")
+    .select("direction, body, message_type, received_at")
+    .eq("conversation_id", conversationId)
+    .order("received_at", { ascending: true })
+    .limit(limit);
+
+  return data || [];
+}
+
+function parseAIResponse(rawContent: string): { replyText: string; crmData: Record<string, unknown> | null } {
+  const text = (rawContent || "").trim();
+  const jsonMatch = text.match(/(\{[\s\S]*\})\s*$/);
+  let replyText = text;
+  let crmData: Record<string, unknown> | null = null;
+
+  if (jsonMatch) {
+    try {
+      crmData = JSON.parse(jsonMatch[1]);
+      replyText = text.slice(0, jsonMatch.index).trim();
+    } catch (e) {
+      console.warn("Failed to parse AI CRM JSON:", (e as Error).message);
+    }
+  }
+
+  return { replyText, crmData };
+}
+
+async function updateLeadFromCRM(supabaseAdmin: any, leadId: string, crmData: Record<string, unknown> | null) {
+  if (!crmData || !leadId) return;
+
+  const updates: Record<string, unknown> = {};
+
+  if (crmData.captured_fields) {
+    const fields = crmData.captured_fields as Record<string, string>;
+    if (fields.name && !updates.contact_name) updates.contact_name = fields.name;
+    if (fields.industry && !updates.industry) updates.industry = fields.industry;
+    if (fields.need && !updates.ai_summary) updates.ai_summary = fields.need;
+  }
+
+  if (crmData.lead_status) {
+    const statusMap: Record<string, string> = { 'HOT': 'QUALIFIED', 'WARM': 'REPLIED', 'COLD': 'NEW' };
+    updates.status = statusMap[crmData.lead_status as string] || updates.status;
+    updates.score_category = crmData.lead_status;
+  }
+
+  if (crmData.notes) {
+    updates.notes = crmData.notes;
+  }
+
+  if (Object.keys(updates).length > 0) {
+    const { error } = await supabaseAdmin
+      .from("leads")
+      .update(updates)
+      .eq("id", leadId);
+
+    if (error) {
+      console.error("Lead CRM update error:", error);
+    }
   }
 }
 
@@ -107,7 +350,9 @@ async function handler(request: Request): Promise<Response> {
   if (method === "POST") {
     try {
       const payload = await request.json();
-      const messages = payload?.entry?.[0]?.changes?.[0]?.value?.messages ?? [];
+      const value = payload?.entry?.[0]?.changes?.[0]?.value ?? {};
+      const messages = value.messages ?? [];
+      const phoneNumberId = value.metadata?.phone_number_id ?? "";
 
       const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
       if (!serviceRoleKey) {
@@ -121,13 +366,30 @@ async function handler(request: Request): Promise<Response> {
         { db: { schema: "public" }, auth: { persistSession: false } },
       );
 
+      const organizationId = await getOrganizationId(supabaseAdmin, phoneNumberId);
+      if (!organizationId) {
+        console.error("[Webhook] No active WhatsApp connection found for phone_number_id:", phoneNumberId);
+        return new Response(null, { status: 200 });
+      }
+
+      let orgSettings: Record<string, string> = {};
+      try {
+        const { data } = await supabaseAdmin
+          .from("organizations")
+          .select("*")
+          .eq("id", organizationId)
+          .limit(1);
+        orgSettings = (data?.[0] as Record<string, string>) || {};
+      } catch (err) {
+        console.warn("[Webhook] Could not fetch organization settings:", (err as Error).message);
+      }
+
       for (const msg of messages) {
         const sender = msg.from ?? "";
         const type = msg.type ?? "";
         const content = msg.text?.body ?? "";
         const isMedia = MEDIA_TYPES.includes(type);
 
-        // Meta retries deliveries it considers failed, so skip messages we already stored.
         if (msg.id) {
           const { data: existing } = await supabaseAdmin
             .from("messages")
@@ -150,7 +412,28 @@ async function handler(request: Request): Promise<Response> {
           displayContent = caption || (type === "audio" ? "🎤 Voice message" : `📎 ${type} message`);
         }
 
+        let leadId: string | null = null;
+        let conversationId: string | null = null;
+        let chatHistory: Array<Record<string, unknown>> = [];
+
+        try {
+          leadId = await findOrCreateLead(supabaseAdmin, organizationId, sender);
+          conversationId = await findOrCreateConversation(supabaseAdmin, organizationId, leadId);
+
+          if (type === "text" && content.trim()) {
+            chatHistory = await fetchChatHistory(supabaseAdmin, conversationId);
+          }
+        } catch (err) {
+          console.error("[Webhook] Lead/Conversation setup error:", err);
+        }
+
+        if (!conversationId) {
+          console.error("[Webhook] Skipping message — no conversation_id available");
+          continue;
+        }
+
         const messageRecord = {
+          conversation_id: conversationId,
           wa_message_id: msg.id,
           sender_number: sender,
           content: displayContent,
@@ -164,15 +447,51 @@ async function handler(request: Request): Promise<Response> {
           media_size: mediaInfo?.mediaSize ?? 0,
         };
 
-        // Must use the service-role client: RLS on public.messages rejects anon inserts.
         const { error } = await supabaseAdmin.from("messages").insert(messageRecord);
         if (error) console.error("[Webhook] Supabase insert error:", error);
+
+        if (type === "text" && content.trim() && !isOptOut(content)) {
+          try {
+            const aiRaw = await generateAIReply(orgSettings, chatHistory, content);
+            const parsed = parseAIResponse(aiRaw);
+            const replyText = parsed.replyText || fallbackReply(content);
+
+            const sent = await sendWhatsAppReply(phoneNumberId, sender, replyText);
+            const sentAt = new Date().toISOString();
+            const { error: outboundError } = await supabaseAdmin.from("messages").insert({
+              conversation_id: conversationId,
+              wa_message_id: sent.messages?.[0]?.id,
+              sender_number: sender,
+              sender: "agent",
+              body: replyText,
+              message_body: replyText,
+              content: replyText,
+              message_type: "text",
+              direction: "outbound",
+              received_at: sentAt,
+              created_at: sentAt,
+              is_ai: true,
+              status: "sent",
+            });
+            if (outboundError) throw outboundError;
+
+            await updateLeadFromCRM(supabaseAdmin, leadId, parsed.crmData);
+
+            await supabaseAdmin
+              .from("conversations")
+              .update({
+                last_message: replyText,
+                last_timestamp: new Date().toISOString()
+              })
+              .eq("id", conversationId);
+          } catch (error) {
+            console.error("[AI Agent] Auto-reply send failed:", error);
+          }
+        }
       }
 
       return new Response(null, { status: 200 });
     } catch (err) {
-      // Always ack with 200. A non-2xx makes Meta retry the same payload and can
-      // eventually disable the webhook subscription.
       console.error("[Webhook] Processing error:", err);
       return new Response(null, { status: 200 });
     }

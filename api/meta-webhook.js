@@ -499,17 +499,23 @@ export default async function handler(req, res) {
 
           const sendResult = await sendWhatsAppMessage(phoneNumberId, sender, replyText);
 
-          await supabase.from('messages').insert({
+          const sentAt = new Date().toISOString();
+          const { error: outboundError } = await supabase.from('messages').insert({
             conversation_id: conversationId,
-            wa_message_id: sendResult?.messages?.[0]?.id || null,
+            wa_message_id: sendResult.messages?.[0]?.id,
             sender_number: sender,
+            sender: 'agent',
+            body: replyText,
+            message_body: replyText,
             content: replyText,
             message_type: 'text',
             direction: 'outbound',
-            received_at: new Date().toISOString(),
+            received_at: sentAt,
+            created_at: sentAt,
             is_ai: true,
-            status: 'SENT',
+            status: 'sent',
           });
+          if (outboundError) throw outboundError;
 
           await updateLeadFromCRM(leadId, crmData);
 
