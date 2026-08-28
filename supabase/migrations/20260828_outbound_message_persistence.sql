@@ -1,3 +1,20 @@
+-- Create the CRM thread table when upgrading from an inbound-only webhook schema.
+-- organization_id and lead_id intentionally have no FK here: some legacy installs
+-- created their own leads table separately and can be linked without data loss.
+CREATE TABLE IF NOT EXISTS public.conversations (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID,
+  lead_id UUID,
+  mode VARCHAR(20) DEFAULT 'AI',
+  unread_count INTEGER DEFAULT 0,
+  last_message TEXT,
+  last_timestamp TIMESTAMPTZ DEFAULT now(),
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_conversations_lead_id
+  ON public.conversations(lead_id);
 -- Bring older inbox schemas up to the CRM message shape before adding indexes.
 -- New columns are nullable so existing inbound history remains intact.
 ALTER TABLE public.messages
