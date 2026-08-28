@@ -506,7 +506,9 @@ class WhatsAppService {
         this.processedMsgIds = new Set();
       }
 
-      for (const msg of data.messages) {
+      // API returns the latest rows first; render each conversation chronologically.
+      const orderedMessages = [...data.messages].sort((a, b) => new Date(a.received_at || a.created_at || 0) - new Date(b.received_at || b.created_at || 0));
+      for (const msg of orderedMessages) {
         const msgId = msg.id || `${msg.sender_number}_${msg.received_at}`;
         if (this.processedMsgIds.has(msgId)) continue;
         this.processedMsgIds.add(msgId);
@@ -582,7 +584,7 @@ class WhatsAppService {
         }
 
         // Match conversation by lead ID OR by normalized phone number
-        let conv = conversations.find(c => c.leadId === lead.id) || this.findConversationByPhone(lead.phone, conversations);
+        let conv = conversations.find(c => c.id === msg.conversation_id) || conversations.find(c => c.leadId === lead.id) || this.findConversationByPhone(lead.phone, conversations);
         if (conv && conv.leadId !== lead.id) {
           conv.leadId = lead.id;
         }
@@ -609,12 +611,13 @@ class WhatsAppService {
 
         if (!conv) {
           conv = {
-            id: 'conv_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+            // Preserve the database UUID so later outbound realtime inserts reach this thread.
+            id: msg.conversation_id || ('conv_' + Date.now() + '_' + Math.floor(Math.random() * 1000)),
             leadId: lead.id,
             leadName: lead.contactName,
             company: lead.companyName,
             phone: lead.phone,
-            unreadCount: 1,
+            unreadCount: msg.direction === 'outbound' ? 0 : 1,
             mode: 'AI',
             status: 'AI Active',
             lastMessage: displayText || text || '📩 New message',
