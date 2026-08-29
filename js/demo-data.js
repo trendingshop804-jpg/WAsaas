@@ -194,7 +194,7 @@ window.DEMO_DATA = {
       mode: 'AI',
       status: 'AI Active',
       lastMessage: '[Inbound WhatsApp Message]',
-      lastTimestamp: '05:49'
+      lastTimestamp: '2026-08-27T05:49:00.000Z'
     },
     {
       id: 'conv_wa_2',
@@ -206,7 +206,7 @@ window.DEMO_DATA = {
       mode: 'AI',
       status: 'AI Active',
       lastMessage: 'Test message from PowerShell',
-      lastTimestamp: '21:14'
+      lastTimestamp: '2026-08-27T21:14:00.000Z'
     },
     {
       id: 'conv_ceo',
@@ -219,7 +219,7 @@ window.DEMO_DATA = {
       mode: 'AI',
       status: 'AI Active',
       lastMessage: 'Hi',
-      lastTimestamp: '08:40',
+      lastTimestamp: '2026-08-27T08:40:00.000Z',
       aiScore: 62,
       aiSummary: 'Active conversational opportunity.',
       messages: [
@@ -228,7 +228,7 @@ window.DEMO_DATA = {
           direction: 'SYSTEM',
           isSystem: true,
           text: 'Chat thread initialized for CEO',
-          timestamp: '19:40'
+          timestamp: '2026-08-27T19:40:00.000Z'
         },
         {
           id: 'm_ceo_2',
@@ -236,7 +236,7 @@ window.DEMO_DATA = {
           isAI: true,
           sentByAi: true,
           text: 'Hi CEO, I noticed NEXTBRIGHT SOLUTIONS in Kochi, Kerala, India. We help leaders in it service automate their customer pipeline on WhatsApp, increasing response velocity by 3x. Are you open to a brief 5-min demo this week? Reply with DEMO for a quick walkthrough',
-          timestamp: '19:44',
+          timestamp: '2026-08-27T19:44:00.000Z',
           status: 'DELIVERED'
         },
         {
@@ -245,7 +245,7 @@ window.DEMO_DATA = {
           isAI: true,
           sentByAi: true,
           text: 'Hi CEO, I noticed NEXTBRIGHT SOLUTIONS in Kochi, Kerala, India. We help leaders in it service automate their customer pipeline on WhatsApp, increasing response velocity by 3x. Are you open to a brief 5-min demo this week? Reply with DEMO for a quick walkthrough',
-          timestamp: '19:44',
+          timestamp: '2026-08-27T19:44:00.000Z',
           status: 'DELIVERED'
         },
         {
@@ -254,7 +254,7 @@ window.DEMO_DATA = {
           isAI: true,
           sentByAi: true,
           text: 'https://moviesdatamil.co/download/mahasenha-2025-original-1080p-hd-2-7-gb/',
-          timestamp: '20:17',
+          timestamp: '2026-08-27T20:17:00.000Z',
           status: 'DELIVERED'
         },
         {
@@ -262,7 +262,7 @@ window.DEMO_DATA = {
           direction: 'SYSTEM',
           isSystem: true,
           text: 'Human Takeover engaged. AI Bot paused.',
-          timestamp: '20:18'
+          timestamp: '2026-08-27T20:18:00.000Z'
         }
       ]
     },
@@ -277,47 +277,47 @@ window.DEMO_DATA = {
       mode: 'AI',
       status: 'AI Active',
       lastMessage: 'Hi Dr. Jacob Mathew, I noticed Dr. Jac...',
-      lastTimestamp: '18:01',
+      lastTimestamp: '2026-08-27T18:01:00.000Z',
       messages: [
         {
           id: 'm1',
           sender: 'system',
           text: 'Campaign "Kerala Dental Clinics Outreach" started. Template healthcare_appointment_intro_v2 dispatched.',
-          timestamp: 'Yesterday, 10:15 AM'
+          timestamp: '2026-08-26T10:15:00.000Z'
         },
         {
           id: 'm2',
           sender: 'outbound',
           text: 'Hi Dr. Jacob, noticed Dr. Jacob Dental & Implant Center in Kochi. Are you still handling clinic patient bookings manually? We helped dental clinics increase appointment shows by 40% with automated WhatsApp recalls. Open to a 5-min demo?',
-          timestamp: 'Yesterday, 10:15 AM',
+          timestamp: '2026-08-26T10:15:00.000Z',
           status: 'READ'
         },
         {
           id: 'm3',
           sender: 'inbound',
           text: 'Hello, yes we currently use front-desk phone calls which takes too much time. What does this software cost and how does it sync with dental appointments?',
-          timestamp: 'Yesterday, 2:10 PM'
+          timestamp: '2026-08-26T14:10:00.000Z'
         },
         {
           id: 'm4',
           sender: 'outbound',
           isAI: true,
           text: 'Thanks for reaching out Dr. Jacob! Our AI automatically sends WhatsApp reminder confirmations 24h & 2h before appointments, allowing patients to confirm or reschedule in 1 click. We support standard clinic workflows. Our growth package starts at ₹3,999/mo for up to 3 doctor chairs.',
-          timestamp: 'Yesterday, 2:11 PM',
+          timestamp: '2026-08-26T14:11:00.000Z',
           status: 'READ'
         },
         {
           id: 'm5',
           sender: 'inbound',
           text: 'Sounds promising. We have 3 branches in Ernakulam with 6 consulting doctors. Can we see a live demonstration with our team?',
-          timestamp: 'Today, 2:30 PM'
+          timestamp: '2026-08-27T14:30:00.000Z'
         },
         {
           id: 'm6',
           sender: 'outbound',
           isAI: true,
           text: 'Sure Doctor Jacob! I can book a 15-min zoom walkthrough tomorrow at 11:30 AM or 3:00 PM. Which works best?',
-          timestamp: 'Today, 2:32 PM',
+          timestamp: '2026-08-27T14:32:00.000Z',
           status: 'DELIVERED'
         },
         {
@@ -326,7 +326,7 @@ window.DEMO_DATA = {
           type: 'image',
           mediaUrl: 'https://images.unsplash.com/photo-1629909615957-be38d48fbbe4?w=480&q=80',
           caption: 'Our current clinic reception — you can see the paper-based reminder board 😅',
-          timestamp: 'Today, 2:35 PM'
+          timestamp: '2026-08-27T14:35:00.000Z'
         },
         {
           id: 'm8',
@@ -336,7 +336,7 @@ window.DEMO_DATA = {
           fileSize: '2.4 MB',
           mediaUrl: '#',
           caption: 'Kerala Dental Case Study — 40% no-show reduction',
-          timestamp: 'Today, 2:37 PM',
+          timestamp: '2026-08-27T14:37:00.000Z',
           status: 'READ'
         },
         {
@@ -344,14 +344,14 @@ window.DEMO_DATA = {
           sender: 'inbound',
           type: 'audio',
           mediaUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
-          timestamp: 'Today, 2:40 PM'
+          timestamp: '2026-08-27T14:40:00.000Z'
         },
         {
           id: 'm10',
           sender: 'inbound',
           type: 'sticker',
           mediaUrl: 'https://media.giphy.com/media/1n9ogS4ddPMzYULVmJ/giphy.gif',
-          timestamp: 'Today, 2:41 PM'
+          timestamp: '2026-08-27T14:41:00.000Z'
         },
         {
           id: 'm11',
@@ -359,7 +359,7 @@ window.DEMO_DATA = {
           type: 'location',
           locationName: 'Jacob Dental Clinic – Ernakulam',
           locationAddress: 'MG Road, Near High Court Junction, Kerala 682016',
-          timestamp: 'Today, 2:43 PM'
+          timestamp: '2026-08-27T14:43:00.000Z'
         },
         {
           id: 'm12',
@@ -367,7 +367,7 @@ window.DEMO_DATA = {
           type: 'contact',
           contactName: 'Dr. Jacob Thomas',
           contactPhone: '+91 94470 23456',
-          timestamp: 'Today, 2:44 PM'
+          timestamp: '2026-08-27T14:44:00.000Z'
         },
         {
           id: 'm13',
@@ -375,7 +375,7 @@ window.DEMO_DATA = {
           type: 'video',
           mediaUrl: 'https://www.w3schools.com/html/mov_bbb.mp4',
           caption: 'Quick tour of our reception setup',
-          timestamp: 'Today, 2:46 PM'
+          timestamp: '2026-08-27T14:46:00.000Z'
         }
       ],
       aiSuggestions: [
@@ -394,47 +394,47 @@ window.DEMO_DATA = {
       mode: 'HUMAN',
       status: 'Human Active',
       lastMessage: 'We received the proposal document Vikram. Can we do a pilot run this weekend at our Indiranagar outlet?',
-      lastTimestamp: '4:45 PM',
+      lastTimestamp: '2026-08-27T16:45:00.000Z',
       messages: [
         {
           id: 'm201',
           sender: 'outbound',
           text: 'Hello Rahul! Loved the dining vibe at Spice Craft Bistro & Brews. Did you know direct WhatsApp table reservations can save up to 25% on aggregator fees? Would you like to see how Bangalore restaurants automate VIP bookings?',
-          timestamp: 'Aug 17, 11:00 AM',
+          timestamp: '2026-08-17T11:00:00.000Z',
           status: 'READ'
         },
         {
           id: 'm202',
           sender: 'inbound',
           text: 'Interesting! Can it integrate with our Petpooja POS billing system?',
-          timestamp: 'Aug 17, 11:42 AM'
+          timestamp: '2026-08-17T11:42:00.000Z'
         },
         {
           id: 'm203',
           sender: 'outbound',
           isAI: true,
           text: 'Yes Rahul! We have direct Petpooja webhook support. Table reservations and VIP billing bills sync in real-time.',
-          timestamp: 'Aug 17, 11:43 AM',
+          timestamp: '2026-08-17T11:43:00.000Z',
           status: 'READ'
         },
         {
           id: 'm204',
           sender: 'system',
           text: 'Human Takeover triggered by Vikram Mehta. AI auto-reply paused.',
-          timestamp: 'Aug 17, 12:00 PM'
+          timestamp: '2026-08-17T12:00:00.000Z'
         },
         {
           id: 'm205',
           sender: 'outbound',
           text: 'Hi Rahul, Vikram here! Just shared our custom hospitality proposal on your email rahul@spicecraft.in. Let me know if you need any adjustments.',
-          timestamp: 'Aug 18, 10:30 AM',
+          timestamp: '2026-08-18T10:30:00.000Z',
           status: 'READ'
         },
         {
           id: 'm206',
           sender: 'inbound',
           text: 'We received the proposal document Vikram. Can we do a pilot run this weekend at our Indiranagar outlet?',
-          timestamp: 'Today, 4:45 PM'
+          timestamp: '2026-08-27T16:45:00.000Z'
         }
       ],
       aiSuggestions: [
@@ -452,27 +452,27 @@ window.DEMO_DATA = {
       mode: 'AI',
       status: 'AI Active',
       lastMessage: 'നമസ്കാരം വിപിൻ സർ! വിദേശ സഞ്ചാരികൾക്കായി ഇംഗ്ലീഷിലും ജർമ്മൻ ഭാഷയിലുമുള്ള ഓട്ടോമേറ്റഡ് വാട്സ്ആപ്പ് ബ്രോഷർ അയക്കാം. ഡെമോ നാളെ 10 മണിക്ക് സൗകര്യമാണോ?',
-      lastTimestamp: '5:10 PM',
+      lastTimestamp: '2026-08-27T17:10:00.000Z',
       messages: [
         {
           id: 'm401',
           sender: 'outbound',
           text: 'നമസ്കാരം Vipin, Sunrise Ayurvedic Resorts-ൽ പുതിയ പേഷ്യന്റ് അപ്പോയിന്റ്മെന്റുകൾ വാട്സ്ആപ്പിലൂടെ സ്വയം ബുക്ക് ചെയ്യാൻ സാധിക്കുന്ന പുതിയ AI ഓട്ടോമേഷൻ സിസ്റ്റം ലഭ്യമാണ്. ഡെമോ ആവശ്യമുണ്ടോ?',
-          timestamp: 'Today, 4:15 PM',
+          timestamp: '2026-08-27T16:15:00.000Z',
           status: 'READ'
         },
         {
           id: 'm402',
           sender: 'inbound',
           text: 'ഹലോ, ഞങ്ങൾക്ക് മൺസൂൺ ആയുർവേദ പാക്കേജുകൾക്ക് യൂറോപ്പിൽ നിന്നും ആളുകൾ ബുക്ക് ചെയ്യാറുണ്ട്. അവർക്ക് ഓട്ടോമാറ്റിക് ആയി ബ്രോഷറും നിരക്കുകളും വാട്സ്ആപ്പിൽ കൊടുക്കാൻ പറ്റുമോ?',
-          timestamp: 'Today, 5:05 PM'
+          timestamp: '2026-08-27T17:05:00.000Z'
         },
         {
           id: 'm403',
           sender: 'outbound',
           isAI: true,
           text: 'നമസ്കാരം വിപിൻ സർ! വിദേശ സഞ്ചാരികൾക്കായി ഇംഗ്ലീഷിലും ജർമ്മൻ ഭാഷയിലുമുള്ള ഓട്ടോമേറ്റഡ് വാട്സ്ആപ്പ് ബ്രോഷർ അയക്കാം. ഡെമോ നാളെ 10 മണിക്ക് സൗകര്യമാണോ?',
-          timestamp: 'Today, 5:10 PM',
+          timestamp: '2026-08-27T17:10:00.000Z',
           status: 'DELIVERED'
         }
       ],
