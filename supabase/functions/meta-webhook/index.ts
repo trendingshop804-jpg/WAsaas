@@ -43,7 +43,7 @@ function fallbackReply(message: string): string {
 }
 
 function isOptOut(message: string): boolean {
-  return /\b(stop|unsubscribe|remove me|do not contact|don't contact)\b/i.test(message);
+  return /\b(stop|unsubscribe|remove me|do not contact|don't contact|not interested)\b/i.test(message);
 }
 
 async function generateAIReply(organization: Record<string, unknown>, history: Array<Record<string, unknown>>, userMessage: string): Promise<string> {
@@ -449,6 +449,22 @@ async function handler(request: Request): Promise<Response> {
 
         const { error } = await supabaseAdmin.from("messages").insert(messageRecord);
         if (error) console.error("[Webhook] Supabase insert error:", error);
+
+        if (isOptOut(content) && leadId) {
+          try {
+            await supabaseAdmin
+              .from("leads")
+              .update({
+                opted_out: true,
+                score: 0,
+                next_follow_up_at: null,
+                followup_count: 0,
+              })
+              .eq("id", leadId);
+          } catch (error) {
+            console.error("[Webhook] Opt-out update error:", error);
+          }
+        }
 
         if (type === "text" && content.trim() && !isOptOut(content)) {
           try {
