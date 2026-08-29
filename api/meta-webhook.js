@@ -366,6 +366,11 @@ async function sendWhatsAppMessage(phoneNumberId, toNumber, text) {
   return data;
 }
 
+function isOptOut(messageText = '') {
+  const normalized = String(messageText || '').trim().toLowerCase();
+  return /\b(stop|unsubscribe|remove me|not interested|do not contact|don't contact)\b/i.test(normalized);
+}
+
 export default async function handler(req, res) {
   if (req.method === 'GET') {
     const mode = req.query['hub.mode'];
@@ -446,11 +451,24 @@ export default async function handler(req, res) {
           leadId = await findOrCreateLead(organizationId, sender);
           conversationId = await findOrCreateConversation(organizationId, leadId);
 
-          // Any inbound WhatsApp message stops the scheduled follow-up sequence.
-          await supabase
-            .from('leads')
-            .update({ status: 'REPLIED', next_followup_at: null })
-            .eq('id', leadId);
+          if (isOptOut(userText) && leadId) {
+            await supabase
+              .from('leads')
+              .update({
+                opted_out: true,
+                opted_out_at: new Date().toISOString(),
+                score: 0,
+                next_followup_at: null,
+                followup_count: 0,
+              })
+              .eq('id', leadId);
+          } else {
+            // Any non-opt-out inbound WhatsApp message stops the scheduled follow-up sequence.
+            await supabase
+              .from('leads')
+              .update({ status: 'REPLIED', next_followup_at: null })
+              .eq('id', leadId);
+          }
 
           if (userText && msgType === 'text') {
             chatHistory = await fetchChatHistory(conversationId);
@@ -485,7 +503,7 @@ export default async function handler(req, res) {
           console.error('[Webhook] Supabase insert error:', msgError);
         }
 
-        if (userText && msgType === 'text' && leadId) {
+        if (userText && msgType === 'text' && leadId && !isOptOut(userText)) {
           let aiRaw = null;
           let replyText = "Hi there! I'd love to help you. Could you tell me a bit more about what you're looking for?";
           let crmData = null;

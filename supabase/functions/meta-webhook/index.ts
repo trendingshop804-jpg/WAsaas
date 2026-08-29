@@ -456,8 +456,9 @@ async function handler(request: Request): Promise<Response> {
               .from("leads")
               .update({
                 opted_out: true,
+                opted_out_at: new Date().toISOString(),
                 score: 0,
-                next_follow_up_at: null,
+                next_followup_at: null,
                 followup_count: 0,
               })
               .eq("id", leadId);
