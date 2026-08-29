@@ -446,6 +446,12 @@ export default async function handler(req, res) {
           leadId = await findOrCreateLead(organizationId, sender);
           conversationId = await findOrCreateConversation(organizationId, leadId);
 
+          // Any inbound WhatsApp message stops the scheduled follow-up sequence.
+          await supabase
+            .from('leads')
+            .update({ status: 'REPLIED', next_followup_at: null })
+            .eq('id', leadId);
+
           if (userText && msgType === 'text') {
             chatHistory = await fetchChatHistory(conversationId);
           }

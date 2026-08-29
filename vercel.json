@@ -5,5 +5,9 @@
       "src": "/api/(.*)",
       "dest": "api/$1.js"
     }
+  ],
+  "crons": [
+    { "path": "/api/daily-welcome", "schedule": "0 9 * * *" },
+    { "path": "/api/daily-followup", "schedule": "30 9 * * *" }
   ]
 }
