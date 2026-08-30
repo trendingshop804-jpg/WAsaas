@@ -36,6 +36,9 @@ globalThis.fetch = async (input, init = {}) => {
     calls.insert.push(JSON.parse(init.body));
     return json([], 201);
   }
+  if (url.includes('/rest/v1/conversations')) {
+    return json([{ id: 'conv_1' }]);
+  }
   throw new Error(`Unexpected fetch to ${url}`);
 };
 

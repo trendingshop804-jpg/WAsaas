@@ -63,6 +63,18 @@ globalThis.fetch = async (input, init = {}) => {
     // does a plain ordered select.
     return json(url.includes('wa_message_id=eq.') ? state.selectResult : state.rows);
   }
+  if (url.includes('/rest/v1/whatsapp_connections')) {
+    return json([{ organization_id: 'org_1', phone_number_id: '1234567890', is_active: true }]);
+  }
+  if (url.includes('/rest/v1/conversations')) {
+    return json([{ id: 'conv_1' }]);
+  }
+  if (url.includes('/rest/v1/leads?select=id')) {
+    return json([]);
+  }
+  if (url.includes('/rest/v1/leads') && init.method === 'POST') {
+    return json([{ id: 'lead_1' }]);
+  }
   throw new Error(`Unexpected fetch to ${url}`);
 };
 

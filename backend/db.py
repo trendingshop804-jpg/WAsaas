@@ -82,6 +82,10 @@ class Lead(Base):
     status = Column(String(50), default="NEW")
     ai_summary = Column(Text)
     last_contacted_at = Column(DateTime)
+    opted_out = Column(Integer, default=0)
+    opted_out_at = Column(DateTime)
+    next_followup_at = Column(DateTime)
+    followup_count = Column(Integer, default=0)
     created_at = Column(DateTime, default=func.now(), server_default=func.now())
 
 

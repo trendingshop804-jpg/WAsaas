@@ -249,6 +249,12 @@ async def process_meta_payload(payload: Dict[str, Any]):
         if contacts and contacts[0] and contacts[0].get("profile", {}).get("name"):
             contact_name = contacts[0]["profile"]["name"]
 
+        OPT_OUT_KEYWORDS = ["stop", "remove me", "unsubscribe", "not interested", "do not contact", "don't contact"]
+
+        def is_opt_out(text: str) -> bool:
+            normalized = (text or "").strip().lower()
+            return any(keyword in normalized for keyword in OPT_OUT_KEYWORDS)
+
         for msg in messages:
             wa_msg_id = msg.get("id", "")
             phone = msg.get("from", "")
@@ -309,7 +315,17 @@ async def process_meta_payload(payload: Dict[str, Any]):
                     created_at=received_at,
                 )
                 db_session.add(message)
-                print(f"[OK] Inbound text message stored from {phone}: \"{text_body}\"")
+
+                # Strict opt-out compliance: terminate all future automation
+                if is_opt_out(text_body) and lead:
+                    lead.opted_out = 1
+                    lead.opted_out_at = datetime.datetime.utcnow()
+                    lead.score = 0
+                    lead.next_followup_at = None
+                    lead.followup_count = 0
+                    print(f"[COMPLIANCE] Opt-out processed for {phone}: automation terminated")
+                else:
+                    print(f"[OK] Inbound text message stored from {phone}: \"{text_body}\"")
 
             # --- Handle media messages ---
             elif msg_type in ("image", "video", "audio", "document", "sticker"):
