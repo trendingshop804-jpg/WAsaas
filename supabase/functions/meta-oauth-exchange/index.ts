@@ -322,6 +322,62 @@ async function handleEmbeddedSignup(
   };
 }
 
+async function handleCodeExchange(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  organizationId: string,
+  code: string
+): Promise<{ success: boolean; phone_number: string; waba_id: string }> {
+  // 1. Exchange code for token
+  let accessToken = '';
+  if (META_APP_ID && META_APP_SECRET) {
+    const tokenUrl = `https://graph.facebook.com/v21.0/oauth/access_token?client_id=${META_APP_ID}&client_secret=${META_APP_SECRET}&code=${code}`;
+    const tokenRes = await fetch(tokenUrl);
+    const tokenData = await tokenRes.json();
+    if (tokenData.access_token) {
+      accessToken = tokenData.access_token;
+    } else {
+      throw new Error(tokenData.error?.message || 'Failed to exchange code for token');
+    }
+  } else {
+    throw new Error('META_APP_ID and META_APP_SECRET must be configured');
+  }
+
+  // 2. Exchange for long-lived token
+  let longLivedToken = accessToken;
+  try {
+    const exchangeUrl = `https://graph.facebook.com/v21.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${META_APP_ID}&client_secret=${META_APP_SECRET}&fb_exchange_token=${accessToken}`;
+    const exRes = await fetch(exchangeUrl);
+    const exData = await exRes.json();
+    if (exData.access_token) {
+      longLivedToken = exData.access_token;
+    }
+  } catch (e) {
+    console.warn("[Code Exchange]: long-lived exchange failed, using short-lived", e);
+  }
+
+  // 3. Discover accounts and save primary
+  const discovery = await discoverAccounts(longLivedToken);
+  const encryptedToken = await encryptToken(longLivedToken);
+  const result = await savePrimaryAccounts(supabaseAdmin, organizationId, longLivedToken, encryptedToken, discovery);
+
+  if (result.whatsapp && result.wabaId) {
+    await subscribeToWebhook(result.wabaId, longLivedToken);
+  }
+
+  if (!result.whatsapp) {
+    throw new Error('No WhatsApp Business Account found');
+  }
+
+  const waba = discovery.wabas.find(w => w.wabaId === result.wabaId);
+  const phone = waba?.phoneNumbers[0];
+
+  return {
+    success: true,
+    phone_number: phone?.display_phone_number || 'WhatsApp Connected',
+    waba_id: result.wabaId || ''
+  };
+}
+
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -347,7 +403,23 @@ serve(async (req: Request) => {
       return jsonResponse({ error: "Unauthorized user session" }, 401);
     }
 
-    const { accessToken, organizationId, mode = "save", wabaIndex = 0, phoneIndex = 0, instagramIndices = [], code, wabaId, phoneNumberId } = await req.json();
+    const body = await req.json();
+    const { accessToken, organizationId, wabaIndex = 0, phoneIndex = 0, instagramIndices = [], code, wabaId, phoneNumberId } = body;
+    const mode = body.mode || (code && !accessToken ? "code_exchange" : "save");
+
+    // Handle code-only exchange (new WhatsApp Embedded Signup flow)
+    if (mode === "code_exchange") {
+      if (!organizationId) {
+        return jsonResponse({ error: "organizationId is required" }, 400);
+      }
+      try {
+        const result = await handleCodeExchange(supabaseAdmin, organizationId, code);
+        return jsonResponse(result);
+      } catch (err) {
+        return jsonResponse({ error: (err as Error).message }, 400);
+      }
+    }
+
     if (!organizationId) {
       return jsonResponse({ error: "organizationId is required" }, 400);
     }
