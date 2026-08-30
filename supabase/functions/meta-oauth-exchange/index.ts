@@ -64,6 +64,37 @@ async function encryptToken(plaintext: string): Promise<string> {
   return btoa(String.fromCharCode(...combined));
 }
 
+async function subscribeToWebhook(wabaId: string, accessToken: string): Promise<void> {
+  const subscribeRes = await fetch(
+    `https://graph.facebook.com/v21.0/${wabaId}/subscribed_apps`,
+    {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${accessToken}` }
+    }
+  );
+
+  if (!subscribeRes.ok) {
+    const err = await subscribeRes.json();
+    throw new Error(err.error?.message || `Webhook subscription failed with status ${subscribeRes.status}`);
+  }
+
+  const checkRes = await fetch(
+    `https://graph.facebook.com/v21.0/${wabaId}/subscribed_apps`,
+    { headers: { 'Authorization': `Bearer ${accessToken}` } }
+  );
+  const checkData = await checkRes.json();
+
+  if (!checkRes.ok) {
+    throw new Error(`Webhook verification failed with status ${checkRes.status}`);
+  }
+
+  console.log('[Webhook] Subscribed apps:', JSON.stringify(checkData.data));
+
+  if (!checkData.data || !Array.isArray(checkData.data) || !checkData.data.some((app: any) => app.id === META_APP_ID)) {
+    console.warn('[Webhook] App not found in subscribed apps list after subscription');
+  }
+}
+
 interface DiscoveryResult {
   wabas: Array<{
     wabaId: string;
@@ -135,14 +166,16 @@ async function discoverAccounts(longLivedToken: string): Promise<DiscoveryResult
 async function saveSelectedAccounts(
   supabaseAdmin: ReturnType<typeof createClient>,
   organizationId: string,
+  longLivedToken: string,
   encryptedToken: string,
   discovery: DiscoveryResult,
   wabaIndex: number,
   phoneIndex: number,
   instagramIndices: number[]
-): Promise<{ whatsapp: boolean; instagram: number }> {
+): Promise<{ whatsapp: boolean; instagram: number; wabaId?: string }> {
   let whatsappSaved = false;
   let instagramSaved = 0;
+  let savedWabaId: string | undefined;
 
   if (discovery.wabas[wabaIndex] && discovery.wabas[wabaIndex].phoneNumbers[phoneIndex]) {
     const waba = discovery.wabas[wabaIndex];
@@ -160,6 +193,9 @@ async function saveSelectedAccounts(
       updated_at: new Date().toISOString()
     }, { onConflict: "organization_id, phone_number_id" });
     whatsappSaved = true;
+    savedWabaId = waba.wabaId;
+
+    await subscribeToWebhook(waba.wabaId, longLivedToken);
   }
 
   for (const idx of instagramIndices) {
@@ -178,32 +214,34 @@ async function saveSelectedAccounts(
     }
   }
 
-  return { whatsapp: whatsappSaved, instagram: instagramSaved };
+  return { whatsapp: whatsappSaved, instagram: instagramSaved, wabaId: savedWabaId };
 }
 
 async function savePrimaryAccounts(
   supabaseAdmin: ReturnType<typeof createClient>,
   organizationId: string,
+  longLivedToken: string,
   encryptedToken: string,
   discovery: DiscoveryResult
-): Promise<{ whatsapp: boolean; instagram: number }> {
+): Promise<{ whatsapp: boolean; instagram: number; wabaId?: string }> {
   const wabaIndex = discovery.wabas.findIndex(w => w.phoneNumbers.length > 0);
   const phoneIndex = wabaIndex >= 0 ? 0 : -1;
   const instagramIndices = discovery.instagram.map((_, i) => i);
-  return saveSelectedAccounts(supabaseAdmin, organizationId, encryptedToken, discovery, wabaIndex, phoneIndex, instagramIndices);
+  return saveSelectedAccounts(supabaseAdmin, organizationId, longLivedToken, encryptedToken, discovery, wabaIndex, phoneIndex, instagramIndices);
 }
 
 async function autoConnectAccounts(
   supabaseAdmin: ReturnType<typeof createClient>,
   organizationId: string,
+  longLivedToken: string,
   encryptedToken: string,
   discovery: DiscoveryResult
-): Promise<{ autoConnected: boolean; needsPicker: boolean; whatsapp: boolean; instagram: number }> {
+): Promise<{ autoConnected: boolean; needsPicker: boolean; whatsapp: boolean; instagram: number; wabaId?: string }> {
   const totalPhones = discovery.wabas.reduce((sum, w) => sum + w.phoneNumbers.length, 0);
   const totalIg = discovery.instagram.length;
 
   if (totalPhones <= 1 && totalIg <= 1) {
-    const result = await savePrimaryAccounts(supabaseAdmin, organizationId, encryptedToken, discovery);
+    const result = await savePrimaryAccounts(supabaseAdmin, organizationId, longLivedToken, encryptedToken, discovery);
     return { autoConnected: true, needsPicker: false, ...result };
   }
 
@@ -275,14 +313,7 @@ async function handleEmbeddedSignup(
   }, { onConflict: "organization_id, phone_number_id" });
 
   // 6. Subscribe to webhooks
-  try {
-    await fetch(`https://graph.facebook.com/v21.0/${wabaId}/subscribed_apps`, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${longLivedToken}` }
-    });
-  } catch (e) {
-    console.warn("[Embedded Signup]: webhook subscription failed", e);
-  }
+  await subscribeToWebhook(wabaId, longLivedToken);
 
   return {
     success: true,
@@ -382,7 +413,12 @@ serve(async (req: Request) => {
 
     if (mode === "auto") {
       const encryptedToken = await encryptToken(longLivedToken);
-      const autoResult = await autoConnectAccounts(supabaseAdmin, organizationId, encryptedToken, discovery);
+      const autoResult = await autoConnectAccounts(supabaseAdmin, organizationId, longLivedToken, encryptedToken, discovery);
+
+      if (autoResult.whatsapp && autoResult.wabaId) {
+        await subscribeToWebhook(autoResult.wabaId, longLivedToken);
+      }
+
       return jsonResponse({
         success: true,
         autoConnected: autoResult.autoConnected,
@@ -404,6 +440,7 @@ serve(async (req: Request) => {
       result = await saveSelectedAccounts(
         supabaseAdmin,
         organizationId,
+        longLivedToken,
         encryptedToken,
         discovery,
         wabaIndex,
@@ -412,7 +449,11 @@ serve(async (req: Request) => {
       );
     } else {
       // Default: save mode (backward compatible)
-      result = await savePrimaryAccounts(supabaseAdmin, organizationId, encryptedToken, discovery);
+      result = await savePrimaryAccounts(supabaseAdmin, organizationId, longLivedToken, encryptedToken, discovery);
+    }
+
+    if (result.whatsapp && result.wabaId) {
+      await subscribeToWebhook(result.wabaId, longLivedToken);
     }
 
     return jsonResponse({
