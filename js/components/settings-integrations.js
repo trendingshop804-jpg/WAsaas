@@ -640,14 +640,18 @@ class SettingsIntegrationsComponent {
       }
 
       console.log('[FB Connect] Loading FB SDK script...');
-      const script = document.createElement('script');
-      script.src = 'https://connect.facebook.net/en_US/sdk.js';
-      script.async = true;
-      script.onload = () => {
-        console.log('[FB Connect] FB SDK script loaded');
+
+      window.fbAsyncInit = () => {
+        console.log('[FB Connect] fbAsyncInit called');
         this._initFb();
         resolve();
       };
+
+      const script = document.createElement('script');
+      script.src = 'https://connect.facebook.net/en_US/sdk.js';
+      script.async = true;
+      script.defer = true;
+      script.crossOrigin = 'anonymous';
       script.onerror = (err) => {
         console.error('[FB Connect] Failed to load FB SDK script');
         reject(err);
@@ -667,9 +671,9 @@ class SettingsIntegrationsComponent {
 
     window.FB.init({
       appId: appId,
-      cookie: true,
+      autoLogAppEvents: true,
       xfbml: true,
-      version: 'v21.0'
+      version: 'v25.0'
     });
     window.FB.__initialized = true;
     console.log('[FB Connect] FB.init() called successfully');
@@ -677,20 +681,23 @@ class SettingsIntegrationsComponent {
 
   _bindFbMessageListener() {
     window.addEventListener('message', (event) => {
-      if (event.origin !== 'https://www.facebook.com') return;
+      if (!event.origin.endsWith('facebook.com')) return;
       try {
         const data = JSON.parse(event.data);
         if (data.type === 'WA_EMBEDDED_SIGNUP') {
-          if (data.event === 'FINISH') {
-            const { phone_number_id, waba_id } = data.data;
-            window.__wa_signup_result = { phone_number_id, waba_id };
+          console.log('[FB Connect] message event:', data);
+          if (data.event === 'FINISH' || data.event === 'FINISH_ONLY_WABA' || data.event === 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING') {
+            const { phone_number_id, waba_id, business_id } = data.data;
+            window.__wa_signup_result = { phone_number_id, waba_id, business_id };
           }
-          if (data.event === 'CANCEL' || data.event === 'ERROR') {
+          if (data.event === 'CANCEL') {
             this._waSignupError = data.data?.error_message || 'Signup cancelled';
             window.__wa_signup_cancelled = true;
           }
         }
-      } catch (e) {}
+      } catch (e) {
+        console.log('[FB Connect] message event:', event.data);
+      }
     });
   }
 
@@ -791,9 +798,7 @@ class SettingsIntegrationsComponent {
         response_type: 'code',
         override_default_response_type: true,
         extras: {
-          setup: {},
-          featureType: '',
-          sessionInfoVersion: '3'
+          setup: {}
         }
       });
     } catch (err) {
