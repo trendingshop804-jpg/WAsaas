@@ -314,11 +314,27 @@ class WhatsAppService {
       try {
         const sb = window.authService.supabase;
         let conversationId = null;
+        let supabaseLeadId = leadId;
+
+        // If the local leadId is not a UUID, try to resolve the real Supabase lead by phone.
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(leadId));
+        if (!isUuid && lead?.phone) {
+          const cleanPhone = String(lead.phone).replace(/[^0-9]/g, '');
+          const { data: leadData } = await sb
+            .from('leads')
+            .select('id')
+            .eq('organization_id', org.id)
+            .eq('phone', cleanPhone)
+            .limit(1);
+          if (leadData?.[0]?.id) {
+            supabaseLeadId = leadData[0].id;
+          }
+        }
 
         const { data: convData } = await sb
           .from('conversations')
           .select('id')
-          .eq('lead_id', leadId)
+          .eq('lead_id', supabaseLeadId)
           .limit(1);
 
         conversationId = convData?.[0]?.id || null;
@@ -328,7 +344,7 @@ class WhatsAppService {
             .from('conversations')
             .insert({
               organization_id: org.id,
-              lead_id: leadId,
+              lead_id: supabaseLeadId,
               mode: isAI ? 'AI' : 'HUMAN',
               last_message: text,
               last_timestamp: nowISO
@@ -338,27 +354,28 @@ class WhatsAppService {
           conversationId = newConv?.id || null;
         }
 
-        if (!conversationId) throw new Error('Unable to create a CRM conversation for this message.');
-
-        const { error: messageError } = await sb.from('messages').insert({
-          conversation_id: conversationId,
-          wa_message_id: metaMessageId,
-          sender_number: lead?.phone ? String(lead.phone).replace(/[^0-9]/g, '') : '',
-          sender: isAI ? 'agent' : 'user',
-          body: text,
-          message_body: text,
-          content: text,
-          message_type: 'text',
-          direction: 'outbound',
-          received_at: nowISO,
-          created_at: nowISO,
-          is_ai: isAI,
-          status: 'sent'
-        });
-        if (messageError) throw messageError;
+        if (!conversationId) {
+          console.warn('[WhatsAppService] Unable to create CRM conversation for this message. Skipping Supabase persistence for outbound message.');
+        } else {
+          const { error: messageError } = await sb.from('messages').insert({
+            conversation_id: conversationId,
+            wa_message_id: metaMessageId,
+            sender_number: lead?.phone ? String(lead.phone).replace(/[^0-9]/g, '') : '',
+            sender: isAI ? 'agent' : 'user',
+            body: text,
+            message_body: text,
+            content: text,
+            message_type: 'text',
+            direction: 'outbound',
+            received_at: nowISO,
+            created_at: nowISO,
+            is_ai: isAI,
+            status: 'sent'
+          });
+          if (messageError) throw messageError;
+        }
       } catch (err) {
         console.warn('[WhatsAppService] Supabase outbound persist failed:', err);
-        throw err;
       }
     }
 
