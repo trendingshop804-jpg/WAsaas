@@ -673,7 +673,7 @@ class SettingsIntegrationsComponent {
       appId: appId,
       autoLogAppEvents: true,
       xfbml: true,
-      version: 'v25.0'
+      version: 'v26.0'
     });
     window.FB.__initialized = true;
     console.log('[FB Connect] FB.init() called successfully');
