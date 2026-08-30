@@ -729,11 +729,11 @@ class SettingsIntegrationsComponent {
 
       console.log('[FB Connect] Calling FB.login...');
 
-      window.FB.login(async (response) => {
+      window.FB.login(function(response) {
         console.log('[FB Connect] FB.login response:', response);
 
         if (!response.authResponse) {
-          console.log('[FB Connect] Login cancelled or not authorized');
+          console.log('[FB Connect] User cancelled login or did not fully authorize.');
           if (btn) {
             btn.disabled = false;
             btn.innerHTML = originalBtnText;
@@ -748,47 +748,45 @@ class SettingsIntegrationsComponent {
         console.log('[FB Connect] Edge function URL:', edgeUrl);
 
         if (!edgeUrl) {
-          throw new Error('Edge function URL not configured');
-        }
-
-        try {
-          console.log('[FB Connect] Calling edge function...');
-          const org = window.appState.getCurrentOrg();
-          const res = await fetch(edgeUrl, {
-            method: 'POST',
-            headers: window.supabaseConfig.getAuthHeaders(),
-            body: JSON.stringify({
-              code,
-              organizationId: org.id
-            })
-          });
-
-          const data = await res.json();
-          console.log('[FB Connect] Edge function response:', data);
-
-          if (!res.ok || data.error) {
-            throw new Error(data.error || `HTTP ${res.status}`);
-          }
-
-          org.whatsappConnected = true;
-          org.whatsappNumber = data.phone_number || 'WhatsApp Connected';
-          org.wabaId = data.waba_id;
-          org.whatsappProvider = 'Meta Embedded Signup';
-          window.appState.saveState();
-          window.appState.emit('whatsappConnectionChanged', { status: 'CONNECTED' });
-
-          this._toast(`WhatsApp connected successfully!`, 'success');
-          this._renderCards();
-        } catch (err) {
-          console.error('[FB Connect] Edge function error:', err);
-          this._toast(err.message || 'Failed to complete connection', 'error');
-
           if (btn) {
             btn.disabled = false;
             btn.innerHTML = originalBtnText;
           }
+          this._toast('Edge function URL not configured', 'error');
+          return;
         }
-      }, {
+
+        const org = window.appState.getCurrentOrg();
+        fetch(edgeUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code, organizationId: org.id })
+        })
+          .then(res => res.json())
+          .then(data => {
+            console.log('[FB Connect] Edge function response:', data);
+            if (data.error) throw new Error(data.error);
+
+            const org = window.appState.getCurrentOrg();
+            org.whatsappConnected = true;
+            org.whatsappNumber = data.phone_number || 'WhatsApp Connected';
+            org.wabaId = data.waba_id;
+            org.whatsappProvider = 'Meta Embedded Signup';
+            window.appState.saveState();
+            window.appState.emit('whatsappConnectionChanged', { status: 'CONNECTED' });
+
+            this._toast('WhatsApp connected successfully!', 'success');
+            this._renderCards();
+          })
+          .catch(err => {
+            console.error('[FB Connect] Error:', err);
+            this._toast(err.message || 'Failed to complete connection', 'error');
+            if (btn) {
+              btn.disabled = false;
+              btn.innerHTML = originalBtnText;
+            }
+          });
+      }.bind(this), {
         config_id: META_CONFIG_ID,
         response_type: 'code',
         override_default_response_type: true,
