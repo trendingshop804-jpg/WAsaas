@@ -2,8 +2,12 @@
 // Simple script to remove the existing React build directory before a new build.
 // Usage: node ../scripts/clean_build.js (called from the frontend/package.json)
 
-const fs = require('fs');
-const path = require('path');
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Resolve the build directory relative to this script (project root/scripts => frontend/build)
 const buildDir = path.resolve(__dirname, '..', 'frontend', 'build');
