@@ -95,6 +95,23 @@ async function subscribeToWebhook(wabaId: string, accessToken: string): Promise<
   }
 }
 
+async function subscribeToInstagramWebhook(pageId: string, accessToken: string): Promise<void> {
+  try {
+    const subscribeRes = await fetch(
+      `https://graph.facebook.com/v21.0/${pageId}/subscribed_apps?subscribed_fields=feed,comments,messages,messaging_postbacks,message_reactions&access_token=${accessToken}`,
+      { method: 'POST' }
+    );
+    if (!subscribeRes.ok) {
+      const err = await subscribeRes.json();
+      console.warn(`[Instagram Webhook] Page ${pageId} subscription notice:`, err.error?.message || subscribeRes.status);
+    } else {
+      console.log(`[Instagram Webhook] Successfully subscribed page ${pageId} to Instagram/Page events`);
+    }
+  } catch (e) {
+    console.warn('[Instagram Webhook] Error subscribing page:', e);
+  }
+}
+
 interface DiscoveryResult {
   wabas: Array<{
     wabaId: string;
@@ -211,6 +228,10 @@ async function saveSelectedAccounts(
         updated_at: new Date().toISOString()
       }, { onConflict: "organization_id, instagram_business_id" });
       instagramSaved++;
+
+      if (ig.pageId) {
+        await subscribeToInstagramWebhook(ig.pageId, longLivedToken);
+      }
     }
   }
 

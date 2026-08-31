@@ -16,6 +16,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (window.leadImportComponent) window.leadImportComponent.init();
   if (window.crmComponent) window.crmComponent.init();
   if (window.whatsappConnectComponent) window.whatsappConnectComponent.init();
+  if (window.instagramManagerComponent) window.instagramManagerComponent.init();
   if (window.campaignsComponent) window.campaignsComponent.init();
   if (window.aiGeneratorComponent) window.aiGeneratorComponent.init();
   if (window.followUpsComponent) window.followUpsComponent.init();

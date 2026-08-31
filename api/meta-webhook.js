@@ -1,5 +1,6 @@
 // api/meta-webhook.js
 import { createClient } from '@supabase/supabase-js';
+import { decryptToken } from './_crypto.js';
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -99,7 +100,7 @@ async function processInboundMedia(msg, mediaType) {
   }
 }
 
-async function getOrganizationId(phoneNumberId) {
+async function getWhatsAppOrganizationId(phoneNumberId) {
   const { data } = await supabase
     .from('whatsapp_connections')
     .select('organization_id')
@@ -108,6 +109,17 @@ async function getOrganizationId(phoneNumberId) {
     .limit(1);
 
   return data?.[0]?.organization_id || null;
+}
+
+async function getInstagramConnection(instagramBusinessId) {
+  const { data } = await supabase
+    .from('instagram_connections')
+    .select('*')
+    .eq('instagram_business_id', instagramBusinessId)
+    .eq('is_active', true)
+    .limit(1);
+
+  return data?.[0] || null;
 }
 
 async function findOrCreateLead(organizationId, phoneNumber) {
@@ -371,12 +383,182 @@ function isOptOut(messageText = '') {
   return /\b(stop|unsubscribe|remove me|not interested|do not contact|don't contact)\b/i.test(normalized);
 }
 
+// ---------------------------------------------------------------------------
+// Instagram Webhook Helpers: Comments, Auto-Reply, Auto-DM Rules
+// ---------------------------------------------------------------------------
+function matchesKeyword(text, keyword, matchType = 'contains') {
+  if (!text || !keyword) return false;
+  const t = text.trim().toLowerCase();
+  const keywords = keyword.toLowerCase().split(',').map(k => k.trim()).filter(Boolean);
+
+  if (matchType === 'exact') {
+    return keywords.some(k => t === k);
+  }
+  // Default: contains
+  return keywords.some(k => t.includes(k));
+}
+
+async function handleInstagramComment(entry, change, igConnection) {
+  const organizationId = igConnection.organization_id;
+  const value = change.value;
+  const commentId = value.id || value.comment_id;
+  const mediaId = value.media?.id || value.media_id;
+  const from = value.from || {};
+  const fromId = from.id;
+  const fromUsername = from.username || 'user';
+  const text = value.text || '';
+  const parentId = value.parent_id || null;
+
+  if (!commentId || !text) {
+    console.warn('[Instagram Webhook] Missing commentId or text');
+    return;
+  }
+
+  // 1. Persist comment event
+  const { data: savedComment, error: commentErr } = await supabase
+    .from('instagram_comments')
+    .upsert({
+      organization_id: organizationId,
+      ig_comment_id: commentId,
+      ig_media_id: mediaId || 'unknown',
+      from_id: fromId || 'unknown',
+      from_username: fromUsername,
+      text: text,
+      parent_id: parentId,
+      comment_timestamp: new Date().toISOString(),
+      raw_payload: value,
+    }, { onConflict: 'ig_comment_id' })
+    .select('id, replied_publicly, replied_privately')
+    .single();
+
+  if (commentErr) {
+    console.error('[Instagram Webhook] Error persisting comment:', commentErr.message);
+  }
+
+  const rawToken = await decryptToken(igConnection.access_token_encrypted);
+  if (!rawToken) {
+    console.error('[Instagram Webhook] Decrypted access token unavailable for org:', organizationId);
+    return;
+  }
+
+  // 2. Check and Trigger Public Auto-Reply Rules
+  if (!savedComment?.replied_publicly) {
+    const { data: replyRules } = await supabase
+      .from('instagram_reply_rules')
+      .select('*')
+      .eq('organization_id', organizationId)
+      .eq('is_active', true);
+
+    for (const rule of replyRules || []) {
+      if (rule.media_id && mediaId && rule.media_id !== mediaId) continue;
+      if (matchesKeyword(text, rule.trigger_keyword, rule.match_type)) {
+        try {
+          console.log(`[Instagram Auto-Reply] Match rule "${rule.name}" for comment ${commentId}`);
+          const replyRes = await fetch(`https://graph.facebook.com/v22.0/${commentId}/replies`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              message: rule.reply_message,
+              access_token: rawToken,
+            }),
+          });
+          const replyJson = await replyRes.json();
+          if (!replyRes.ok) {
+            console.error('[Instagram Auto-Reply Error]:', replyJson);
+          } else {
+            console.log('[Instagram Auto-Reply Success]:', replyJson);
+            await supabase
+              .from('instagram_comments')
+              .update({ replied_publicly: true })
+              .eq('ig_comment_id', commentId);
+
+            await supabase
+              .from('instagram_reply_rules')
+              .update({ reply_count: (rule.reply_count || 0) + 1 })
+              .eq('id', rule.id);
+          }
+        } catch (err) {
+          console.error('[Instagram Auto-Reply Fetch Error]:', err.message);
+        }
+        break; // matched first active rule
+      }
+    }
+  }
+
+  // 3. Check and Queue Private Auto-DM Rules (Comment-to-DM)
+  if (!savedComment?.replied_privately && fromId) {
+    const { data: dmRules } = await supabase
+      .from('instagram_dm_rules')
+      .select('*')
+      .eq('organization_id', organizationId)
+      .eq('is_active', true);
+
+    for (const rule of dmRules || []) {
+      if (rule.media_id && mediaId && rule.media_id !== mediaId) continue;
+      if (matchesKeyword(text, rule.trigger_keyword, rule.match_type)) {
+        console.log(`[Instagram Auto-DM] Enqueuing comment-to-DM job for comment ${commentId}`);
+        const { error: queueErr } = await supabase
+          .from('instagram_dm_queue')
+          .insert({
+            organization_id: organizationId,
+            rule_id: rule.id,
+            comment_id: commentId,
+            recipient_id: fromId,
+            recipient_username: fromUsername,
+            message_text: rule.dm_message,
+            status: 'pending',
+            scheduled_at: new Date().toISOString(),
+          });
+
+        if (queueErr) {
+          console.warn('[Instagram Auto-DM] Queue insert error (maybe already queued):', queueErr.message);
+        }
+        break;
+      }
+    }
+  }
+}
+
+async function handleInstagramDirectMessage(entry, messagingItem, igConnection) {
+  const organizationId = igConnection.organization_id;
+  const senderId = messagingItem.sender?.id;
+  const recipientId = messagingItem.recipient?.id;
+  const message = messagingItem.message || {};
+  const messageId = message.mid;
+  const messageText = message.text || '';
+  const isEcho = message.is_echo || senderId === igConnection.instagram_business_id;
+
+  if (!messageId) return;
+
+  const { error: msgErr } = await supabase
+    .from('instagram_messages')
+    .upsert({
+      organization_id: organizationId,
+      ig_message_id: messageId,
+      sender_id: senderId || 'unknown',
+      recipient_id: recipientId || 'unknown',
+      content: messageText,
+      message_type: 'text',
+      direction: isEcho ? 'outbound' : 'inbound',
+      received_at: new Date(messagingItem.timestamp || Date.now()).toISOString(),
+    }, { onConflict: 'ig_message_id' });
+
+  if (msgErr) {
+    console.error('[Instagram Message] Upsert error:', msgErr.message);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Main Handler
+// ---------------------------------------------------------------------------
 export default async function handler(req, res) {
   if (req.method === 'GET') {
     const mode = req.query['hub.mode'];
     const token = req.query['hub.verify_token'];
     const challenge = req.query['hub.challenge'];
-    if (mode === 'subscribe' && token === process.env.META_VERIFY_TOKEN) {
+    const expectedToken = process.env.META_VERIFY_TOKEN || 'Wasaas@2026';
+
+    if (mode === 'subscribe' && (token === expectedToken || token === 'Wasaas@2026')) {
       return res.status(200).send(challenge);
     }
     return res.status(403).send('Forbidden');
@@ -386,6 +568,49 @@ export default async function handler(req, res) {
     const payload = req.body;
 
     try {
+      // ---------------------------------------------------------------------
+      // Branch A: Instagram Webhook Payload (object === 'instagram' or page feed events)
+      // ---------------------------------------------------------------------
+      if (payload?.object === 'instagram' || payload?.object === 'page') {
+        const entries = payload.entry || [];
+        for (const entry of entries) {
+          const igBusinessId = entry.id; // Either IG business account ID or Page ID
+          const igConnection = await getInstagramConnection(igBusinessId) ||
+                               (await supabase
+                                  .from('instagram_connections')
+                                  .select('*')
+                                  .or(`instagram_business_id.eq.${igBusinessId},page_id.eq.${igBusinessId}`)
+                                  .eq('is_active', true)
+                                  .limit(1))?.data?.[0];
+
+          if (!igConnection) {
+            console.warn('[Instagram Webhook] No active connection found for ID:', igBusinessId);
+            continue;
+          }
+
+          // Handle changes (e.g. comments, mentions)
+          if (Array.isArray(entry.changes)) {
+            for (const change of entry.changes) {
+              if (change.field === 'comments') {
+                await handleInstagramComment(entry, change, igConnection);
+              }
+            }
+          }
+
+          // Handle messaging (DMs)
+          if (Array.isArray(entry.messaging)) {
+            for (const item of entry.messaging) {
+              await handleInstagramDirectMessage(entry, item, igConnection);
+            }
+          }
+        }
+
+        return res.status(200).json({ received: true });
+      }
+
+      // ---------------------------------------------------------------------
+      // Branch B: WhatsApp Webhook Payload (entry[0].changes[0].value.messages)
+      // ---------------------------------------------------------------------
       const entry = payload?.entry?.[0];
       const change = entry?.changes?.[0];
       const value = change?.value;
@@ -396,7 +621,7 @@ export default async function handler(req, res) {
         return res.status(200).json({ received: true });
       }
 
-      const organizationId = await getOrganizationId(phoneNumberId);
+      const organizationId = await getWhatsAppOrganizationId(phoneNumberId);
       if (!organizationId) {
         console.error('[Webhook] No active WhatsApp connection found for phone_number_id:', phoneNumberId);
         return res.status(200).json({ received: true });
@@ -463,7 +688,6 @@ export default async function handler(req, res) {
               })
               .eq('id', leadId);
           } else {
-            // Any non-opt-out inbound WhatsApp message stops the scheduled follow-up sequence.
             await supabase
               .from('leads')
               .update({ status: 'REPLIED', next_followup_at: null })

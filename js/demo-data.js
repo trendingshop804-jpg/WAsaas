@@ -657,5 +657,66 @@ window.DEMO_DATA = {
       details: '25 messages queued with 4.2s jitter rate limit. 0 provider errors.',
       status: 'Success'
     }
+  ],
+
+  // Instagram Automation Data
+  instagramReplyRules: [
+    {
+      id: 'ig_rule_1',
+      name: 'Pricing Inquiries',
+      trigger_keyword: 'price, cost, pricing, how much, rate',
+      reply_message: 'Hey there! Sent you the full pricing breakdown in your DMs 🚀 Check your message requests!',
+      media_id: null,
+      match_type: 'contains',
+      is_active: true,
+      reply_count: 42
+    },
+    {
+      id: 'ig_rule_2',
+      name: 'Demo Keyword Trigger',
+      trigger_keyword: 'demo, link, access, try',
+      reply_message: 'Awesome! We just sent the instant demo access link to your direct messages 💬',
+      media_id: null,
+      match_type: 'contains',
+      is_active: true,
+      reply_count: 128
+    }
+  ],
+
+  instagramDmRules: [
+    {
+      id: 'ig_dm_1',
+      name: 'Lead Qualification & Booking Link',
+      trigger_keyword: 'demo, book, pricing, link, info',
+      dm_message: "Hey! Thanks for commenting on our post 👋 Here is the direct link to book a 1-on-1 walkthrough and claim your 14-day free trial: https://w-asaas.vercel.app/demo. Reply here if you have any questions!",
+      media_id: null,
+      match_type: 'contains',
+      is_active: true,
+      dm_count: 96
+    }
+  ],
+
+  instagramScheduledPosts: [
+    {
+      id: 'sched_post_1',
+      media_urls: ['https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800&auto=format&fit=crop&q=80'],
+      caption: '🚀 Transform your WhatsApp & Instagram customer conversions with automated AI agents. 24/7 qualifying, booking & closing.\n\n#salesautomation #whatsappmarketing #growthmarketing #ai',
+      post_type: 'post',
+      scheduled_time: '2026-09-02T10:00:00.000Z',
+      status: 'pending',
+      created_at: '2026-08-30T12:00:00.000Z'
+    },
+    {
+      id: 'sched_post_2',
+      media_urls: ['https://images.unsplash.com/photo-1551836022-d5d88e9218df?w=800&auto=format&fit=crop&q=80'],
+      caption: '✨ Comment "DEMO" below to get our instant 4-touch outreach template sent directly to your DMs!',
+      post_type: 'reel',
+      scheduled_time: '2026-08-31T18:00:00.000Z',
+      status: 'published',
+      ig_post_id: '1792837491029384',
+      published_at: '2026-08-31T18:00:05.000Z',
+      created_at: '2026-08-29T14:00:00.000Z'
+    }
   ]
 };
+
