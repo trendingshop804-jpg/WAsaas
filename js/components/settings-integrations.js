@@ -15,8 +15,9 @@
    Alternatively, set them in js/services/supabase-config.js
    (metaAppId and whatsappConfigId fields). */
 
-const META_APP_ID = window.supabaseConfig?.metaAppId || '';     // Your Meta App ID
-const META_CONFIG_ID = window.supabaseConfig?.whatsappConfigId || ''; // WhatsApp Embedded Signup Config ID
+const META_APP_ID = window.supabaseConfig?.metaAppId || '';        // Your Meta App ID
+const META_CONFIG_ID = window.supabaseConfig?.whatsappConfigId || '';  // WhatsApp Embedded Signup Config ID
+const META_IG_CONFIG_ID = window.supabaseConfig?.instagramConfigId || ''; // Instagram Business Login Config ID (optional)
 
 class SettingsIntegrationsComponent {
   constructor() {
@@ -32,9 +33,23 @@ class SettingsIntegrationsComponent {
         description: 'Connect your Meta WhatsApp Business Account (WABA) via OAuth to send & receive messages at scale.',
         helpText:    'Requires a verified Meta Business Account. Your WABA number must be approved at Tier-2 or above. <a href="https://business.facebook.com/wa/manage/home/" target="_blank" rel="noopener">Open Meta Business Manager →</a>',
         status:      'disconnected',
-        dbId:        null,   // row id in user_integration_keys
+        dbId:        null,
         maskedValue: null,
-        instagramUsername: null,
+      },
+      {
+        id:          'instagram_business',
+        type:        'oauth',
+        accent:      'instagram',
+        logoClass:   'instagram',
+        logoEmoji:   '📸',
+        name:        'Instagram Business',
+        description: 'Connect your Instagram Professional account via Meta OAuth to manage DMs, auto-reply to comments, and schedule posts.',
+        helpText:    'Your Instagram account must be a <strong>Professional Account</strong> linked to a <strong>Facebook Page</strong>. <a href="https://www.facebook.com/help/1543466699359073" target="_blank" rel="noopener">How to link Instagram to a Facebook Page →</a>',
+        status:      'disconnected',
+        dbId:        null,
+        maskedValue: null,  // stores @username when connected
+        instagramBusinessId: null,
+        instagramPageId: null,
       },
       {
         id:          'openai_api_key',
@@ -100,28 +115,47 @@ class SettingsIntegrationsComponent {
       wa.maskedValue = org.whatsappNumber;
     }
 
-    // Sync changes dynamically
+    // Align Instagram Business card status with active appState on boot
+    const igCard = this.integrations.find(i => i.id === 'instagram_business');
+    if (igCard && org.instagramConnected) {
+      igCard.status = 'connected';
+      igCard.maskedValue = org.instagramUsername ? `@${org.instagramUsername}` : 'Instagram Connected';
+      igCard.instagramBusinessId = org.instagramBusinessId || null;
+      igCard.instagramPageId = org.instagramPageId || null;
+    }
+
+    // Sync WhatsApp changes dynamically
     window.appState.on('whatsappConnectionChanged', (state) => {
       const currentOrg = window.appState.getCurrentOrg();
-      const ig = this.integrations.find(i => i.id === 'whatsapp_business');
-      if (ig) {
+      const waInt = this.integrations.find(i => i.id === 'whatsapp_business');
+      if (waInt) {
         if (currentOrg.whatsappConnected) {
-          ig.status = 'connected';
-          ig.maskedValue = currentOrg.whatsappNumber || 'WABA Connected';
+          waInt.status = 'connected';
+          waInt.maskedValue = currentOrg.whatsappNumber || 'WABA Connected';
         } else {
-          ig.status = 'disconnected';
-          ig.maskedValue = null;
-          ig.instagramUsername = null;
+          waInt.status = 'disconnected';
+          waInt.maskedValue = null;
         }
       }
       this._renderCards();
     });
 
+    // Sync Instagram changes dynamically
     window.appState.on('instagramConnectionChanged', (state) => {
       const currentOrg = window.appState.getCurrentOrg();
-      const ig = this.integrations.find(i => i.id === 'whatsapp_business');
-      if (ig) {
-        ig.instagramUsername = currentOrg.instagramUsername || null;
+      const igInt = this.integrations.find(i => i.id === 'instagram_business');
+      if (igInt) {
+        if (currentOrg.instagramConnected) {
+          igInt.status = 'connected';
+          igInt.maskedValue = currentOrg.instagramUsername ? `@${currentOrg.instagramUsername}` : 'Instagram Connected';
+          igInt.instagramBusinessId = currentOrg.instagramBusinessId || null;
+          igInt.instagramPageId = currentOrg.instagramPageId || null;
+        } else {
+          igInt.status = 'disconnected';
+          igInt.maskedValue = null;
+          igInt.instagramBusinessId = null;
+          igInt.instagramPageId = null;
+        }
       }
       this._renderCards();
     });
@@ -218,26 +252,43 @@ class SettingsIntegrationsComponent {
         </div>
       </div>` : '';
 
-    /* WhatsApp OAuth connect button */
-    const oauthSection = ig.type === 'oauth' && !isConnected ? `
+    /* OAuth connect button — Facebook branding for WhatsApp, Instagram branding for IG */
+    const oauthSection = ig.type === 'oauth' && !isConnected ? (
+      ig.id === 'instagram_business' ? `
+      <button class="btn-oauth-connect btn-meta-instagram" id="btn-oauth-${ig.id}">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="white" stroke="none">
+          <rect x="2" y="2" width="20" height="20" rx="5" ry="5" fill="white" opacity="0.15"/>
+          <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 1 0 0 12.324 6.162 6.162 0 0 0 0-12.324zM12 16a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm6.406-11.845a1.44 1.44 0 1 0 0 2.881 1.44 1.44 0 0 0 0-2.881z" fill="white"/>
+        </svg>
+        Connect with Instagram
+      </button>` : `
       <button class="btn-oauth-connect btn-meta-facebook" id="btn-oauth-${ig.id}">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
         Continue with Facebook
-      </button>` : '';
+      </button>`
+    ) : '';
 
-    /* Connected account display for WhatsApp */
-    const connectedAccountBlock = ig.type === 'oauth' && isConnected ? `
-      <div class="connected-account-display" id="connected-account-${ig.id}">
-        <div class="connected-account-info">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
-          <span class="connected-account-value">${ig.maskedValue || 'WhatsApp Connected'}</span>
-        </div>
-        ${ig.instagramUsername ? `
-        <div class="connected-account-info instagram">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg>
-          <span class="connected-account-value">@${ig.instagramUsername}</span>
-        </div>` : ''}
-      </div>` : '';
+    /* Connected account display */
+    let connectedAccountBlock = '';
+    if (ig.type === 'oauth' && isConnected) {
+      if (ig.id === 'instagram_business') {
+        connectedAccountBlock = `
+        <div class="connected-account-display" id="connected-account-${ig.id}">
+          <div class="connected-account-info instagram">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg>
+            <span class="connected-account-value">${ig.maskedValue || 'Instagram Connected'}</span>
+          </div>
+        </div>`;
+      } else {
+        connectedAccountBlock = `
+        <div class="connected-account-display" id="connected-account-${ig.id}">
+          <div class="connected-account-info">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+            <span class="connected-account-value">${ig.maskedValue || 'WhatsApp Connected'}</span>
+          </div>
+        </div>`;
+      }
+    }
 
     /* Test Connection button + result badge (only when connected) */
     const testBtn = isConnected ? `
@@ -323,6 +374,8 @@ class SettingsIntegrationsComponent {
       document.getElementById(`btn-oauth-${ig.id}`)?.addEventListener('click', () => {
         if (ig.id === 'whatsapp_business') {
           this._handleEmbeddedSignup();
+        } else if (ig.id === 'instagram_business') {
+          this._handleInstagramEmbeddedSignup();
         } else {
           this._openOAuthModal(ig.id);
         }
@@ -406,11 +459,43 @@ class SettingsIntegrationsComponent {
     const ig = this.integrations.find(i => i.id === integrationId);
     if (!ig) return;
 
-    if (!confirm(`Remove the ${ig.name} credential? This cannot be undone.`)) return;
+    if (!confirm(`Disconnect ${ig.name}? This cannot be undone.`)) return;
 
     try {
       if (integrationId === 'whatsapp_business') {
         window.whatsappService.disconnect();
+
+      } else if (integrationId === 'instagram_business') {
+        /* ── Instagram disconnect: clear DB row + appState ──────────── */
+        const org = window.appState.getCurrentOrg();
+        if (window.supabaseConfig?.isSupabaseConfigured() && org.id) {
+          const res = await fetch('/api/instagram-disconnect', {
+            method:  'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({
+              organizationId:       org.id,
+              instagramBusinessId:  ig.instagramBusinessId || org.instagramBusinessId
+            })
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok && data.error) throw new Error(data.error);
+        }
+
+        /* Clear local app state */
+        org.instagramConnected   = false;
+        org.instagramUsername    = null;
+        org.instagramBusinessId  = null;
+        org.instagramPageId      = null;
+        window.appState.saveState();
+        window.appState.emit('instagramConnectionChanged', { status: 'DISCONNECTED' });
+
+        ig.status              = 'disconnected';
+        ig.maskedValue         = null;
+        ig.instagramBusinessId = null;
+        ig.instagramPageId     = null;
+        ig.dbId                = null;
+        this._removeFromStorage(ig.id);
+
       } else {
         if (window.supabaseConfig?.isSupabaseConfigured() && ig.dbId) {
           const fnUrl = window.supabaseConfig.getEdgeFunctionUrl(
@@ -574,6 +659,43 @@ class SettingsIntegrationsComponent {
 
       this._renderCards();
     } catch (_) { /* Network unavailable — silently ignore */ }
+
+    /* ── Also fetch Instagram connection status from Supabase ─────── */
+    try {
+      const org = window.appState.getCurrentOrg();
+      if (!org?.id || !window.supabaseConfig?.isSupabaseConfigured()) return;
+
+      // Use the anon key + user JWT to query instagram_connections (RLS-protected)
+      const headers = window.supabaseConfig.getAuthHeaders();
+      const sbUrl = `${window.supabaseConfig.projectUrl}/rest/v1/instagram_connections?organization_id=eq.${encodeURIComponent(org.id)}&is_active=eq.true&select=id,instagram_business_id,instagram_username,page_id&limit=1`;
+      const igRes = await fetch(sbUrl, {
+        headers: { ...headers, 'apikey': window.supabaseConfig.anonKey }
+      });
+      if (!igRes.ok) return;
+
+      const igRows = await igRes.json();
+      const igCard = this.integrations.find(i => i.id === 'instagram_business');
+      if (igCard && Array.isArray(igRows) && igRows.length > 0) {
+        const row = igRows[0];
+        igCard.status              = 'connected';
+        igCard.maskedValue         = row.instagram_username ? `@${row.instagram_username}` : 'Instagram Connected';
+        igCard.instagramBusinessId = row.instagram_business_id;
+        igCard.instagramPageId     = row.page_id;
+        igCard.dbId                = row.id;
+
+        /* Sync into appState so Instagram Manager also picks it up */
+        const currentOrg = window.appState.getCurrentOrg();
+        if (!currentOrg.instagramConnected) {
+          currentOrg.instagramConnected   = true;
+          currentOrg.instagramUsername    = row.instagram_username || null;
+          currentOrg.instagramBusinessId  = row.instagram_business_id;
+          currentOrg.instagramPageId      = row.page_id;
+          window.appState.saveState();
+          window.appState.emit('instagramConnectionChanged', { status: 'CONNECTED' });
+        }
+        this._renderCards();
+      }
+    } catch (_) { /* silently ignore */ }
   }
 
   /* Obsolete local simulated OAuth modal methods removed. 
@@ -809,6 +931,158 @@ class SettingsIntegrationsComponent {
         btn.disabled = false;
         btn.innerHTML = originalBtnText;
       }
+    }
+  }
+
+  /* ══════════════════════════════════════════════════════════════════════
+     INSTAGRAM EMBEDDED SIGNUP
+     Requests Instagram-specific scopes and exchanges the token for a
+     long-lived user token via the existing meta-oauth-exchange function.
+     ══════════════════════════════════════════════════════════════════════ */
+  async _handleInstagramEmbeddedSignup() {
+    console.log('[IG Connect] Button clicked, starting Instagram connection...');
+
+    if (!META_APP_ID) {
+      this._toast('Meta App ID not configured. Please set META_APP_ID in your environment.', 'error');
+      return;
+    }
+
+    if (!window.supabaseConfig?.isSupabaseConfigured()) {
+      this._toast('Supabase not configured. Please set up your environment.', 'error');
+      return;
+    }
+
+    const btn = document.getElementById('btn-oauth-instagram_business');
+    const originalBtnText = btn ? btn.innerHTML : '';
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = `<span class="spinner-xs"></span> Connecting…`;
+    }
+
+    const restoreBtn = () => {
+      if (btn) { btn.disabled = false; btn.innerHTML = originalBtnText; }
+    };
+
+    try {
+      await this._loadFbSdk();
+
+      if (typeof window.FB === 'undefined' || !window.FB.__initialized) {
+        this._initFb();
+      }
+
+      if (typeof window.FB === 'undefined' || !window.FB.__initialized) {
+        throw new Error('Facebook SDK failed to initialize');
+      }
+
+      // Instagram-specific scope set
+      const igScopes = 'instagram_basic,instagram_manage_messages,pages_show_list,pages_manage_metadata,business_management';
+
+      // Build the FB.login options — use embedded signup config if available
+      const loginOptions = META_IG_CONFIG_ID
+        ? {
+            config_id: META_IG_CONFIG_ID,
+            response_type: 'token',
+            override_default_response_type: true,
+            extras: { setup: {} }
+          }
+        : { scope: igScopes, return_scopes: true };
+
+      console.log('[IG Connect] Calling FB.login with options:', loginOptions);
+
+      window.FB.login((response) => {
+        console.log('[IG Connect] FB.login response:', response);
+
+        if (!response.authResponse) {
+          console.log('[IG Connect] User cancelled or did not authorize.');
+          restoreBtn();
+          return;
+        }
+
+        const accessToken = response.authResponse.accessToken;
+        if (!accessToken) {
+          this._toast('No access token received from Facebook.', 'error');
+          restoreBtn();
+          return;
+        }
+
+        const edgeUrl = window.supabaseConfig.getEdgeFunctionUrl('meta-oauth-exchange');
+        if (!edgeUrl) {
+          this._toast('Edge function URL not configured.', 'error');
+          restoreBtn();
+          return;
+        }
+
+        const org = window.appState.getCurrentOrg();
+
+        fetch(edgeUrl, {
+          method:  'POST',
+          headers: window.supabaseConfig.getAuthHeaders(),
+          body:    JSON.stringify({
+            accessToken,
+            organizationId: org.id,
+            mode: 'auto'
+          })
+        })
+          .then(res => res.json())
+          .then(data => {
+            console.log('[IG Connect] Edge function response:', data);
+            if (data.error) throw new Error(data.error);
+
+            const igAccounts = data.instagram || [];
+
+            if (igAccounts.length === 0) {
+              // Clear, actionable error for the most common failure case
+              throw new Error(
+                'No Instagram Business Account found linked to your Facebook Pages. ' +
+                'Please go to your Facebook Page Settings → Instagram → and link your Instagram Professional Account first.'
+              );
+            }
+
+            // Apply connection state from first Instagram account
+            const ig = igAccounts[0];
+            const currentOrg = window.appState.getCurrentOrg();
+            currentOrg.instagramConnected   = true;
+            currentOrg.instagramUsername    = ig.username;
+            currentOrg.instagramBusinessId  = ig.instagramBusinessId;
+            currentOrg.instagramPageId      = ig.pageId;
+            window.appState.saveState();
+            window.appState.emit('instagramConnectionChanged', { status: 'CONNECTED', account: ig });
+            window.appState.addAuditLog(
+              'Instagram Connected',
+              ig.username || 'Instagram',
+              `Connected Instagram account @${ig.username} (Page: ${ig.pageName}).`,
+              'Connected'
+            );
+
+            // Update card immediately
+            const igCard = this.integrations.find(i => i.id === 'instagram_business');
+            if (igCard) {
+              igCard.status              = 'connected';
+              igCard.maskedValue         = `@${ig.username}`;
+              igCard.instagramBusinessId = ig.instagramBusinessId;
+              igCard.instagramPageId     = ig.pageId;
+            }
+
+            this._toast(`Instagram @${ig.username} connected successfully!`, 'success');
+            this._renderCards();
+          })
+          .catch(err => {
+            console.error('[IG Connect] Error:', err);
+            // Show the "link your Instagram" message prominently
+            const isLinkingError = err.message.includes('No Instagram Business Account');
+            this._toast(
+              isLinkingError
+                ? '⚠️ No Instagram Business Account found. Please link your Instagram Professional Account to a Facebook Page first, then try again.'
+                : (err.message || 'Failed to connect Instagram'),
+              'error'
+            );
+            restoreBtn();
+          });
+      }, loginOptions);
+    } catch (err) {
+      console.error('[IG Connect] Connection error:', err);
+      this._toast(err.message || 'Failed to start Instagram connection', 'error');
+      restoreBtn();
     }
   }
 

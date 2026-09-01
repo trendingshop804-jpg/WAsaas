@@ -43,6 +43,13 @@ const SUPABASE_CONFIG = {
   whatsappConfigId: '1530177935103547',
 
   /**
+   * Instagram Business Login Config ID from Meta App Dashboard.
+   * Found at: Meta App Dashboard → Instagram → Configuration → Business Login
+   * Leave empty to fall back to standard FB.login() popup with Instagram scopes.
+   */
+  instagramConfigId: '',
+
+  /**
    * The Edge Function name that handles integration-key CRUD.
    * Deployed at: <projectUrl>/functions/v1/<functionName>
    */
@@ -76,6 +83,7 @@ async function loadPublicSupabaseConfig() {
         metaAppId: SUPABASE_CONFIG.metaAppId,
         metaApiVersion: SUPABASE_CONFIG.metaApiVersion,
         whatsappConfigId: SUPABASE_CONFIG.whatsappConfigId,
+        instagramConfigId: config.instagramConfigId || SUPABASE_CONFIG.instagramConfigId || '',
       });
     }
   } catch (error) {
@@ -130,6 +138,7 @@ window.supabaseConfig = {
   getEdgeFunctionUrl,
   getAuthHeaders,
   isSupabaseConfigured,
+  instagramConfigId: SUPABASE_CONFIG.instagramConfigId || '',
 };
 
 window.supabaseConfig.ready = loadPublicSupabaseConfig();

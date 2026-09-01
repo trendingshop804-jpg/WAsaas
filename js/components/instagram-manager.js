@@ -33,26 +33,45 @@ class InstagramManagerComponent {
       });
     });
 
-    // Connect Instagram Trigger
+    // Connect Instagram Trigger — uses the dedicated Instagram embedded signup flow
     document.addEventListener('click', async (e) => {
       if (e.target.closest('#ig-btn-connect-meta')) {
-        if (window.whatsappConnectComponent) {
-          window.whatsappConnectComponent.openMetaOAuthModal();
-        } else if (window.settingsIntegrationsComponent) {
-          window.navigationComponent.switchView('settings');
+        if (window.settingsIntegrationsComponent) {
+          // Navigate to Settings → Integrations and trigger the Instagram signup
+          if (window.navigationComponent) {
+            window.navigationComponent.switchView('settings');
+          }
+          // Small delay to let the settings panel render before opening the dialog
+          setTimeout(() => {
+            window.settingsIntegrationsComponent._handleInstagramEmbeddedSignup();
+          }, 350);
         }
       }
     });
 
-    // Disconnect Instagram Trigger
-    document.addEventListener('click', (e) => {
+    // Disconnect Instagram Trigger — clears DB row + local state
+    document.addEventListener('click', async (e) => {
       if (e.target.closest('#ig-btn-disconnect')) {
         if (confirm('Disconnect Instagram account from this workspace? All comment auto-replies and scheduled posts will be paused.')) {
           const org = window.appState.getCurrentOrg();
-          org.instagramConnected = false;
-          org.instagramUsername = null;
-          org.instagramBusinessId = null;
-          org.instagramPageId = null;
+
+          // Remove DB row via API (fire-and-forget, don't block UI)
+          if (window.supabaseConfig?.isSupabaseConfigured() && org.id) {
+            fetch('/api/instagram-disconnect', {
+              method:  'DELETE',
+              headers: { 'Content-Type': 'application/json' },
+              body:    JSON.stringify({
+                organizationId:      org.id,
+                instagramBusinessId: org.instagramBusinessId
+              })
+            }).catch(err => console.warn('[IG Disconnect] API call failed:', err.message));
+          }
+
+          // Clear local state immediately
+          org.instagramConnected   = false;
+          org.instagramUsername    = null;
+          org.instagramBusinessId  = null;
+          org.instagramPageId      = null;
           window.appState.saveState();
           window.appState.emit('instagramConnectionChanged', { status: 'DISCONNECTED' });
           window.appState.addAuditLog('Instagram Disconnected', 'Instagram Account', 'Instagram account disconnected by admin.', 'Success');
