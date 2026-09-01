@@ -7,9 +7,13 @@
     }
   ],
   "crons": [
-    { "path": "/api/daily-welcome", "schedule": "0 9 * * *" },
-    { "path": "/api/daily-followup", "schedule": "30 9 * * *" },
-    { "path": "/api/instagram-dm-queue", "schedule": "*/5 * * * *" },
-    { "path": "/api/instagram-publish", "schedule": "*/10 * * * *" }
+    {
+      "path": "/api/daily-welcome",
+      "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/daily-followup",
+      "schedule": "0 10 * * *"
+    }
   ]
 }
