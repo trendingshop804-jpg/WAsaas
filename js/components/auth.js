@@ -136,7 +136,11 @@ class AuthComponent {
       await window.authService.signIn({ email, password });
       this.enterApplication();
     } catch (err) {
-      this.showError(err.message || 'Login failed. Please check your credentials.');
+      let msg = err.message || 'Login failed. Please check your credentials.';
+      if (msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
+        msg = 'Unable to connect to authentication server. Please verify your internet connection or Supabase project status.';
+      }
+      this.showError(msg);
     } finally {
       if (submitBtn) {
         submitBtn.disabled = false;
@@ -182,7 +186,11 @@ class AuthComponent {
       });
       this.enterApplication();
     } catch (err) {
-      this.showError(err.message || 'Signup failed. Please try again.');
+      let msg = err.message || 'Account creation failed. Please try again.';
+      if (msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
+        msg = 'Unable to connect to authentication server. Please verify your internet connection or Supabase project status.';
+      }
+      this.showError(msg);
     } finally {
       if (submitBtn) {
         submitBtn.disabled = false;

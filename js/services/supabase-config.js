@@ -16,7 +16,7 @@ const SUPABASE_CONFIG = {
    * Your Supabase project URL.
    * Example: "https://abcdefghij.supabase.co"
    */
-  projectUrl: 'https://mdrxnycolkuuvszzwwqi.supabase.co',
+  projectUrl: 'https://mdrxnycolkuuvszzzwqi.supabase.co',
 
   /**
    * Your Supabase anon (public) key.
