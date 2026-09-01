@@ -16,13 +16,13 @@ const SUPABASE_CONFIG = {
    * Your Supabase project URL.
    * Example: "https://abcdefghij.supabase.co"
    */
-  projectUrl: '',
+  projectUrl: 'https://mdrxnycolkuuvszzwwqi.supabase.co',
 
   /**
    * Your Supabase anon (public) key.
    * Safe to expose in front-end code — Row-Level Security enforces auth.
    */
-  anonKey: '',
+  anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1kcnhueWNvbGt1dXZzenp6d3FpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcyMzkwNTcsImV4cCI6MjEwMjgxNTA1N30.hEl52V14VF47U1hQF6uzJGuMSQ05XLVsBq3x6fcimTI',
 
   /**
    * Meta App ID for Facebook Login OAuth.
