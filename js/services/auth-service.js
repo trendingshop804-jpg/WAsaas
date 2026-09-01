@@ -119,6 +119,10 @@ class AuthService {
   }
 
   async signUp({ email, password, fullName, workspaceName = 'My Workspace' }) {
+    if (!this.supabase && window.supabaseConfig && window.supabaseConfig.isSupabaseConfigured()) {
+      this.initSupabaseClient();
+    }
+
     if (this.supabase) {
       const { data, error } = await this.supabase.auth.signUp({
         email,
@@ -145,6 +149,10 @@ class AuthService {
   }
 
   async signIn({ email, password }) {
+    if (!this.supabase && window.supabaseConfig && window.supabaseConfig.isSupabaseConfigured()) {
+      this.initSupabaseClient();
+    }
+
     if (this.supabase) {
       const { data, error } = await this.supabase.auth.signInWithPassword({
         email,

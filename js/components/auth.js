@@ -7,8 +7,11 @@ class AuthComponent {
     this.activeMode = 'login'; // 'login' | 'signup'
   }
 
-  init() {
+  async init() {
     this.bindEvents();
+    if (window.supabaseConfig?.ready) {
+      await window.supabaseConfig.ready;
+    }
     this.checkInitialSession();
 
     window.authService.onAuthStateChange((event, session) => {
