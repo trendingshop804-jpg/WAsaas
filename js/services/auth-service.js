@@ -110,6 +110,14 @@ class AuthService {
     return false;
   }
 
+  getMissingConfigDetails() {
+    const missing = [];
+    if (!window.supabaseConfig?.projectUrl) missing.push('VITE_SUPABASE_URL (or SUPABASE_URL)');
+    if (!window.supabaseConfig?.anonKey) missing.push('VITE_SUPABASE_ANON_KEY (or SUPABASE_ANON_KEY)');
+    if (typeof window.supabase === 'undefined') missing.push('Supabase JS SDK (@supabase/supabase-js)');
+    return missing;
+  }
+
   async signUp({ email, password, fullName, workspaceName = 'My Workspace' }) {
     if (this.supabase) {
       const { data, error } = await this.supabase.auth.signUp({
@@ -130,7 +138,10 @@ class AuthService {
       return data;
     }
 
-    throw new Error('Authentication is not configured. Add your Supabase project URL and anon key before creating an account.');
+    const missing = this.getMissingConfigDetails();
+    const missingMsg = missing.length > 0 ? ` Missing: ${missing.join(', ')}.` : '';
+    console.error(`[AuthService] Supabase authentication is not configured.${missingMsg}`);
+    throw new Error(`Authentication is not configured.${missingMsg} Add your Supabase project URL and anon key before creating an account.`);
   }
 
   async signIn({ email, password }) {
@@ -147,7 +158,10 @@ class AuthService {
       return data;
     }
 
-    throw new Error('Authentication is not configured. Add your Supabase project URL and anon key before signing in.');
+    const missing = this.getMissingConfigDetails();
+    const missingMsg = missing.length > 0 ? ` Missing: ${missing.join(', ')}.` : '';
+    console.error(`[AuthService] Supabase authentication is not configured.${missingMsg}`);
+    throw new Error(`Authentication is not configured.${missingMsg} Add your Supabase project URL and anon key before signing in.`);
   }
 
   async signOut() {

@@ -56,7 +56,13 @@ const SUPABASE_CONFIG = {
 async function loadPublicSupabaseConfig() {
   try {
     const response = await fetch('/api/public-config', { credentials: 'same-origin' });
-    if (!response.ok) return;
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({}));
+      if (errData.missing && Array.isArray(errData.missing)) {
+        console.error(`[Supabase Config] Missing environment variable(s): ${errData.missing.join(', ')}`);
+      }
+      return;
+    }
     const config = await response.json();
     if (config.projectUrl && config.anonKey) {
       SUPABASE_CONFIG.projectUrl = config.projectUrl;
