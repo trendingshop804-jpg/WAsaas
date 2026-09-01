@@ -10,7 +10,7 @@
     "lint:syntax": "node -e \"const{execSync}=require('child_process');const fs=require('fs');const g=d=>fs.readdirSync(d,{withFileTypes:true}).flatMap(e=>e.isDirectory()?g(d+'/'+e.name):(e.name.endsWith('.js')?[d+'/'+e.name]:[]));const files=[...g('js'),...g('api')];let bad=0;for(const f of files){try{execSync('node --check '+JSON.stringify(f),{stdio:'pipe'})}catch(e){bad++;console.error('SYNTAX ERROR: '+f+'\\n'+String(e.stderr))}}console.log(bad?bad+' file(s) failed':'All '+files.length+' files parse OK');process.exit(bad?1:0)\""
   },
   "dependencies": {
-    "@supabase/server": "^1.4.1",
+    "@supabase/server": "^1.5.2",
     "@supabase/supabase-js": "^2.112.3"
   }
 }
