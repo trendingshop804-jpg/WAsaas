@@ -241,14 +241,16 @@ class WhatsAppConnectComponent {
       });
 
       FB.login(async (response) => {
-        if (response.authResponse) {
-          await this._handleFbLoginSuccess(response.authResponse.accessToken);
-        } else {
-          console.info('[Meta OAuth]: User cancelled login or did not fully authorize.');
-        }
-      }, {
-        scope: 'whatsapp_business_management,whatsapp_business_messaging,business_management'
-      });
+          if (response.authResponse) {
+            await this._handleFbLoginSuccess(response.authResponse.accessToken);
+          } else {
+            console.info('[Meta OAuth]: User cancelled login or did not fully authorize.');
+          }
+        }, {
+          config_id: window.supabaseConfig.whatsappConfigId,
+          response_type: 'code',
+          override_default_response_type: true
+        });
     } catch (err) {
       alert('Failed to load Facebook SDK: ' + err.message);
     }

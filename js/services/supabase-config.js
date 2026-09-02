@@ -42,7 +42,7 @@ const SUPABASE_CONFIG = {
    * WhatsApp Embedded Signup Config ID from Meta App Dashboard.
    * Found at: Meta App Dashboard → WhatsApp → Configuration → Embedded Signup
    */
-  whatsappConfigId: '1530177935103547',
+  whatsappConfigId: process.env.WHATSAPP_CONFIG_ID || '',
 
   /**
    * Instagram Business Login Config ID from Meta App Dashboard.
