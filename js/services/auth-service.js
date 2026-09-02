@@ -42,7 +42,7 @@ class AuthService {
       await window.supabaseConfig.ready;
     }
 
-    if (!this.supabase && window.supabaseConfig && window.supabaseConfig.isSupabaseConfigured()) {
+    if (window.supabaseConfig && window.supabaseConfig.isSupabaseConfigured()) {
       this.initSupabaseClient();
     }
 
@@ -119,6 +119,9 @@ class AuthService {
   }
 
   async signUp({ email, password, fullName, workspaceName = 'My Workspace' }) {
+    if (window.supabaseConfig?.ready) {
+      await window.supabaseConfig.ready;
+    }
     if (!this.supabase && window.supabaseConfig && window.supabaseConfig.isSupabaseConfigured()) {
       this.initSupabaseClient();
     }
@@ -149,6 +152,9 @@ class AuthService {
   }
 
   async signIn({ email, password }) {
+    if (window.supabaseConfig?.ready) {
+      await window.supabaseConfig.ready;
+    }
     if (!this.supabase && window.supabaseConfig && window.supabaseConfig.isSupabaseConfigured()) {
       this.initSupabaseClient();
     }
