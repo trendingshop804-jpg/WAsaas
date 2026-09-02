@@ -30,6 +30,8 @@ const SUPABASE_CONFIG = {
    * Found at: Meta App Dashboard → Settings → Basic → App ID
    */
   metaAppId: '1480548923617105',
+  // Custom base URL for Edge Functions (e.g., Vercel deployment)
+  edgeBaseUrl: 'https://w-asaas.vercel.app',
 
   /**
    * Meta Graph API version for OAuth flows.
@@ -97,6 +99,10 @@ async function loadPublicSupabaseConfig() {
  * @returns {string}
  */
 function getEdgeFunctionUrl(fnName) {
+  // Prefer custom edge base URL if provided
+  if (SUPABASE_CONFIG.edgeBaseUrl) {
+    return `${SUPABASE_CONFIG.edgeBaseUrl}/${fnName}`;
+  }
   if (!SUPABASE_CONFIG.projectUrl) return null;
   return `${SUPABASE_CONFIG.projectUrl}/functions/v1/${fnName}`;
 }

@@ -247,7 +247,7 @@ class WhatsAppConnectComponent {
           console.info('[Meta OAuth]: User cancelled login or did not fully authorize.');
         }
       }, {
-        scope: 'whatsapp_business_management,whatsapp_business_messaging,instagram_basic,instagram_manage_messages,pages_show_list,pages_read_engagement'
+        scope: 'whatsapp_business_management,whatsapp_business_messaging,business_management'
       });
     } catch (err) {
       alert('Failed to load Facebook SDK: ' + err.message);
@@ -575,7 +575,7 @@ class WhatsAppConnectComponent {
           }
         }
       }, {
-        scope: 'whatsapp_business_management,whatsapp_business_messaging,instagram_basic,instagram_manage_messages,pages_show_list,pages_read_engagement'
+        scope: 'whatsapp_business_management,whatsapp_business_messaging,business_management'
       });
 
     } catch (err) {
