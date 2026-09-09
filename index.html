@@ -2446,7 +2446,7 @@
       }
     }, { scope: 'public_profile,email' }); // Adding permissions here fixes the error
   }
-</script>
+
 
 <!-- Button to trigger login -->
 <button onclick="launchFBLogin()">Log in with Facebook</button>
@@ -2454,5 +2454,24 @@
   config_id="1530177935103547" 
   onlogin="checkLoginState();">
 </fb:login-button>
+</script>
+      <script>
+  // Called automatically when user completes login via <fb:login-button>
+  function checkLoginState() {
+    FB.getLoginStatus(function(response) {
+      statusChangeCallback(response);
+    });
+  }
+
+  // Receives the result from checkLoginState
+  function statusChangeCallback(response) {
+    if (response.status === 'connected') {
+      console.log('User logged in successfully!', response.authResponse.accessToken);
+      // Add your post-login logic here (e.g., redirecting to dashboard)
+    } else {
+      console.log('User is not logged in or closed the login popup.');
+    }
+  }
+</script>
 </body>
 </html>
