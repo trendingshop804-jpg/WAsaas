@@ -83,3 +83,17 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   console.log('✓ NexusLead AI Platform Ready & Operational.');
 });
+function checkAndLogin() {
+  FB.getLoginStatus(function(response) {
+    if (response.status === 'connected') {
+      // User is already logged in
+      console.log('Already connected with token:', response.authResponse.accessToken);
+      statusChangeCallback(response);
+    } else {
+      // User is not logged in or hasn't authorized app, prompt FB.login WITH scope
+      FB.login(function(loginResponse) {
+        statusChangeCallback(loginResponse);
+      }, { scope: 'public_profile,email' }); // Passing required permissions here
+    }
+  });
+}
