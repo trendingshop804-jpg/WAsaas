@@ -2416,5 +2416,39 @@
   <script src="js/components/meta-onboarding.js"></script>
 
   <script src="js/app.js"></script>
+    <script>
+  window.fbAsyncInit = function() {
+    FB.init({
+      appId      : 'YOUR_ACTUAL_APP_ID', // Replace with your real App ID
+      cookie     : true,
+      xfbml      : true,
+      version    : 'v20.0'               // Replace with active API version
+    });
+      
+    FB.AppEvents.logPageView();   
+  };
+
+  (function(d, s, id){
+     var js, fjs = d.getElementsByTagName(s)[0];
+     if (d.getElementById(id)) {return;}
+     js = d.createElement(s); js.id = id;
+     js.src = "https://connect.facebook.net/en_US/sdk.js";
+     fjs.parentNode.insertBefore(js, fjs);
+   }(document, 'script', 'facebook-jssdk'));
+
+  // Function to trigger Facebook Login with permissions
+  function launchFBLogin() {
+    FB.login(function(response) {
+      if (response.authResponse) {
+        console.log('Login successful:', response);
+      } else {
+        console.log('User cancelled login or did not fully authorize.');
+      }
+    }, { scope: 'public_profile,email' }); // Adding permissions here fixes the error
+  }
+</script>
+
+<!-- Button to trigger login -->
+<button onclick="launchFBLogin()">Log in with Facebook</button>
 </body>
 </html>
