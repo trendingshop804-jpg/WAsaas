@@ -942,7 +942,10 @@ class SettingsIntegrationsComponent {
   async _handleInstagramEmbeddedSignup() {
     console.log('[IG Connect] Button clicked, starting Instagram connection...');
 
-    if (!META_APP_ID) {
+    const metaAppId = window.supabaseConfig?.metaAppId || META_APP_ID || '1480548923617105';
+    const igConfigId = window.supabaseConfig?.instagramConfigId || META_IG_CONFIG_ID || '1530177935103547';
+
+    if (!metaAppId) {
       this._toast('Meta App ID not configured. Please set META_APP_ID in your environment.', 'error');
       return;
     }
@@ -978,10 +981,10 @@ class SettingsIntegrationsComponent {
       const igScopes = 'instagram_basic,instagram_manage_messages,pages_show_list,pages_manage_metadata,business_management';
 
       // Build the FB.login options — use embedded signup config if available
-      const loginOptions = META_IG_CONFIG_ID
+      const loginOptions = igConfigId
         ? {
-            config_id: META_IG_CONFIG_ID,
-            response_type: 'token',
+            config_id: igConfigId,
+            response_type: 'code',
             override_default_response_type: true,
             extras: { setup: {} }
           }
@@ -999,8 +1002,10 @@ class SettingsIntegrationsComponent {
         }
 
         const accessToken = response.authResponse.accessToken;
-        if (!accessToken) {
-          this._toast('No access token received from Facebook.', 'error');
+        const code = response.authResponse.code;
+
+        if (!accessToken && !code) {
+          this._toast('No access token or authorization code received from Facebook.', 'error');
           restoreBtn();
           return;
         }
@@ -1014,14 +1019,14 @@ class SettingsIntegrationsComponent {
 
         const org = window.appState.getCurrentOrg();
 
+        const reqBody = code
+          ? { code, organizationId: org.id, mode: 'code_exchange' }
+          : { accessToken, organizationId: org.id, mode: 'auto' };
+
         fetch(edgeUrl, {
           method:  'POST',
           headers: window.supabaseConfig.getAuthHeaders(),
-          body:    JSON.stringify({
-            accessToken,
-            organizationId: org.id,
-            mode: 'auto'
-          })
+          body:    JSON.stringify(reqBody)
         })
           .then(res => res.json())
           .then(data => {

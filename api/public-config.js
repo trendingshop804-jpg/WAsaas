@@ -30,6 +30,6 @@ export default function handler(req, res) {
     metaAppId: process.env.META_APP_ID || '',
     metaApiVersion: 'v21.0',
     whatsappConfigId: process.env.WHATSAPP_CONFIG_ID || '',
-    instagramConfigId: process.env.INSTAGRAM_CONFIG_ID || ''
+    instagramConfigId: process.env.INSTAGRAM_CONFIG_ID || '1530177935103547'
   });
 }

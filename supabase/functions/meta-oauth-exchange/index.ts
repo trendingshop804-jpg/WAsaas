@@ -385,8 +385,8 @@ async function handleCodeExchange(
     await subscribeToWebhook(result.wabaId, longLivedToken);
   }
 
-  if (!result.whatsapp) {
-    throw new Error('No WhatsApp Business Account found');
+  if (!result.whatsapp && (!result.instagram || result.instagram === 0)) {
+    throw new Error('No WhatsApp or Instagram Business Account found linked to this Meta account');
   }
 
   const waba = discovery.wabas.find(w => w.wabaId === result.wabaId);
@@ -394,7 +394,9 @@ async function handleCodeExchange(
 
   return {
     success: true,
-    phone_number: phone?.display_phone_number || 'WhatsApp Connected',
+    whatsapp: result.whatsapp,
+    instagram: result.instagram,
+    phone_number: phone?.display_phone_number || (result.instagram > 0 ? 'Instagram Connected' : 'Meta Connected'),
     waba_id: result.wabaId || ''
   };
 }
