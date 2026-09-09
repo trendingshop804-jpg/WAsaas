@@ -24,73 +24,73 @@ class SettingsIntegrationsComponent {
     /* ── Integration definitions ────────────────────────────────────── */
     this.integrations = [
       {
-        id:          'whatsapp_business',
-        type:        'oauth',
-        accent:      'whatsapp',
-        logoClass:   'whatsapp',
-        logoEmoji:   '💬',
-        name:        'WhatsApp Business',
+        id: 'whatsapp_business',
+        type: 'oauth',
+        accent: 'whatsapp',
+        logoClass: 'whatsapp',
+        logoEmoji: '💬',
+        name: 'WhatsApp Business',
         description: 'Connect your Meta WhatsApp Business Account (WABA) via OAuth to send & receive messages at scale.',
-        helpText:    'Requires a verified Meta Business Account. Your WABA number must be approved at Tier-2 or above. <a href="https://business.facebook.com/wa/manage/home/" target="_blank" rel="noopener">Open Meta Business Manager →</a>',
-        status:      'disconnected',
-        dbId:        null,
+        helpText: 'Requires a verified Meta Business Account. Your WABA number must be approved at Tier-2 or above. <a href="https://business.facebook.com/wa/manage/home/" target="_blank" rel="noopener">Open Meta Business Manager →</a>',
+        status: 'disconnected',
+        dbId: null,
         maskedValue: null,
       },
       {
-        id:          'instagram_business',
-        type:        'oauth',
-        accent:      'instagram',
-        logoClass:   'instagram',
-        logoEmoji:   '📸',
-        name:        'Instagram Business',
+        id: 'instagram_business',
+        type: 'oauth',
+        accent: 'instagram',
+        logoClass: 'instagram',
+        logoEmoji: '📸',
+        name: 'Instagram Business',
         description: 'Connect your Instagram Professional account via Meta OAuth to manage DMs, auto-reply to comments, and schedule posts.',
-        helpText:    'Your Instagram account must be a <strong>Professional Account</strong> linked to a <strong>Facebook Page</strong>. <a href="https://www.facebook.com/help/1543466699359073" target="_blank" rel="noopener">How to link Instagram to a Facebook Page →</a>',
-        status:      'disconnected',
-        dbId:        null,
+        helpText: 'Your Instagram account must be a <strong>Professional Account</strong> linked to a <strong>Facebook Page</strong>. <a href="https://www.facebook.com/help/1543466699359073" target="_blank" rel="noopener">How to link Instagram to a Facebook Page →</a>',
+        status: 'disconnected',
+        dbId: null,
         maskedValue: null,  // stores @username when connected
         instagramBusinessId: null,
         instagramPageId: null,
       },
       {
-        id:          'openai_api_key',
-        type:        'api_key',
-        accent:      'openai',
-        logoClass:   'openai',
-        logoEmoji:   '🤖',
-        name:        'OpenAI API Key',
+        id: 'openai_api_key',
+        type: 'api_key',
+        accent: 'openai',
+        logoClass: 'openai',
+        logoEmoji: '🤖',
+        name: 'OpenAI API Key',
         description: 'Optional. Provide your own key to bypass the platform default and use your own billing quota.',
-        helpText:    'Find your secret key in the <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">OpenAI API Keys dashboard →</a>. Keys start with <code>sk-</code>. The platform default is used when no key is saved.',
+        helpText: 'Find your secret key in the <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">OpenAI API Keys dashboard →</a>. Keys start with <code>sk-</code>. The platform default is used when no key is saved.',
         placeholder: 'sk-proj-…',
-        status:      'disconnected',
-        dbId:        null,
+        status: 'disconnected',
+        dbId: null,
         maskedValue: null,
       },
       {
-        id:          'stripe_api_key',
-        type:        'api_key',
-        accent:      'stripe',
-        logoClass:   'stripe',
-        logoEmoji:   '💳',
-        name:        'Stripe Secret Key',
+        id: 'stripe_api_key',
+        type: 'api_key',
+        accent: 'stripe',
+        logoClass: 'stripe',
+        logoEmoji: '💳',
+        name: 'Stripe Secret Key',
         description: 'Connect Stripe to process payments and sync subscription data with NexusLead billing.',
-        helpText:    'Copy your secret key from the <a href="https://dashboard.stripe.com/apikeys" target="_blank" rel="noopener">Stripe Developers → API Keys →</a> page. Use the <strong>live</strong> key for production.',
+        helpText: 'Copy your secret key from the <a href="https://dashboard.stripe.com/apikeys" target="_blank" rel="noopener">Stripe Developers → API Keys →</a> page. Use the <strong>live</strong> key for production.',
         placeholder: 'sk_live_…',
-        status:      'disconnected',
-        dbId:        null,
+        status: 'disconnected',
+        dbId: null,
         maskedValue: null,
       },
       {
-        id:          'hubspot_api_key',
-        type:        'api_key',
-        accent:      'hubspot',
-        logoClass:   'hubspot',
-        logoEmoji:   '🟠',
-        name:        'HubSpot Private App Token',
+        id: 'hubspot_api_key',
+        type: 'api_key',
+        accent: 'hubspot',
+        logoClass: 'hubspot',
+        logoEmoji: '🟠',
+        name: 'HubSpot Private App Token',
         description: 'Sync leads and contacts bi-directionally with HubSpot CRM.',
-        helpText:    'Create a Private App in your <a href="https://app.hubspot.com/private-apps/" target="_blank" rel="noopener">HubSpot account → Settings → Private Apps →</a> and copy the access token.',
+        helpText: 'Create a Private App in your <a href="https://app.hubspot.com/private-apps/" target="_blank" rel="noopener">HubSpot account → Settings → Private Apps →</a> and copy the access token.',
         placeholder: 'pat-na1-…',
-        status:      'disconnected',
-        dbId:        null,
+        status: 'disconnected',
+        dbId: null,
         maskedValue: null,
       },
     ];
@@ -203,9 +203,9 @@ class SettingsIntegrationsComponent {
   /* ── Card HTML Template ─────────────────────────────────────────────── */
   _cardHTML(ig) {
     const statusLabel = {
-      connected:    'Connected',
+      connected: 'Connected',
       disconnected: 'Not Connected',
-      error:        'Error',
+      error: 'Error',
     }[ig.status] || 'Not Connected';
     const isConnected = ig.status === 'connected';
 
@@ -351,7 +351,7 @@ class SettingsIntegrationsComponent {
 
       /* Toggle password visibility */
       document.getElementById(`btn-toggle-vis-${ig.id}`)?.addEventListener('click', () => {
-        const inp  = document.getElementById(`api-key-input-${ig.id}`);
+        const inp = document.getElementById(`api-key-input-${ig.id}`);
         const icon = document.getElementById(`eye-icon-${ig.id}`);
         if (!inp) return;
         const isHidden = inp.type === 'password';
@@ -390,8 +390,8 @@ class SettingsIntegrationsComponent {
     const ig = this.integrations.find(i => i.id === integrationId);
     if (!ig) return;
 
-    const input    = document.getElementById(`api-key-input-${integrationId}`);
-    const saveBtn  = document.getElementById(`btn-save-${integrationId}`);
+    const input = document.getElementById(`api-key-input-${integrationId}`);
+    const saveBtn = document.getElementById(`btn-save-${integrationId}`);
     if (!input) return;
 
     const rawValue = input.value.trim();
@@ -417,17 +417,17 @@ class SettingsIntegrationsComponent {
         const body = { key_name: integrationId, value: rawValue };
         if (ig.dbId) body.update_id = ig.dbId;
 
-        const res  = await fetch(fnUrl, {
-          method:  'POST',
+        const res = await fetch(fnUrl, {
+          method: 'POST',
           headers: window.supabaseConfig.getAuthHeaders(),
-          body:    JSON.stringify(body),
+          body: JSON.stringify(body),
         });
         const data = await res.json();
 
         if (!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`);
 
-        ig.dbId      = data.id || ig.dbId;
-        maskedValue  = data.masked_value;
+        ig.dbId = data.id || ig.dbId;
+        maskedValue = data.masked_value;
       } else {
         /* ── Demo fallback (no Supabase project configured) ──────────── */
         await this._simulateApiCall(900);
@@ -435,7 +435,7 @@ class SettingsIntegrationsComponent {
       }
 
       ig.maskedValue = maskedValue;
-      ig.status      = 'connected';
+      ig.status = 'connected';
 
       /* NEVER keep the raw key in memory — clear immediately */
       input.value = '';
@@ -470,11 +470,11 @@ class SettingsIntegrationsComponent {
         const org = window.appState.getCurrentOrg();
         if (window.supabaseConfig?.isSupabaseConfigured() && org.id) {
           const res = await fetch('/api/instagram-disconnect', {
-            method:  'DELETE',
+            method: 'DELETE',
             headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({
-              organizationId:       org.id,
-              instagramBusinessId:  ig.instagramBusinessId || org.instagramBusinessId
+            body: JSON.stringify({
+              organizationId: org.id,
+              instagramBusinessId: ig.instagramBusinessId || org.instagramBusinessId
             })
           });
           const data = await res.json().catch(() => ({}));
@@ -482,18 +482,18 @@ class SettingsIntegrationsComponent {
         }
 
         /* Clear local app state */
-        org.instagramConnected   = false;
-        org.instagramUsername    = null;
-        org.instagramBusinessId  = null;
-        org.instagramPageId      = null;
+        org.instagramConnected = false;
+        org.instagramUsername = null;
+        org.instagramBusinessId = null;
+        org.instagramPageId = null;
         window.appState.saveState();
         window.appState.emit('instagramConnectionChanged', { status: 'DISCONNECTED' });
 
-        ig.status              = 'disconnected';
-        ig.maskedValue         = null;
+        ig.status = 'disconnected';
+        ig.maskedValue = null;
         ig.instagramBusinessId = null;
-        ig.instagramPageId     = null;
-        ig.dbId                = null;
+        ig.instagramPageId = null;
+        ig.dbId = null;
         this._removeFromStorage(ig.id);
 
       } else {
@@ -501,8 +501,8 @@ class SettingsIntegrationsComponent {
           const fnUrl = window.supabaseConfig.getEdgeFunctionUrl(
             window.supabaseConfig.integrationsFunctionName
           );
-          const res  = await fetch(`${fnUrl}?id=${encodeURIComponent(ig.dbId)}`, {
-            method:  'DELETE',
+          const res = await fetch(`${fnUrl}?id=${encodeURIComponent(ig.dbId)}`, {
+            method: 'DELETE',
             headers: window.supabaseConfig.getAuthHeaders(),
           });
           const data = await res.json();
@@ -511,9 +511,9 @@ class SettingsIntegrationsComponent {
           await this._simulateApiCall(600);
         }
 
-        ig.status      = 'disconnected';
+        ig.status = 'disconnected';
         ig.maskedValue = null;
-        ig.dbId        = null;
+        ig.dbId = null;
         this._removeFromStorage(ig.id);
       }
 
@@ -528,9 +528,9 @@ class SettingsIntegrationsComponent {
      TEST CONNECTION
      ══════════════════════════════════════════════════════════════════════ */
   async _testConnection(integrationId) {
-    const ig          = this.integrations.find(i => i.id === integrationId);
-    const testBtn     = document.getElementById(`btn-test-${integrationId}`);
-    const resultEl    = document.getElementById(`test-result-${integrationId}`);
+    const ig = this.integrations.find(i => i.id === integrationId);
+    const testBtn = document.getElementById(`btn-test-${integrationId}`);
+    const resultEl = document.getElementById(`test-result-${integrationId}`);
     const statusBadge = document.getElementById(`status-badge-${integrationId}`);
 
     if (!ig) return;
@@ -540,11 +540,11 @@ class SettingsIntegrationsComponent {
       testBtn.innerHTML = `<span class="spinner-xs"></span> Testing…`;
     }
     if (statusBadge) {
-      statusBadge.className   = 'integration-status-badge testing';
+      statusBadge.className = 'integration-status-badge testing';
       statusBadge.textContent = 'Testing…';
     }
     if (resultEl) {
-      resultEl.className   = 'test-result-inline';
+      resultEl.className = 'test-result-inline';
       resultEl.textContent = '';
     }
 
@@ -556,37 +556,37 @@ class SettingsIntegrationsComponent {
         const fnUrl = window.supabaseConfig.getEdgeFunctionUrl(
           window.supabaseConfig.integrationsFunctionName
         );
-        const res  = await fetch(`${fnUrl}/test`, {
-          method:  'POST',
+        const res = await fetch(`${fnUrl}/test`, {
+          method: 'POST',
           headers: window.supabaseConfig.getAuthHeaders(),
-          body:    JSON.stringify({ key_id: ig.dbId }),
+          body: JSON.stringify({ key_id: ig.dbId }),
         });
         const data = await res.json();
         success = data.ok;
-        msg     = data.message;
+        msg = data.message;
       } else {
         /* ── Demo simulation ─────────────────────────────────────────── */
         await this._simulateApiCall(1400);
         success = Math.random() > 0.1;   // 90% success rate in demo
         const messages = {
-          whatsapp_business: { ok: 'WABA token valid · Tier-2 (1,000 msg/day)',        err: 'Invalid token or WABA account suspended'       },
-          openai_api_key:    { ok: 'API key valid · gpt-4o accessible',                err: 'Unauthorized — check key or billing status'     },
-          stripe_api_key:    { ok: 'Live key authenticated · account active',          err: 'Invalid key or restricted permissions'          },
-          hubspot_api_key:   { ok: 'Access token valid · CRM scope granted',           err: 'Token expired or missing CRM scope'            },
+          whatsapp_business: { ok: 'WABA token valid · Tier-2 (1,000 msg/day)', err: 'Invalid token or WABA account suspended' },
+          openai_api_key: { ok: 'API key valid · gpt-4o accessible', err: 'Unauthorized — check key or billing status' },
+          stripe_api_key: { ok: 'Live key authenticated · account active', err: 'Invalid key or restricted permissions' },
+          hubspot_api_key: { ok: 'Access token valid · CRM scope granted', err: 'Token expired or missing CRM scope' },
         };
         msg = success
-          ? (messages[integrationId]?.ok  || 'Connection successful')
+          ? (messages[integrationId]?.ok || 'Connection successful')
           : (messages[integrationId]?.err || 'Connection failed');
       }
     } catch (err) {
       success = false;
-      msg     = `Network error: ${err.message}`;
+      msg = `Network error: ${err.message}`;
     }
 
     /* Update status badge */
     ig.status = success ? 'connected' : 'error';
     if (statusBadge) {
-      statusBadge.className   = `integration-status-badge ${ig.status}`;
+      statusBadge.className = `integration-status-badge ${ig.status}`;
       statusBadge.textContent = success ? 'Connected' : 'Error';
     }
 
@@ -596,8 +596,8 @@ class SettingsIntegrationsComponent {
       resultEl.innerHTML = `
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
           ${success
-            ? '<polyline points="20 6 9 17 4 12"/>'
-            : '<circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>'}
+          ? '<polyline points="20 6 9 17 4 12"/>'
+          : '<circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>'}
         </svg>
         ${msg}`;
       setTimeout(() => { if (resultEl) resultEl.className = 'test-result-inline'; }, 6000);
@@ -637,8 +637,8 @@ class SettingsIntegrationsComponent {
       const fnUrl = window.supabaseConfig.getEdgeFunctionUrl(
         window.supabaseConfig.integrationsFunctionName
       );
-      const res  = await fetch(fnUrl, {
-        method:  'GET',
+      const res = await fetch(fnUrl, {
+        method: 'GET',
         headers: window.supabaseConfig.getAuthHeaders(),
       });
 
@@ -651,9 +651,9 @@ class SettingsIntegrationsComponent {
       keys.forEach(row => {
         const ig = this.integrations.find(i => i.id === row.key_name);
         if (ig) {
-          ig.status      = 'connected';
+          ig.status = 'connected';
           ig.maskedValue = row.masked_value;
-          ig.dbId        = row.id;
+          ig.dbId = row.id;
         }
       });
 
@@ -677,19 +677,19 @@ class SettingsIntegrationsComponent {
       const igCard = this.integrations.find(i => i.id === 'instagram_business');
       if (igCard && Array.isArray(igRows) && igRows.length > 0) {
         const row = igRows[0];
-        igCard.status              = 'connected';
-        igCard.maskedValue         = row.instagram_username ? `@${row.instagram_username}` : 'Instagram Connected';
+        igCard.status = 'connected';
+        igCard.maskedValue = row.instagram_username ? `@${row.instagram_username}` : 'Instagram Connected';
         igCard.instagramBusinessId = row.instagram_business_id;
-        igCard.instagramPageId     = row.page_id;
-        igCard.dbId                = row.id;
+        igCard.instagramPageId = row.page_id;
+        igCard.dbId = row.id;
 
         /* Sync into appState so Instagram Manager also picks it up */
         const currentOrg = window.appState.getCurrentOrg();
         if (!currentOrg.instagramConnected) {
-          currentOrg.instagramConnected   = true;
-          currentOrg.instagramUsername    = row.instagram_username || null;
-          currentOrg.instagramBusinessId  = row.instagram_business_id;
-          currentOrg.instagramPageId      = row.page_id;
+          currentOrg.instagramConnected = true;
+          currentOrg.instagramUsername = row.instagram_username || null;
+          currentOrg.instagramBusinessId = row.instagram_business_id;
+          currentOrg.instagramPageId = row.page_id;
           window.appState.saveState();
           window.appState.emit('instagramConnectionChanged', { status: 'CONNECTED' });
         }
@@ -716,8 +716,8 @@ class SettingsIntegrationsComponent {
 
     const icons = {
       success: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>`,
-      error:   `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>`,
-      info:    `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`,
+      error: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>`,
+      info: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`,
     };
 
     const el = document.createElement('div');
@@ -858,7 +858,7 @@ class SettingsIntegrationsComponent {
 
       console.log('[FB Connect] Calling FB.login...');
 
-      window.FB.login(function(response) {
+      window.FB.login(function (response) {
         console.log('[FB Connect] FB.login response:', response);
 
         if (!response.authResponse) {
@@ -943,7 +943,7 @@ class SettingsIntegrationsComponent {
     console.log('[IG Connect] Button clicked, starting Instagram connection...');
 
     const metaAppId = window.supabaseConfig?.metaAppId || META_APP_ID || '1480548923617105';
-    const igConfigId = window.supabaseConfig?.instagramConfigId || META_IG_CONFIG_ID || '1530177935103547';
+    const igConfigId = window.supabaseConfig?.instagramConfigId || META_IG_CONFIG_ID || '4616502125294134';
 
     if (!metaAppId) {
       this._toast('Meta App ID not configured. Please set META_APP_ID in your environment.', 'error');
@@ -983,11 +983,11 @@ class SettingsIntegrationsComponent {
       // Build the FB.login options — use embedded signup config if available
       const loginOptions = igConfigId
         ? {
-            config_id: igConfigId,
-            response_type: 'code',
-            override_default_response_type: true,
-            extras: { setup: {} }
-          }
+          config_id: igConfigId,
+          response_type: 'code',
+          override_default_response_type: true,
+          extras: { setup: {} }
+        }
         : { scope: igScopes, return_scopes: true };
 
       console.log('[IG Connect] Calling FB.login with options:', loginOptions);
@@ -1024,9 +1024,9 @@ class SettingsIntegrationsComponent {
           : { accessToken, organizationId: org.id, mode: 'auto' };
 
         fetch(edgeUrl, {
-          method:  'POST',
+          method: 'POST',
           headers: window.supabaseConfig.getAuthHeaders(),
-          body:    JSON.stringify(reqBody)
+          body: JSON.stringify(reqBody)
         })
           .then(res => res.json())
           .then(data => {
@@ -1046,10 +1046,10 @@ class SettingsIntegrationsComponent {
             // Apply connection state from first Instagram account
             const ig = igAccounts[0];
             const currentOrg = window.appState.getCurrentOrg();
-            currentOrg.instagramConnected   = true;
-            currentOrg.instagramUsername    = ig.username;
-            currentOrg.instagramBusinessId  = ig.instagramBusinessId;
-            currentOrg.instagramPageId      = ig.pageId;
+            currentOrg.instagramConnected = true;
+            currentOrg.instagramUsername = ig.username;
+            currentOrg.instagramBusinessId = ig.instagramBusinessId;
+            currentOrg.instagramPageId = ig.pageId;
             window.appState.saveState();
             window.appState.emit('instagramConnectionChanged', { status: 'CONNECTED', account: ig });
             window.appState.addAuditLog(
@@ -1062,10 +1062,10 @@ class SettingsIntegrationsComponent {
             // Update card immediately
             const igCard = this.integrations.find(i => i.id === 'instagram_business');
             if (igCard) {
-              igCard.status              = 'connected';
-              igCard.maskedValue         = `@${ig.username}`;
+              igCard.status = 'connected';
+              igCard.maskedValue = `@${ig.username}`;
               igCard.instagramBusinessId = ig.instagramBusinessId;
-              igCard.instagramPageId     = ig.pageId;
+              igCard.instagramPageId = ig.pageId;
             }
 
             this._toast(`Instagram @${ig.username} connected successfully!`, 'success');
@@ -1147,9 +1147,9 @@ class SettingsIntegrationsComponent {
       Object.entries(stored).forEach(([id, data]) => {
         const ig = this.integrations.find(i => i.id === id);
         if (ig) {
-          ig.status      = data.status      || 'disconnected';
-          ig.maskedValue = data.maskedValue  || null;
-          ig.dbId        = data.dbId         || null;
+          ig.status = data.status || 'disconnected';
+          ig.maskedValue = data.maskedValue || null;
+          ig.dbId = data.dbId || null;
         }
       });
     } catch (_) { /* ignore */ }

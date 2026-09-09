@@ -49,7 +49,7 @@ const SUPABASE_CONFIG = {
    * Found at: Meta App Dashboard → Instagram → Configuration → Business Login
    * Leave empty to fall back to standard FB.login() popup with Instagram scopes.
    */
-  instagramConfigId: '1530177935103547',
+  instagramConfigId: '4616502125294134',
 
   /**
    * The Edge Function name that handles integration-key CRUD.
