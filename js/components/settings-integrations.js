@@ -1028,10 +1028,21 @@ class SettingsIntegrationsComponent {
           headers: window.supabaseConfig.getAuthHeaders(),
           body: JSON.stringify(reqBody)
         })
-          .then(res => res.json())
+          .then(async res => {
+            const text = await res.text();
+            let data;
+            try {
+              data = JSON.parse(text);
+            } catch (_) {
+              throw new Error(`Server returned non-JSON response (${res.status}): ${text.slice(0, 100)}`);
+            }
+            if (!res.ok || data.error) {
+              throw new Error(data?.error || `Edge function error (${res.status})`);
+            }
+            return data;
+          })
           .then(data => {
             console.log('[IG Connect] Edge function response:', data);
-            if (data.error) throw new Error(data.error);
 
             const igAccounts = data.instagram || [];
 

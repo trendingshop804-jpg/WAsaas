@@ -99,10 +99,6 @@ async function loadPublicSupabaseConfig() {
  * @returns {string}
  */
 function getEdgeFunctionUrl(fnName) {
-  // Prefer custom edge base URL if provided
-  if (SUPABASE_CONFIG.edgeBaseUrl) {
-    return `${SUPABASE_CONFIG.edgeBaseUrl}/${fnName}`;
-  }
   if (!SUPABASE_CONFIG.projectUrl) return null;
   return `${SUPABASE_CONFIG.projectUrl}/functions/v1/${fnName}`;
 }
