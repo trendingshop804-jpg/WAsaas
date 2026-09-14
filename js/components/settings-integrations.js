@@ -788,7 +788,7 @@ class SettingsIntegrationsComponent {
         /* ── Instagram disconnect: clear DB row + appState ──────────── */
         const org = window.appState.getCurrentOrg();
         if (window.supabaseConfig?.isSupabaseConfigured() && org.id) {
-          const res = await fetch('/api/instagram-disconnect', {
+          const res = await fetch('/api/instagram?action=disconnect', {
             method: 'DELETE',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({

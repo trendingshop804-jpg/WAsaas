@@ -1,7 +1,7 @@
 {
   "crons": [
     {
-      "path": "/api/daily-welcome",
+      "path": "/api/daily-followup?action=welcome",
       "schedule": "0 9 * * *"
     }
   ]
