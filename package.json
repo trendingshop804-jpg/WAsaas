@@ -15,6 +15,5 @@
     "@supabase/server": "^1.5.2",
     "@supabase/supabase-js": "^2.112.3",
     "pg": "^8.23.0"
-  },
- 
+  }
 }
