@@ -1,7 +1,11 @@
 {
   "crons": [
     {
-      "path": "/api/cron/follow-up",
+      "path": "/api/daily-welcome",
+      "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/daily-followup",
       "schedule": "0 10 * * *"
     }
   ]
