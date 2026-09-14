@@ -1,0 +1,146 @@
+/* ==========================================================================
+   NexusLead AI — Supabase Client Configuration
+   Provides a lightweight wrapper around the Supabase edge-function URL and
+   the anon key so that front-end components can make authenticated requests
+   without bundling the full Supabase SDK.
+
+   ┌──────────────────────────────────────────────────────────────────────┐
+   │  IMPORTANT: Replace the placeholder values below with your real      │
+   │  Supabase project URL and anon key before deploying to production.   │
+   │  These are the public anon credentials — safe to ship to the client. │
+   └──────────────────────────────────────────────────────────────────────┘
+   ========================================================================== */
+
+const SUPABASE_CONFIG = {
+  /**
+   * Your Supabase project URL.
+   * Example: "https://abcdefghij.supabase.co"
+   */
+  projectUrl: 'https://mdrxnycolkuuvszzzwqi.supabase.co',
+
+  /**
+   * Your Supabase anon (public) key.
+   * Safe to expose in front-end code — Row-Level Security enforces auth.
+   */
+  anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1kcnhueWNvbGt1dXZzenp6d3FpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcyMzkwNTcsImV4cCI6MjEwMjgxNTA1N30.hEl52V14VF47U1hQF6uzJGuMSQ05XLVsBq3x6fcimTI',
+
+  /**
+   * Meta App ID for Facebook Login OAuth.
+   * Set META_APP_ID in your environment to enable pre-configured OAuth.
+   * Found at: Meta App Dashboard → Settings → Basic → App ID
+   */
+  metaAppId: '1480548923617105',
+  // Custom base URL for Edge Functions (e.g., Vercel deployment)
+  edgeBaseUrl: 'https://w-asaas.vercel.app',
+
+  /**
+   * Meta Graph API version for OAuth flows.
+   */
+  metaApiVersion: 'v21.0',
+
+  /**
+   * WhatsApp Embedded Signup Config ID from Meta App Dashboard.
+   * Found at: Meta App Dashboard → WhatsApp → Configuration → Embedded Signup
+   */
+  whatsappConfigId: typeof process !== 'undefined' && process.env ? process.env.WHATSAPP_CONFIG_ID : '',
+
+  /**
+   * Instagram Business Login Config ID from Meta App Dashboard.
+   * Found at: Meta App Dashboard → Instagram → Configuration → Business Login
+   * Leave empty to fall back to standard FB.login() popup with Instagram scopes.
+   */
+  instagramConfigId: '4616502125294134',
+
+  /**
+   * The Edge Function name that handles integration-key CRUD.
+   * Deployed at: <projectUrl>/functions/v1/<functionName>
+   */
+  integrationsFunctionName: 'manage-integration-keys',
+};
+/**
+ * Static sites do not receive Vercel environment variables directly. Fetch
+ * only the public Supabase URL and anon key at runtime; never expose a
+ * service-role key to the browser.
+ */
+async function loadPublicSupabaseConfig() {
+  try {
+    const response = await fetch('/api/public-config', { credentials: 'same-origin' });
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({}));
+      if (errData.missing && Array.isArray(errData.missing)) {
+        console.error(`[Supabase Config] Missing environment variable(s): ${errData.missing.join(', ')}`);
+      }
+      return;
+    }
+    const config = await response.json();
+    if (config.projectUrl && config.anonKey) {
+      SUPABASE_CONFIG.projectUrl = config.projectUrl;
+      SUPABASE_CONFIG.anonKey = config.anonKey;
+      if (config.metaAppId) SUPABASE_CONFIG.metaAppId = config.metaAppId;
+      if (config.metaApiVersion) SUPABASE_CONFIG.metaApiVersion = config.metaApiVersion;
+      if (config.whatsappConfigId) SUPABASE_CONFIG.whatsappConfigId = config.whatsappConfigId;
+      Object.assign(window.supabaseConfig, {
+        projectUrl: config.projectUrl,
+        anonKey: config.anonKey,
+        metaAppId: SUPABASE_CONFIG.metaAppId,
+        metaApiVersion: SUPABASE_CONFIG.metaApiVersion,
+        whatsappConfigId: SUPABASE_CONFIG.whatsappConfigId,
+        instagramConfigId: config.instagramConfigId || SUPABASE_CONFIG.instagramConfigId || '',
+      });
+    }
+  } catch (error) {
+    console.warn('[Supabase] Public configuration could not be loaded.', error);
+  }
+}
+
+/**
+ * Returns the base URL for a named Edge Function.
+ * @param {string} fnName
+ * @returns {string}
+ */
+function getEdgeFunctionUrl(fnName) {
+  if (!SUPABASE_CONFIG.projectUrl) return null;
+  return `${SUPABASE_CONFIG.projectUrl}/functions/v1/${fnName}`;
+}
+
+/**
+ * Returns default Authorization headers using the currently cached JWT.
+ * Falls back to anon key if no user session is found.
+ * @returns {Object}
+ */
+function getAuthHeaders() {
+  const session = (() => {
+    try {
+      // Look for a Supabase session stored by the official JS client
+      const raw = localStorage.getItem('sb-session') ||
+                  Object.keys(localStorage)
+                    .filter(k => k.startsWith('sb-') && k.endsWith('-auth-token'))
+                    .map(k => localStorage.getItem(k))[0];
+      return raw ? JSON.parse(raw) : null;
+    } catch (_) { return null; }
+  })();
+
+  const token = session?.access_token || SUPABASE_CONFIG.anonKey || '';
+  return {
+    'Authorization': token ? `Bearer ${token}` : '',
+    'Content-Type':  'application/json',
+    'apikey':        SUPABASE_CONFIG.anonKey || '',
+  };
+}
+
+/**
+ * Returns true when both project URL and anon key are configured.
+ */
+function isSupabaseConfigured() {
+  return Boolean(SUPABASE_CONFIG.projectUrl && SUPABASE_CONFIG.anonKey);
+}
+
+window.supabaseConfig = {
+  ...SUPABASE_CONFIG,
+  getEdgeFunctionUrl,
+  getAuthHeaders,
+  isSupabaseConfigured,
+  instagramConfigId: SUPABASE_CONFIG.instagramConfigId || '',
+};
+
+window.supabaseConfig.ready = loadPublicSupabaseConfig();

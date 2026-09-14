@@ -34,6 +34,7 @@ yarn-error.log*
 
 # Browser API key config — never commit this
 js/config.js
+**/config.js
 
 # SQLite database files — may contain real client data
 *.db
