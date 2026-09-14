@@ -483,8 +483,8 @@ class SettingsIntegrationsComponent {
           this._toast('Test WhatsApp Sent ✅', 'Real message dispatched via Meta Cloud API.', 'success');
         } else {
           const errMsg = data?.error || 'Unknown error from API.';
-          const hint = errMsg.toLowerCase().includes('not configured') || response.status === 400
-            ? '<br><strong>Hint:</strong> Add WHATSAPP_ACCESS_TOKEN and WHATSAPP_PHONE_NUMBER_ID to Vercel Environment Variables.'
+          const hint = errMsg.toLowerCase().includes('not configured') || data?.missing
+            ? '<br><strong>Hint:</strong> Add WHATSAPP_ACCESS_TOKEN and WHATSAPP_PHONE_NUMBER_ID in Vercel → Settings → Environment Variables.'
             : '';
           resultEl.innerHTML = `<span style="color:#f87171;">❌ Test failed: ${this._escHtml(errMsg)}${hint}</span>`;
           this._toast('Test Failed ⚠️', errMsg, 'error');

@@ -57,7 +57,7 @@ class InstagramManagerComponent {
 
           // Remove DB row via API (fire-and-forget, don't block UI)
           if (window.supabaseConfig?.isSupabaseConfigured() && org.id) {
-            fetch('/api/instagram-disconnect', {
+            fetch('/api/instagram?action=disconnect', {
               method:  'DELETE',
               headers: { 'Content-Type': 'application/json' },
               body:    JSON.stringify({
