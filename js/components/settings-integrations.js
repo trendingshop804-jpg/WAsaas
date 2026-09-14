@@ -102,6 +102,7 @@ class SettingsIntegrationsComponent {
   init() {
     this._injectToastContainer();
     this._buildIntegrationsPanel();
+    this._buildWhatsAppDebugPanel();
     this._bindSettingsTabs();
     this._bindModalClose();
     this._loadFbSdk();
@@ -187,6 +188,324 @@ class SettingsIntegrationsComponent {
   _buildIntegrationsPanel() {
     /* Render integration cards inside the static container from index.html */
     this._renderCards();
+  }
+
+  /* ══════════════════════════════════════════════════════════════════════
+     WHATSAPP AUTOMATION DEBUG DASHBOARD
+     Injected just before the integrations grid so it's always visible in
+     the WhatsApp / Integrations settings tab.
+     NEVER displays secrets, tokens, or credentials.
+     ══════════════════════════════════════════════════════════════════════ */
+  _buildWhatsAppDebugPanel() {
+    /* Find the container that wraps the integrations grid */
+    const grid = document.getElementById('integrations-cards-grid');
+    if (!grid || document.getElementById('wa-automation-debug-panel')) return;
+
+    const panel = document.createElement('div');
+    panel.id = 'wa-automation-debug-panel';
+    panel.style.cssText = 'grid-column: 1 / -1; margin-bottom: 4px;';
+    panel.innerHTML = `
+      <div class="card" style="border-left: 4px solid var(--brand-whatsapp); padding: 20px 24px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 10px;">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <span style="font-size: 22px;">📊</span>
+            <div>
+              <div style="font-weight: 700; font-size: 15px; color: var(--text-primary);">WhatsApp Automation Status</div>
+              <div style="font-size: 12px; color: var(--text-muted);">Live scheduler health · No credentials are shown here</div>
+            </div>
+          </div>
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <button id="wa-debug-refresh-btn" class="btn btn-secondary btn-sm" style="font-size: 12px; gap: 6px;">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+              Refresh
+            </button>
+            <button id="wa-debug-test-btn" class="btn btn-primary btn-sm" style="font-size: 12px; background: var(--brand-whatsapp); border-color: var(--brand-whatsapp);">
+              🚀 Send Test WhatsApp
+            </button>
+          </div>
+        </div>
+
+        <!-- Status Grid -->
+        <div id="wa-debug-status-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 16px;">
+          <div class="wa-debug-stat" style="background: var(--bg-tertiary); border-radius: 8px; padding: 12px 14px; border: 1px solid var(--border-subtle);">
+            <div style="font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; margin-bottom: 6px;">WhatsApp Connection</div>
+            <div id="wa-stat-connection" style="font-size: 13px; font-weight: 700;">Checking…</div>
+          </div>
+          <div class="wa-debug-stat" style="background: var(--bg-tertiary); border-radius: 8px; padding: 12px 14px; border: 1px solid var(--border-subtle);">
+            <div style="font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; margin-bottom: 6px;">Scheduler</div>
+            <div id="wa-stat-scheduler" style="font-size: 13px; font-weight: 700;">Checking…</div>
+          </div>
+          <div class="wa-debug-stat" style="background: var(--bg-tertiary); border-radius: 8px; padding: 12px 14px; border: 1px solid var(--border-subtle);">
+            <div style="font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; margin-bottom: 6px;">Last Scheduler Run</div>
+            <div id="wa-stat-last-run" style="font-size: 12px; font-weight: 600; color: var(--text-secondary);">—</div>
+          </div>
+          <div class="wa-debug-stat" style="background: var(--bg-tertiary); border-radius: 8px; padding: 12px 14px; border: 1px solid var(--border-subtle);">
+            <div style="font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; margin-bottom: 6px;">Sent Today</div>
+            <div id="wa-stat-sent-today" style="font-size: 20px; font-weight: 800; color: #34d399;">—</div>
+          </div>
+          <div class="wa-debug-stat" style="background: var(--bg-tertiary); border-radius: 8px; padding: 12px 14px; border: 1px solid var(--border-subtle);">
+            <div style="font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; margin-bottom: 6px;">Failed Today</div>
+            <div id="wa-stat-failed-today" style="font-size: 20px; font-weight: 800; color: #f87171;">—</div>
+          </div>
+          <div class="wa-debug-stat" style="background: var(--bg-tertiary); border-radius: 8px; padding: 12px 14px; border: 1px solid var(--border-subtle);">
+            <div style="font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; margin-bottom: 6px;">Pending</div>
+            <div id="wa-stat-pending" style="font-size: 20px; font-weight: 800; color: #60a5fa;">—</div>
+          </div>
+        </div>
+
+        <!-- Recent Log Events -->
+        <div style="margin-bottom: 8px;">
+          <div style="font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; margin-bottom: 8px;">Recent Scheduler Activity</div>
+          <div id="wa-debug-log" style="max-height: 200px; overflow-y: auto; font-size: 11.5px; font-family: monospace; background: rgba(0,0,0,0.25); border-radius: 6px; padding: 10px; color: var(--text-secondary); border: 1px solid var(--border-subtle);">
+            Loading logs…
+          </div>
+        </div>
+
+        <!-- Test Send Modal -->
+        <div id="wa-test-send-modal" style="display: none; margin-top: 16px; padding: 16px; background: rgba(37,211,102,0.07); border: 1px solid rgba(37,211,102,0.25); border-radius: 8px;">
+          <div style="font-weight: 600; font-size: 13px; color: var(--text-primary); margin-bottom: 10px;">Send Test WhatsApp Message</div>
+          <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 12px;">
+            This will call the real Meta WhatsApp Cloud API using your configured credentials and send an actual message to the phone number below.
+          </div>
+          <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+            <input type="text" id="wa-test-phone-input" class="form-input" style="width: 200px; height: 36px; font-size: 13px;" placeholder="+91 98765 43210" />
+            <input type="text" id="wa-test-template-input" class="form-input" style="width: 180px; height: 36px; font-size: 13px;" placeholder="Template name" value="hello_world" />
+            <button id="wa-test-send-confirm-btn" class="btn btn-primary btn-sm" style="background: var(--brand-whatsapp); border-color: var(--brand-whatsapp);">Confirm & Send</button>
+            <button id="wa-test-send-cancel-btn" class="btn btn-secondary btn-sm">Cancel</button>
+          </div>
+          <div id="wa-test-send-result" style="margin-top: 10px; font-size: 12.5px; display: none;"></div>
+        </div>
+      </div>
+    `;
+    grid.insertAdjacentElement('beforebegin', panel);
+
+    // Bind events
+    document.getElementById('wa-debug-refresh-btn')?.addEventListener('click', () => this._refreshWhatsAppDebug());
+    document.getElementById('wa-debug-test-btn')?.addEventListener('click', () => this._toggleTestSendPanel());
+    document.getElementById('wa-test-send-cancel-btn')?.addEventListener('click', () => {
+      const modal = document.getElementById('wa-test-send-modal');
+      if (modal) modal.style.display = 'none';
+    });
+    document.getElementById('wa-test-send-confirm-btn')?.addEventListener('click', () => this._executeTestSend());
+
+    // Auto-load stats on mount
+    this._refreshWhatsAppDebug();
+  }
+
+  _toggleTestSendPanel() {
+    const modal = document.getElementById('wa-test-send-modal');
+    if (!modal) return;
+    const isVisible = modal.style.display !== 'none';
+    modal.style.display = isVisible ? 'none' : 'block';
+    if (!isVisible) {
+      const resultEl = document.getElementById('wa-test-send-result');
+      if (resultEl) { resultEl.style.display = 'none'; resultEl.innerHTML = ''; }
+    }
+  }
+
+  async _refreshWhatsAppDebug() {
+    const refreshBtn = document.getElementById('wa-debug-refresh-btn');
+    if (refreshBtn) {
+      refreshBtn.disabled = true;
+      refreshBtn.textContent = 'Loading…';
+    }
+
+    try {
+      // ── 1. Check WhatsApp connection via /api/test-connection ──────────
+      let connStatus = '<span style="color:#f87171;">✗ Not Connected</span>';
+      let schedulerStatus = '<span style="color:#f87171;">✗ Not Running</span>';
+
+      try {
+        const connRes = await fetch('/api/test-connection');
+        if (connRes.ok) {
+          const connData = await connRes.json();
+          if (connData.connected) {
+            connStatus = `<span style="color:#34d399;">✓ Connected</span>`;
+            schedulerStatus = `<span style="color:#34d399;">✓ Running (Hourly)</span>`;
+          } else {
+            connStatus = `<span style="color:#f87171;">✗ ${this._escHtml(connData.status || 'Not Connected')}</span>`;
+            schedulerStatus = '<span style="color:#f87171;">✗ Config Missing</span>';
+          }
+        }
+      } catch (e) {
+        connStatus = '<span style="color:#fbbf24;">⚠ API Unreachable (dev server?)</span>';
+        schedulerStatus = '<span style="color:#fbbf24;">⚠ Unknown</span>';
+      }
+
+      const connEl = document.getElementById('wa-stat-connection');
+      const schedEl = document.getElementById('wa-stat-scheduler');
+      if (connEl) connEl.innerHTML = connStatus;
+      if (schedEl) schedEl.innerHTML = schedulerStatus;
+
+      // ── 2. Load stats from Supabase (if connected) ────────────────────
+      if (window.authService?.supabase) {
+        const sb = window.authService.supabase;
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+        const todayStartIso = todayStart.toISOString();
+
+        // Count messages sent today
+        const { count: sentCount } = await sb
+          .from('follow_up_messages')
+          .select('id', { count: 'exact', head: true })
+          .eq('status', 'Sent')
+          .gte('sent_at', todayStartIso);
+
+        // Count messages failed today
+        const { count: failedCount } = await sb
+          .from('follow_up_messages')
+          .select('id', { count: 'exact', head: true })
+          .eq('status', 'Failed')
+          .gte('created_at', todayStartIso);
+
+        // Count pending leads with follow-up due
+        const { count: pendingCount } = await sb
+          .from('leads')
+          .select('id', { count: 'exact', head: true })
+          .eq('follow_up_enabled', true)
+          .not('follow_up_status', 'in', '("Paused","Completed")')
+          .eq('opted_out', false);
+
+        const sentEl = document.getElementById('wa-stat-sent-today');
+        const failEl = document.getElementById('wa-stat-failed-today');
+        const pendEl = document.getElementById('wa-stat-pending');
+        if (sentEl) sentEl.textContent = sentCount ?? '—';
+        if (failEl) failEl.textContent = failedCount ?? '—';
+        if (pendEl) pendEl.textContent = pendingCount ?? '—';
+
+        // Load recent automation log entries
+        const { data: logs } = await sb
+          .from('whatsapp_automation_logs')
+          .select('event, details, created_at, run_id')
+          .order('created_at', { ascending: false })
+          .limit(30);
+
+        const logEl = document.getElementById('wa-debug-log');
+        const lastRunEl = document.getElementById('wa-stat-last-run');
+
+        if (logs && logs.length > 0) {
+          // Find the most recent execution_started event for last run timestamp
+          const lastRun = logs.find(l => l.event === 'execution_started' || l.event === 'execution_complete');
+          if (lastRun && lastRunEl) {
+            const d = new Date(lastRun.created_at);
+            lastRunEl.textContent = d.toLocaleString();
+          }
+
+          if (logEl) {
+            logEl.innerHTML = logs.map(log => {
+              const ts = new Date(log.created_at).toLocaleTimeString();
+              const eventColor = {
+                message_sent:           '#34d399',
+                message_failed:         '#f87171',
+                execution_started:      '#60a5fa',
+                execution_complete:     '#a78bfa',
+                due_followups_found:    '#fbbf24',
+                lead_claimed:           '#94a3b8',
+                message_attempted:      '#94a3b8',
+                meta_response_received: '#34d399',
+                stale_locks_released:   '#fbbf24',
+              }[log.event] || '#94a3b8';
+
+              return `<div style="padding: 2px 0; border-bottom: 1px solid rgba(255,255,255,0.04);">
+                <span style="color: #475569;">${ts}</span>
+                <span style="color: ${eventColor}; font-weight: 600;"> [${this._escHtml(log.event)}]</span>
+                ${log.details ? `<span style="color: #64748b;"> — ${this._escHtml(log.details)}</span>` : ''}
+              </div>`;
+            }).join('');
+          }
+        } else {
+          if (logEl) logEl.textContent = 'No scheduler activity recorded yet. The cron runs hourly.';
+          if (lastRunEl) lastRunEl.textContent = 'Never';
+        }
+
+      } else {
+        // Not connected to Supabase — show placeholders
+        ['wa-stat-sent-today', 'wa-stat-failed-today', 'wa-stat-pending'].forEach(id => {
+          const el = document.getElementById(id);
+          if (el) el.textContent = '—';
+        });
+        const logEl = document.getElementById('wa-debug-log');
+        if (logEl) logEl.textContent = 'Connect to Supabase to see scheduler logs.';
+      }
+    } catch (err) {
+      console.warn('[WADebug] Refresh error:', err.message);
+    } finally {
+      if (refreshBtn) {
+        refreshBtn.disabled = false;
+        refreshBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg> Refresh`;
+      }
+    }
+  }
+
+  async _executeTestSend() {
+    const phoneInput    = document.getElementById('wa-test-phone-input');
+    const templateInput = document.getElementById('wa-test-template-input');
+    const resultEl      = document.getElementById('wa-test-send-result');
+    const confirmBtn    = document.getElementById('wa-test-send-confirm-btn');
+
+    const phone    = phoneInput?.value?.trim();
+    const template = templateInput?.value?.trim() || 'hello_world';
+
+    if (!phone) {
+      if (resultEl) {
+        resultEl.style.display = 'block';
+        resultEl.innerHTML = '<span style="color:#f87171;">⚠️ Please enter a phone number.</span>';
+      }
+      return;
+    }
+
+    if (confirmBtn) {
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = 'Sending…';
+    }
+    if (resultEl) { resultEl.style.display = 'none'; resultEl.innerHTML = ''; }
+
+    try {
+      // Call the backend Edge function directly — credentials stay server-side
+      const response = await fetch('/api/send-whatsapp-followup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone,
+          templateName: template,
+          stage:        'Test Message',
+          // Use a synthetic leadId so the API can look up / create the lead
+          direct_phone: phone,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (resultEl) {
+        resultEl.style.display = 'block';
+        if (response.ok && data.success) {
+          resultEl.innerHTML = `<span style="color:#34d399;">✅ Test WhatsApp message sent successfully via Meta Cloud API.<br>Message ID: ${this._escHtml(data.whatsappMessageId || 'N/A')}</span>`;
+          this._toast('Test WhatsApp Sent ✅', 'Real message dispatched via Meta Cloud API.', 'success');
+        } else {
+          const errMsg = data?.error || 'Unknown error from API.';
+          const hint = errMsg.toLowerCase().includes('not configured') || response.status === 400
+            ? '<br><strong>Hint:</strong> Add WHATSAPP_ACCESS_TOKEN and WHATSAPP_PHONE_NUMBER_ID to Vercel Environment Variables.'
+            : '';
+          resultEl.innerHTML = `<span style="color:#f87171;">❌ Test failed: ${this._escHtml(errMsg)}${hint}</span>`;
+          this._toast('Test Failed ⚠️', errMsg, 'error');
+        }
+      }
+    } catch (err) {
+      if (resultEl) {
+        resultEl.style.display = 'block';
+        resultEl.innerHTML = `<span style="color:#f87171;">❌ Network error: ${this._escHtml(err.message)}. Is the dev server running?</span>`;
+      }
+    } finally {
+      if (confirmBtn) {
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = 'Confirm & Send';
+      }
+    }
+  }
+
+  _escHtml(str) {
+    return String(str || '')
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
   /* ── Render All Cards ───────────────────────────────────────────────── */

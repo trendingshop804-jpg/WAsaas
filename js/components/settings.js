@@ -94,6 +94,37 @@ class SettingsComponent {
     alert('Business profile updated successfully!');
   }
 
+  async testWhatsAppConnection() {
+    const statusEl = document.getElementById('whatsapp-test-status-msg');
+    if (statusEl) {
+      statusEl.innerHTML = '<span style="color: var(--text-secondary);">Testing Meta WhatsApp Cloud API connection...</span>';
+    }
+
+    try {
+      const res = await fetch('/api/test-connection');
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.connected) {
+        if (statusEl) {
+          statusEl.innerHTML = `<span style="color: var(--status-success); font-weight: 700;">✓ ${this.escapeHtml(data.message)} (${this.escapeHtml(data.verifiedName)})</span>`;
+        }
+        if (window.followUpsComponent) {
+          window.followUpsComponent.showToast('WhatsApp Connected', data.message, 'success');
+        }
+      } else {
+        if (statusEl) {
+          statusEl.innerHTML = `<span style="color: #f87171; font-weight: 700;">✕ ${this.escapeHtml(data.message || 'WhatsApp integration is not configured.')}</span>`;
+        }
+        if (window.followUpsComponent) {
+          window.followUpsComponent.showToast('WhatsApp Connection Status', data.message || 'WhatsApp integration is not configured.', 'warning');
+        }
+      }
+    } catch (err) {
+      if (statusEl) {
+        statusEl.innerHTML = `<span style="color: #f87171; font-weight: 700;">✕ Connection error: ${this.escapeHtml(err.message)}</span>`;
+      }
+    }
+  }
+
   exportBackup() { window.storageService?.exportBackup?.(); }
   resetDemo()    { window.storageService?.resetToDemo?.(); }
 

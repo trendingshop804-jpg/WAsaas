@@ -1,8 +1,14 @@
 // meta-webhook Edge Function (Supabase)
+// Handles:
+//   - Inbound messages from WhatsApp customers
+//   - Delivery status updates (sent, delivered, read, failed) from Meta
+//   - Opt-out compliance
+//   - AI auto-reply generation
+//   - Automatic follow-up pause when customer replies
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
-const openRouterApiKey = Deno.env.get("OPENROUTER_API_KEY") ?? "";
+const supabaseUrl       = Deno.env.get("SUPABASE_URL") ?? "";
+const openRouterApiKey  = Deno.env.get("OPENROUTER_API_KEY") ?? "";
 
 const MEDIA_TYPES = ["image", "video", "audio", "document", "sticker"];
 
@@ -49,10 +55,10 @@ function isOptOut(message: string): boolean {
 async function generateAIReply(organization: Record<string, unknown>, history: Array<Record<string, unknown>>, userMessage: string): Promise<string> {
   if (!openRouterApiKey) return fallbackReply(userMessage);
 
-  const businessName = organization?.name || 'our business';
+  const businessName      = organization?.name || 'our business';
   const productDescription = organization?.product_description || 'our services';
-  const pricingSummary = organization?.pricing_summary || 'contact us for pricing details';
-  const bookingLink = organization?.booking_link || '';
+  const pricingSummary    = organization?.pricing_summary || 'contact us for pricing details';
+  const bookingLink       = organization?.booking_link || '';
 
   const systemPrompt = `You are ${businessName}'s WhatsApp assistant. Your job is to greet inbound leads, qualify them, and either book them in or hand them off to a human — all inside a normal WhatsApp chat.
 
@@ -124,8 +130,11 @@ After each exchange, also produce:
 }
 
 async function sendWhatsAppReply(phoneNumberId: string, to: string, body: string) {
+  // Access token read from environment — NEVER logged
   const accessToken = Deno.env.get("WHATSAPP_ACCESS_TOKEN");
-  if (!accessToken || !phoneNumberId || !to) throw new Error("WhatsApp token, phone number ID, or recipient is missing");
+  if (!accessToken || !phoneNumberId || !to) {
+    throw new Error("WhatsApp token, phone number ID, or recipient is missing");
+  }
   const response = await fetch(`https://graph.facebook.com/v21.0/${phoneNumberId}/messages`, {
     method: "POST",
     headers: { "Authorization": `Bearer ${accessToken}`, "Content-Type": "application/json" },
@@ -181,10 +190,10 @@ async function processInboundMedia(msg: any, mediaType: string, supabaseAdmin: a
     }
 
     return {
-      mediaUrl: uploadData?.path || storagePath,
+      mediaUrl:      uploadData?.path || storagePath,
       mediaMimeType: mimeType,
       fileName,
-      mediaSize: buffer.byteLength,
+      mediaSize:     buffer.byteLength,
     };
   } catch (err) {
     console.error("[Media] Processing error:", err);
@@ -219,13 +228,13 @@ async function findOrCreateLead(supabaseAdmin: any, organizationId: string, phon
     .from("leads")
     .insert({
       organization_id: organizationId,
-      company_name: "WhatsApp Lead",
-      contact_name: "",
-      phone: phoneNumber,
-      source: "WhatsApp",
-      status: "NEW",
-      score: 50,
-      score_category: "WARM",
+      company_name:    "WhatsApp Lead",
+      contact_name:    "",
+      phone:           phoneNumber,
+      source:          "WhatsApp",
+      status:          "NEW",
+      score:           50,
+      score_category:  "WARM",
     })
     .select("id")
     .single();
@@ -253,9 +262,9 @@ async function findOrCreateConversation(supabaseAdmin: any, organizationId: stri
     .from("conversations")
     .insert({
       organization_id: organizationId,
-      lead_id: leadId,
-      mode: "AI",
-      unread_count: 0,
+      lead_id:         leadId,
+      mode:            "AI",
+      unread_count:    0,
     })
     .select("id")
     .single();
@@ -331,14 +340,107 @@ async function updateLeadFromCRM(supabaseAdmin: any, leadId: string, crmData: Re
   }
 }
 
+// ---------------------------------------------------------------------------
+// handleDeliveryStatuses
+// Processes Meta's "statuses" array in webhook payloads.
+// Updates message status in both messages and follow_up_messages tables.
+// When a customer sends any message, pauses the lead's automatic follow-ups.
+// ---------------------------------------------------------------------------
+async function handleDeliveryStatuses(
+  supabaseAdmin: any,
+  statuses: Array<Record<string, unknown>>,
+): Promise<void> {
+  for (const statusEntry of statuses) {
+    const waMsgId    = statusEntry.id as string | undefined;
+    const statusVal  = statusEntry.status as string | undefined; // sent | delivered | read | failed
+    const timestamp  = statusEntry.timestamp as string | undefined;
+    const recipientId = statusEntry.recipient_id as string | undefined;
+
+    if (!waMsgId || !statusVal) continue;
+
+    // Map Meta status names to our internal status values
+    const statusMap: Record<string, string> = {
+      sent:      'sent',
+      delivered: 'delivered',
+      read:      'read',
+      failed:    'failed',
+    };
+    const mappedStatus = statusMap[statusVal] || statusVal;
+
+    const updatedAt = timestamp
+      ? new Date(Number(timestamp) * 1000).toISOString()
+      : new Date().toISOString();
+
+    // Update messages table
+    const { error: msgErr } = await supabaseAdmin
+      .from("messages")
+      .update({ status: mappedStatus, updated_at: updatedAt })
+      .eq("wa_message_id", waMsgId);
+
+    if (msgErr) {
+      console.warn(`[Webhook] Status update failed for message ${waMsgId}:`, msgErr.message);
+    }
+
+    // Update follow_up_messages table
+    const { error: fupErr } = await supabaseAdmin
+      .from("follow_up_messages")
+      .update({ status: mappedStatus === 'sent' ? 'Sent' : mappedStatus === 'delivered' ? 'Delivered' : mappedStatus === 'read' ? 'Read' : 'Failed' })
+      .eq("whatsapp_message_id", waMsgId);
+
+    if (fupErr) {
+      // Non-fatal — follow_up_messages row may not exist for all outbound messages
+      console.warn(`[Webhook] follow_up_messages status update skipped for ${waMsgId}:`, fupErr.message);
+    }
+
+    // Log failed delivery errors
+    if (statusVal === 'failed') {
+      const errInfo = statusEntry.errors as Array<Record<string, unknown>> | undefined;
+      const errDetail = errInfo?.[0]
+        ? `Code ${errInfo[0].code}: ${errInfo[0].title || errInfo[0].message || 'Unknown error'}`
+        : 'Delivery failed';
+      console.error(`[Webhook] Message ${waMsgId} delivery failed:`, errDetail);
+
+      await supabaseAdmin
+        .from("follow_up_messages")
+        .update({ status: 'Failed', error_message: errDetail })
+        .eq("whatsapp_message_id", waMsgId);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// pauseLeadFollowUp
+// When a customer sends ANY message, their automatic follow-up sequence is
+// paused so we don't keep sending scheduled messages after they've replied.
+// ---------------------------------------------------------------------------
+async function pauseLeadFollowUp(supabaseAdmin: any, leadId: string | null): Promise<void> {
+  if (!leadId) return;
+
+  const { error } = await supabaseAdmin
+    .from("leads")
+    .update({
+      follow_up_status: 'Paused',
+      status:           'REPLIED',
+    })
+    .eq("id", leadId)
+    // Only pause if currently in an active automation state
+    .in("follow_up_status", ['Scheduled', 'Processing', 'Failed', 'Sent']);
+
+  if (error) {
+    console.warn(`[Webhook] Could not pause follow-up for lead ${leadId}:`, error.message);
+  } else {
+    console.log(`[Webhook] Follow-up automation paused for lead ${leadId} (customer replied)`);
+  }
+}
+
 async function handler(request: Request): Promise<Response> {
   const method = request.method;
 
   if (method === "GET") {
     const url = new URL(request.url);
-    const hubMode = url.searchParams.get("hub.mode");
+    const hubMode        = url.searchParams.get("hub.mode");
     const hubVerifyToken = url.searchParams.get("hub.verify_token");
-    const hubChallenge = url.searchParams.get("hub.challenge");
+    const hubChallenge   = url.searchParams.get("hub.challenge");
 
     const expectedToken = Deno.env.get("META_VERIFY_TOKEN");
     if (hubMode === "subscribe" && hubVerifyToken === expectedToken && hubChallenge) {
@@ -350,8 +452,10 @@ async function handler(request: Request): Promise<Response> {
   if (method === "POST") {
     try {
       const payload = await request.json();
-      const value = payload?.entry?.[0]?.changes?.[0]?.value ?? {};
-      const messages = value.messages ?? [];
+      const value   = payload?.entry?.[0]?.changes?.[0]?.value ?? {};
+
+      const messages      = value.messages ?? [];
+      const statuses      = value.statuses ?? [];
       const phoneNumberId = value.metadata?.phone_number_id ?? "";
 
       const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -365,6 +469,17 @@ async function handler(request: Request): Promise<Response> {
         serviceRoleKey,
         { db: { schema: "public" }, auth: { persistSession: false } },
       );
+
+      // ── Handle delivery status updates ──────────────────────────────────
+      // Process statuses FIRST so they're recorded even if message processing fails
+      if (statuses.length > 0) {
+        await handleDeliveryStatuses(supabaseAdmin, statuses);
+      }
+
+      // ── Handle inbound messages ─────────────────────────────────────────
+      if (messages.length === 0) {
+        return new Response(null, { status: 200 });
+      }
 
       const organizationId = await getOrganizationId(supabaseAdmin, phoneNumberId);
       if (!organizationId) {
@@ -385,11 +500,12 @@ async function handler(request: Request): Promise<Response> {
       }
 
       for (const msg of messages) {
-        const sender = msg.from ?? "";
-        const type = msg.type ?? "";
+        const sender  = msg.from ?? "";
+        const type    = msg.type ?? "";
         const content = msg.text?.body ?? "";
         const isMedia = MEDIA_TYPES.includes(type);
 
+        // Idempotency: skip duplicate webhook deliveries
         if (msg.id) {
           const { data: existing } = await supabaseAdmin
             .from("messages")
@@ -402,13 +518,13 @@ async function handler(request: Request): Promise<Response> {
           }
         }
 
-        let mediaInfo = null;
-        let caption = "";
+        let mediaInfo    = null;
+        let caption      = "";
         let displayContent = content;
 
         if (isMedia) {
-          mediaInfo = await processInboundMedia(msg, type, supabaseAdmin);
-          caption = msg[type]?.caption || "";
+          mediaInfo      = await processInboundMedia(msg, type, supabaseAdmin);
+          caption        = msg[type]?.caption || "";
           displayContent = caption || (type === "audio" ? "🎤 Voice message" : `📎 ${type} message`);
         }
 
@@ -417,7 +533,7 @@ async function handler(request: Request): Promise<Response> {
         let chatHistory: Array<Record<string, unknown>> = [];
 
         try {
-          leadId = await findOrCreateLead(supabaseAdmin, organizationId, sender);
+          leadId         = await findOrCreateLead(supabaseAdmin, organizationId, sender);
           conversationId = await findOrCreateConversation(supabaseAdmin, organizationId, leadId);
 
           if (type === "text" && content.trim()) {
@@ -432,63 +548,73 @@ async function handler(request: Request): Promise<Response> {
           continue;
         }
 
+        // Persist the inbound message
         const messageRecord = {
-          conversation_id: conversationId,
-          wa_message_id: msg.id,
-          sender_number: sender,
-          content: displayContent,
-          message_type: type,
-          direction: "inbound",
-          received_at: new Date().toISOString(),
-          media_url: mediaInfo?.mediaUrl ?? null,
-          media_mime_type: mediaInfo?.mediaMimeType ?? null,
-          file_name: mediaInfo?.fileName ?? null,
-          media_caption: isMedia ? caption : null,
-          media_size: mediaInfo?.mediaSize ?? 0,
+          conversation_id:  conversationId,
+          wa_message_id:    msg.id,
+          sender_number:    sender,
+          content:          displayContent,
+          message_type:     type,
+          direction:        "inbound",
+          received_at:      new Date().toISOString(),
+          media_url:        mediaInfo?.mediaUrl ?? null,
+          media_mime_type:  mediaInfo?.mediaMimeType ?? null,
+          file_name:        mediaInfo?.fileName ?? null,
+          media_caption:    isMedia ? caption : null,
+          media_size:       mediaInfo?.mediaSize ?? 0,
         };
 
         const { error } = await supabaseAdmin.from("messages").insert(messageRecord);
         if (error) console.error("[Webhook] Supabase insert error:", error);
 
+        // ── Pause follow-up automation when customer replies ──────────────
+        // Any inbound message pauses the scheduled follow-up sequence.
+        await pauseLeadFollowUp(supabaseAdmin, leadId);
+
+        // ── Opt-out compliance ─────────────────────────────────────────────
         if (isOptOut(content) && leadId) {
           try {
             await supabaseAdmin
               .from("leads")
               .update({
-                opted_out: true,
-                opted_out_at: new Date().toISOString(),
-                score: 0,
+                opted_out:        true,
+                opted_out_at:     new Date().toISOString(),
+                score:            0,
                 next_followup_at: null,
-                followup_count: 0,
+                followup_count:   0,
+                follow_up_status: 'Paused',
+                follow_up_enabled: false,
               })
               .eq("id", leadId);
+            console.log(`[Webhook] Lead ${leadId} opted out`);
           } catch (error) {
             console.error("[Webhook] Opt-out update error:", error);
           }
         }
 
+        // ── AI auto-reply (text messages only, non-opt-outs) ───────────────
         if (type === "text" && content.trim() && !isOptOut(content)) {
           try {
-            const aiRaw = await generateAIReply(orgSettings, chatHistory, content);
-            const parsed = parseAIResponse(aiRaw);
+            const aiRaw    = await generateAIReply(orgSettings, chatHistory, content);
+            const parsed   = parseAIResponse(aiRaw);
             const replyText = parsed.replyText || fallbackReply(content);
 
-            const sent = await sendWhatsAppReply(phoneNumberId, sender, replyText);
+            const sent   = await sendWhatsAppReply(phoneNumberId, sender, replyText);
             const sentAt = new Date().toISOString();
             const { error: outboundError } = await supabaseAdmin.from("messages").insert({
               conversation_id: conversationId,
-              wa_message_id: sent.messages?.[0]?.id,
-              sender_number: sender,
-              sender: "agent",
-              body: replyText,
-              message_body: replyText,
-              content: replyText,
-              message_type: "text",
-              direction: "outbound",
-              received_at: sentAt,
-              created_at: sentAt,
-              is_ai: true,
-              status: "sent",
+              wa_message_id:   sent.messages?.[0]?.id,
+              sender_number:   sender,
+              sender:          "agent",
+              body:            replyText,
+              message_body:    replyText,
+              content:         replyText,
+              message_type:    "text",
+              direction:       "outbound",
+              received_at:     sentAt,
+              created_at:      sentAt,
+              is_ai:           true,
+              status:          "sent",
             });
             if (outboundError) throw outboundError;
 
@@ -497,7 +623,7 @@ async function handler(request: Request): Promise<Response> {
             await supabaseAdmin
               .from("conversations")
               .update({
-                last_message: replyText,
+                last_message:   replyText,
                 last_timestamp: new Date().toISOString()
               })
               .eq("id", conversationId);

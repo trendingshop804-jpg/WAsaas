@@ -1,6 +1,8 @@
 # Node.js / React
 node_modules/
 build/
+dist/
+frontend/dist/
 # Python / FastAPI
 __pycache__/
 *.pyc

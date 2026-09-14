@@ -692,7 +692,12 @@ export default async function handler(req, res) {
           } else {
             await supabase
               .from('leads')
-              .update({ status: 'REPLIED', next_followup_at: null })
+              .update({
+                status: 'REPLIED',
+                follow_up_status: 'Paused',
+                next_followup_at: null,
+                updated_at: new Date().toISOString(),
+              })
               .eq('id', leadId);
           }
 

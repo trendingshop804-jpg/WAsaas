@@ -110,6 +110,21 @@ class DashboardComponent {
     setEl('kpi-response-rate', responseRate + '%');
     setEl('kpi-conversion-rate', conversionRate + '%');
     setEl('kpi-credits-used', `${org.creditsUsed} / ${org.creditsLimit}`);
+
+    // Update Follow-up priority widget on dashboard
+    if (window.followUpsComponent) {
+      const cats = window.followUpsComponent.categorizeLeads();
+      const heading = document.getElementById('dash-followup-heading');
+      const subtext = document.getElementById('dash-followup-subtext');
+      if (heading) {
+        heading.textContent = `Follow-Up Priorities: ${cats.today.length} Due Today • ${cats.overdue.length} Overdue`;
+      }
+      if (subtext) {
+        subtext.textContent = cats.overdue.length > 0
+          ? `⚠️ Attention: You have ${cats.overdue.length} overdue follow-up tasks requiring immediate contact!`
+          : `You have ${cats.today.length} follow-ups scheduled for today. Click to launch your daily outreach queue.`;
+      }
+    }
   }
 
   renderFunnel() {

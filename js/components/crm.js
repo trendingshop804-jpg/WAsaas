@@ -329,25 +329,40 @@ class CRMComponent {
     // Render Timeline
     const timelineList = document.getElementById('drawer-timeline-list');
     if (timelineList) {
+      let historyItems = '';
+      if (Array.isArray(lead.followupHistory) && lead.followupHistory.length > 0) {
+        historyItems = lead.followupHistory.map(item => `
+          <div class="timeline-item">
+            <div class="timeline-dot" style="background: var(--brand-whatsapp);"></div>
+            <div class="timeline-header">
+              <span class="timeline-title">${this.escapeHtml(item.stage || 'Follow-up')} via <strong style="color: var(--brand-whatsapp);">${this.escapeHtml(item.channel || 'Outreach')}</strong></span>
+              <span class="timeline-time">${new Date(item.timestamp).toLocaleString()}</span>
+            </div>
+            <div class="timeline-desc" style="color: var(--text-primary); font-style: italic;">"${this.escapeHtml(item.message)}"</div>
+          </div>
+        `).join('');
+      }
+
       timelineList.innerHTML = `
         <div class="timeline-item">
           <div class="timeline-dot"></div>
           <div class="timeline-header">
-            <span class="timeline-title">Lead Created via ${this.escapeHtml(lead.source)}</span>
-            <span class="timeline-time">${new Date(lead.createdDate).toLocaleDateString()}</span>
+            <span class="timeline-title">Lead Created via ${this.escapeHtml(lead.source || 'Direct')}</span>
+            <span class="timeline-time">${lead.createdDate || lead.created_at ? new Date(lead.createdDate || lead.created_at).toLocaleDateString() : 'Initial'}</span>
           </div>
           <div class="timeline-desc">Initial discovery and automated data normalization complete.</div>
         </div>
-        ${lead.lastContacted ? `
+        ${lead.lastContacted || lead.last_contacted_at ? `
           <div class="timeline-item">
             <div class="timeline-dot" style="background: var(--brand-primary);"></div>
             <div class="timeline-header">
-              <span class="timeline-title">WhatsApp Outreach Dispatched</span>
-              <span class="timeline-time">${new Date(lead.lastContacted).toLocaleTimeString()}</span>
+              <span class="timeline-title">Last Interaction Recorded</span>
+              <span class="timeline-time">${new Date(lead.lastContacted || lead.last_contacted_at).toLocaleString()}</span>
             </div>
-            <div class="timeline-desc">Personalized message delivered via campaign sequence.</div>
+            <div class="timeline-desc">Next follow-up scheduled for: <strong style="color: var(--brand-whatsapp);">${lead.next_followup_at || lead.next_follow_up_date || lead.followup_date || 'Pending'}</strong></div>
           </div>
         ` : ''}
+        ${historyItems}
       `;
     }
 

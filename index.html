@@ -308,6 +308,11 @@
             PAUSE ALL AUTOMATIONS
           </button>
 
+          <!-- Follow-up Reminder Badge -->
+          <button id="topbar-followup-reminder" class="btn btn-secondary btn-sm" onclick="window.navigationComponent.switchView('followups')" style="display: flex; align-items: center; gap: 6px;" title="View Active Follow-up Queue">
+            <span>📅 0 Today</span>
+          </button>
+
           <!-- Guided Setup Wizard Button -->
           <button id="start-onboarding-wizard-btn" class="btn btn-cyber btn-sm">
             🚀 Guided Setup
@@ -338,6 +343,25 @@
                 <button class="time-filter-btn" data-range="7d">Last 7 Days</button>
                 <button class="time-filter-btn" data-range="30d">Last 30 Days</button>
                 <button class="time-filter-btn" data-range="all">All Time</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Follow-up Action Priority Widget -->
+          <div id="dashboard-followup-priority-widget" class="card" style="margin-bottom: 24px; border-left: 4px solid var(--brand-whatsapp); background: var(--bg-card);">
+            <div class="flex items-center justify-between" style="flex-wrap: wrap; gap: 12px;">
+              <div class="flex items-center gap-3">
+                <div style="font-size: 24px;">📅</div>
+                <div>
+                  <h3 style="font-size: 15px; font-weight: 800; color: var(--text-primary); margin: 0;" id="dash-followup-heading">Lead Follow-Up Priorities</h3>
+                  <p style="font-size: 12.5px; color: var(--text-secondary); margin-top: 2px;" id="dash-followup-subtext">Manage scheduled touches, compose WhatsApp messages, and log contact outcomes.</p>
+                </div>
+              </div>
+
+              <div class="flex items-center gap-2">
+                <button class="btn btn-primary btn-sm" onclick="window.navigationComponent.switchView('followups')" style="font-weight: 700;">
+                  Manage Follow-Ups Queue →
+                </button>
               </div>
             </div>
           </div>
@@ -1043,17 +1067,42 @@
         </section>
 
 
-        <!-- 8. FOLLOW-UP SEQUENCES VIEW -->
+        <!-- 8. FOLLOW-UP MANAGEMENT & SEQUENCES VIEW -->
         <section id="view-followups" class="view-panel">
-          <div class="flex items-center justify-between" style="margin-bottom: 20px;">
+          <div class="flex items-center justify-between" style="margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
             <div>
-              <h2>Automated Follow-up Engine</h2>
-              <p style="color: var(--text-secondary); font-size: 13.5px;">Visual multi-touch follow-up rules with instant cancellation on reply or opt-out.</p>
+              <h2 style="font-size: 22px; font-weight: 800; color: var(--text-primary); margin: 0;">Lead Follow-Up Management</h2>
+              <p style="color: var(--text-secondary); font-size: 13.5px; margin-top: 4px;">Track daily follow-up queues, schedule touches, and compose personalized AI/WhatsApp messages.</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <button id="followup-refresh-btn" class="btn btn-secondary btn-sm flex items-center gap-1" style="height: 36px; padding: 0 12px;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+                <span>Refresh</span>
+              </button>
+              <button id="followup-new-lead-btn" class="btn btn-primary btn-sm flex items-center gap-1" style="height: 36px; padding: 0 14px; font-weight: 700;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                <span>+ Add Lead</span>
+              </button>
             </div>
           </div>
 
-          <div id="followup-sequence-visual-tree" style="max-width: 700px; margin: 0 auto;">
-            <!-- Rendered dynamically -->
+          <!-- Dynamic Lead Follow-up Dashboard Container -->
+          <div id="followups-container">
+            <!-- Rendered dynamically by FollowUpsComponent -->
+          </div>
+
+          <!-- Visual Automation Sequence Tree (Collapsible/Footer) -->
+          <div class="card" style="margin-top: 30px; border-top: 3px solid var(--brand-whatsapp);">
+            <div class="flex items-center justify-between" style="margin-bottom: 14px;">
+              <div>
+                <h3 style="font-size: 15px; font-weight: 700; color: var(--text-primary); margin: 0;">Automated Sequence Workflow Rules</h3>
+                <p style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;">Multi-touch automated triggers with instant cancellation on reply or opt-out keyword.</p>
+              </div>
+              <span class="badge badge-whatsapp">Rule Engine Active</span>
+            </div>
+            <div id="followup-sequence-visual-tree" style="max-width: 700px; margin: 0 auto;">
+              <!-- Rendered dynamically -->
+            </div>
           </div>
         </section>
 
@@ -2372,6 +2421,130 @@
             <button type="submit" class="btn btn-primary">Schedule Post →</button>
           </div>
         </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Follow-up: Mark Contacted / Schedule Modal -->
+  <div id="followup-contact-modal" class="modal-backdrop">
+    <div class="modal" style="max-width: 480px;">
+      <div class="modal-header">
+        <div class="flex items-center gap-2">
+          <span style="font-size: 18px;">✅</span>
+          <h3 style="margin: 0;">Mark as Contacted & Schedule Next</h3>
+        </div>
+        <button class="btn btn-secondary btn-icon btn-sm" data-close-modal>✕</button>
+      </div>
+      <div class="modal-body space-y-4">
+        <p style="font-size: 13px; color: var(--text-secondary); margin: 0;">
+          Record interaction for <strong id="modal-lead-name" style="color: var(--text-primary);">Prospect Name</strong> and pick the next follow-up date.
+        </p>
+
+        <!-- Presets -->
+        <div>
+          <label class="form-label" style="margin-bottom: 6px;">Quick Presets:</label>
+          <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="window.followUpsComponent.setQuickPresetDays(2)">+2 Days</button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="window.followUpsComponent.setQuickPresetDays(3)">+3 Days</button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="window.followUpsComponent.setQuickPresetDays(7)">+1 Week</button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="window.followUpsComponent.setQuickPresetDays(14)">+2 Weeks</button>
+          </div>
+        </div>
+
+        <!-- Next Follow-up Date Input -->
+        <div class="form-group">
+          <label class="form-label" for="modal-next-date-input">Next Follow-up Date</label>
+          <input type="date" id="modal-next-date-input" class="form-input" required style="font-weight: 700;">
+        </div>
+
+        <!-- Updated Status -->
+        <div class="form-group">
+          <label class="form-label" for="modal-status-select">Updated Lead Status</label>
+          <select id="modal-status-select" class="form-input">
+            <option value="Contacted">Contacted</option>
+            <option value="Replied">Replied</option>
+            <option value="Qualified">Qualified</option>
+            <option value="Follow-up">Follow-up</option>
+            <option value="Interested">Interested</option>
+            <option value="Proposal">Proposal</option>
+            <option value="Won">Won</option>
+            <option value="Lost">Lost</option>
+          </select>
+        </div>
+
+        <!-- Note -->
+        <div class="form-group">
+          <label class="form-label" for="modal-note-input">Contact Log Notes (Optional)</label>
+          <input type="text" id="modal-note-input" class="form-input" placeholder="e.g. Discussed pricing model, prospect requested brochure.">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-close-modal>Cancel</button>
+        <button type="button" class="btn btn-primary" onclick="window.followUpsComponent.saveContactModal()" style="font-weight: 700;">Save & Schedule →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Follow-up: Personalized Message Generator Modal -->
+  <div id="followup-message-modal" class="modal-backdrop">
+    <div class="modal" style="max-width: 600px;">
+      <div class="modal-header">
+        <div class="flex items-center gap-2">
+          <span style="font-size: 18px;">✍️</span>
+          <div>
+            <h3 style="margin: 0;">Personalized Follow-Up Composer</h3>
+            <span id="msgmodal-lead-name" style="font-size: 12px; color: var(--text-secondary); font-weight: normal;">Lead Name</span>
+          </div>
+        </div>
+        <button class="btn btn-secondary btn-icon btn-sm" data-close-modal>✕</button>
+      </div>
+      <div class="modal-body space-y-4">
+        <!-- Stage & Tone Selectors -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div>
+            <label class="form-label">Follow-up Stage</label>
+            <select id="msgmodal-stage-select" class="form-input" onchange="window.followUpsComponent.onStageOrToneChange('stage', this.value)">
+              <option value="First Follow-up">First Follow-up</option>
+              <option value="Second Follow-up">Second Follow-up</option>
+              <option value="Final Follow-up">Final Follow-up</option>
+            </select>
+          </div>
+          <div>
+            <label class="form-label">Tone & Style</label>
+            <select id="msgmodal-tone-select" class="form-input" onchange="window.followUpsComponent.onStageOrToneChange('tone', this.value)">
+              <option value="Professional">Professional</option>
+              <option value="Friendly">Friendly</option>
+              <option value="Short Sales">Short Sales</option>
+              <option value="Polite">Polite</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Editable Message Box -->
+        <div class="form-group">
+          <div class="flex items-center justify-between" style="margin-bottom: 6px;">
+            <label class="form-label" style="margin: 0;">Generated Personalized Message</label>
+            <span style="font-size: 11px; color: var(--text-muted);">Editable before sending</span>
+          </div>
+          <textarea id="msgmodal-textarea" class="form-textarea" rows="6" style="font-family: var(--font-sans); font-size: 13px; line-height: 1.5;"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer" style="flex-wrap: wrap; gap: 8px; justify-content: space-between;">
+        <div style="display: flex; gap: 6px;">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="window.followUpsComponent.sendWhatsAppFromModal()" style="background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3);">
+            💬 Open WhatsApp
+          </button>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="window.followUpsComponent.sendEmailFromModal()" style="background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3);">
+            ✉️ Open Email
+          </button>
+        </div>
+
+        <div style="display: flex; gap: 6px;">
+          <button type="button" class="btn btn-secondary" data-close-modal>Close</button>
+          <button type="button" class="btn btn-primary" onclick="window.followUpsComponent.copyGeneratedMessage()">
+            📋 Copy Message
+          </button>
+        </div>
       </div>
     </div>
   </div>
