@@ -1,20 +1,8 @@
 {
-  {
   "crons": [
     {
       "path": "/api/cron/follow-up",
       "schedule": "0 10 * * *"
-    }
-  ]
-}
-  "crons": [
-    {
-      "path": "/api/daily-welcome",
-      "schedule": "0 9 * * *"
-    },
-    {
-      "path": "/api/daily-followup",
-      "schedule": "0 * * * *"
     }
   ]
 }
