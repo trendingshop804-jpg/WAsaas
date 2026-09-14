@@ -1,69 +1,83 @@
-import Image from "next/image";
-
 export default function Home() {
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
+    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans p-6 md:p-12 flex flex-col items-center justify-center selection:bg-emerald-500 selection:text-slate-950">
+      <div className="w-full max-w-4xl space-y-8">
+        
+        {/* Header Badge & Title */}
+        <div className="space-y-4 text-center md:text-left">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold tracking-wide uppercase">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            WhatsApp Cloud API Webhook
+          </div>
+          <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">
+            Service Endpoint Ready
           </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+          <p className="text-slate-400 text-lg max-w-2xl">
+            This microservice handles Meta WhatsApp inbound webhooks, signature verification, and real-time lead sync with Supabase.
           </p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+
+        {/* Status Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="p-5 rounded-2xl bg-slate-900/60 border border-slate-800 backdrop-blur-sm hover:border-slate-700 transition-all">
+            <div className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">Endpoint URL</div>
+            <div className="font-mono text-sm text-emerald-400 font-semibold truncate">/api/webhook</div>
+            <div className="text-xs text-slate-500 mt-2">Accepts GET (verify) & POST (messages)</div>
+          </div>
+
+          <div className="p-5 rounded-2xl bg-slate-900/60 border border-slate-800 backdrop-blur-sm hover:border-slate-700 transition-all">
+            <div className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">Verification Protocol</div>
+            <div className="font-mono text-sm text-sky-400 font-semibold">HMAC SHA-256</div>
+            <div className="text-xs text-slate-500 mt-2">Validates X-Hub-Signature-256</div>
+          </div>
+
+          <div className="p-5 rounded-2xl bg-slate-900/60 border border-slate-800 backdrop-blur-sm hover:border-slate-700 transition-all">
+            <div className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">Database Connection</div>
+            <div className="font-mono text-sm text-purple-400 font-semibold">Supabase Service Role</div>
+            <div className="text-xs text-slate-500 mt-2">Bypasses RLS for server-side updates</div>
+          </div>
         </div>
-      </main>
+
+        {/* Setup Card */}
+        <div className="p-6 md:p-8 rounded-3xl bg-slate-900/90 border border-slate-800 shadow-2xl space-y-6">
+          <h2 className="text-xl font-bold text-slate-100 flex items-center gap-3">
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/20 text-emerald-400 text-sm">
+              🚀
+            </span>
+            Meta Developer Console Instructions
+          </h2>
+
+          <ol className="space-y-4 text-sm text-slate-300">
+            <li className="flex items-start gap-3">
+              <span className="flex-shrink-0 font-mono text-xs text-emerald-400 bg-slate-800 px-2 py-1 rounded">1</span>
+              <span>Navigate to <strong className="text-slate-100">Meta Developer Portal &gt; Your App &gt; WhatsApp &gt; Configuration</strong>.</span>
+            </li>
+            <li className="flex items-start gap-3">
+              <span className="flex-shrink-0 font-mono text-xs text-emerald-400 bg-slate-800 px-2 py-1 rounded">2</span>
+              <span>Set <strong>Callback URL</strong> to: <code className="bg-slate-800 text-emerald-300 px-2 py-1 rounded font-mono text-xs">https://your-vercel-domain.vercel.app/api/webhook</code></span>
+            </li>
+            <li className="flex items-start gap-3">
+              <span className="flex-shrink-0 font-mono text-xs text-emerald-400 bg-slate-800 px-2 py-1 rounded">3</span>
+              <span>Set <strong>Verify Token</strong> to match your Vercel environment variable: <code className="bg-slate-800 text-emerald-300 px-2 py-1 rounded font-mono text-xs">WEBHOOK_VERIFY_TOKEN</code></span>
+            </li>
+            <li className="flex items-start gap-3">
+              <span className="flex-shrink-0 font-mono text-xs text-emerald-400 bg-slate-800 px-2 py-1 rounded">4</span>
+              <span>Subscribe to fields: <strong className="text-slate-100">messages</strong>.</span>
+            </li>
+          </ol>
+        </div>
+
+        {/* Footer */}
+        <div className="pt-4 border-t border-slate-800/80 flex flex-col md:flex-row justify-between items-center text-xs text-slate-500 gap-2">
+          <div>WAsaas WhatsApp Cloud Webhook Integration</div>
+          <div className="flex items-center gap-4">
+            <span className="hover:text-slate-400 transition-colors">App Router v16</span>
+            <span>•</span>
+            <span className="hover:text-slate-400 transition-colors">Supabase JS</span>
+          </div>
+        </div>
+
+      </div>
     </div>
   );
 }
