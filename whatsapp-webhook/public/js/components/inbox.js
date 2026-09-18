@@ -54,7 +54,7 @@ class InboxComponent {
           .on(
             'postgres_changes',
             { event: 'INSERT', schema: 'public', table: 'messages' },
-            (payload) => {
+            async (payload) => {
               const newMsg = payload.new;
               if (!newMsg || !window.whatsappService) return;
 
@@ -66,54 +66,67 @@ class InboxComponent {
 
               if (!conversation) return;
 
-              if (direction === 'outbound') {
-                const formattedTime = new Date(newMsg.received_at || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                const outMsg = {
-                  id: newMsg.wa_message_id || 'm_sb_' + Date.now(),
-                  sender: 'outbound',
-                  direction: 'outbound',
-                  type: (newMsg.message_type || 'text').toLowerCase(),
-                  text: newMsg.content || newMsg.body || '',
-                  body: newMsg.content || newMsg.body || '',
-                  caption: newMsg.media_caption || undefined,
-                  mediaUrl: newMsg.media_url || undefined,
-                  media_url: newMsg.media_url || undefined,
-                  mimeType: newMsg.media_mime_type || undefined,
-                  media_mime_type: newMsg.media_mime_type || undefined,
-                  fileName: newMsg.file_name || undefined,
-                  file_name: newMsg.file_name || undefined,
-                  mediaSize: newMsg.media_size || 0,
-                  media_size: newMsg.media_size || 0,
-                  timestamp: formattedTime,
-                  received_at: newMsg.received_at,
-                  status: newMsg.status || 'SENT',
-                  isAI: newMsg.is_ai || false,
-                  sentByHuman: !newMsg.is_ai,
-                  metaMessageId: newMsg.wa_message_id,
-                  wa_message_id: newMsg.wa_message_id,
-                };
-
-                if (!conversation.messages) conversation.messages = [];
-                if (!conversation.messages.some(m => m.id === outMsg.id || (outMsg.metaMessageId && m.metaMessageId === outMsg.metaMessageId) || (outMsg.wa_message_id && m.wa_message_id === outMsg.wa_message_id))) {
-                  conversation.messages.push(outMsg);
+              let resolvedMediaUrl = newMsg.media_url || undefined;
+              if (resolvedMediaUrl && !/^https?:\/\//i.test(resolvedMediaUrl)) {
+                try {
+                  const cleanPath = resolvedMediaUrl.replace(/^whatsapp-media\//, '');
+                  const { data: urlData } = await supabase.storage.from('whatsapp-media').createSignedUrl(cleanPath, 86400);
+                  if (urlData?.signedUrl) {
+                    resolvedMediaUrl = urlData.signedUrl;
+                  }
+                } catch (e) {
+                  console.warn('[Inbox Realtime] Signed URL resolution failed:', e.message);
                 }
-                conversation.lastMessage = outMsg.text;
-                conversation.lastTimestamp = newMsg.received_at || formattedTime;
-                window.appState.saveState();
-
-                if (this.selectedConvId === conversation.id) {
-                  this.renderMessages(conversation.id);
-                  this.scrollToBottom(true);
-                } else {
-                  this.showScrollBottomButton(true);
-                }
-                return;
               }
 
-              window.whatsappService.receiveSimulatedInbound({
-                leadId: conversation.leadId,
-                text: newMsg.body || newMsg.content || ''
-              });
+              const formattedTime = new Date(newMsg.received_at || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+              const msgType = (newMsg.message_type || 'text').toLowerCase();
+              const formattedMsg = {
+                id: newMsg.wa_message_id || newMsg.id || ('m_realtime_' + Date.now()),
+                sender: direction === 'outbound' ? 'outbound' : 'inbound',
+                direction: direction === 'outbound' ? 'OUTBOUND' : 'INBOUND',
+                type: msgType,
+                message_type: msgType,
+                text: newMsg.content || newMsg.body || newMsg.media_caption || '',
+                body: newMsg.content || newMsg.body || newMsg.media_caption || '',
+                caption: newMsg.media_caption || undefined,
+                media_caption: newMsg.media_caption || undefined,
+                mediaUrl: resolvedMediaUrl,
+                media_url: resolvedMediaUrl,
+                mimeType: newMsg.media_mime_type || undefined,
+                media_mime_type: newMsg.media_mime_type || undefined,
+                fileName: newMsg.file_name || undefined,
+                file_name: newMsg.file_name || undefined,
+                mediaSize: newMsg.media_size || 0,
+                media_size: newMsg.media_size || 0,
+                timestamp: formattedTime,
+                received_at: newMsg.received_at,
+                status: newMsg.status || 'SENT',
+                isAI: newMsg.is_ai || false,
+                sentByHuman: !newMsg.is_ai,
+                metaMessageId: newMsg.wa_message_id,
+                wa_message_id: newMsg.wa_message_id,
+              };
+
+              if (!conversation.messages) conversation.messages = [];
+              if (!conversation.messages.some(m => m.id === formattedMsg.id || (formattedMsg.metaMessageId && m.metaMessageId === formattedMsg.metaMessageId) || (formattedMsg.wa_message_id && m.wa_message_id === formattedMsg.wa_message_id))) {
+                conversation.messages.push(formattedMsg);
+              }
+
+              const lastDisplay = formattedMsg.caption || formattedMsg.text || (msgType !== 'text' ? `📷 ${msgType} message` : '');
+              conversation.lastMessage = lastDisplay;
+              conversation.lastTimestamp = newMsg.received_at || formattedTime;
+              if (direction !== 'outbound') {
+                conversation.unreadCount = (conversation.unreadCount || 0) + 1;
+              }
+              window.appState.saveState();
+
+              if (this.selectedConvId === conversation.id) {
+                this.renderMessages(conversation.id);
+                this.scrollToBottom(true);
+              } else {
+                this.showScrollBottomButton(true);
+              }
             }
           )
           .subscribe();

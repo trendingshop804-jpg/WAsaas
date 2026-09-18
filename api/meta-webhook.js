@@ -763,6 +763,12 @@ export default async function handler(req, res) {
           console.warn('[Webhook] Could not decrypt org WhatsApp token:', e.message);
         }
       }
+      if (!decryptedToken && waConnection?.access_token) {
+        decryptedToken = waConnection.access_token;
+      }
+      if (!decryptedToken) {
+        decryptedToken = WHATSAPP_ACCESS_TOKEN;
+      }
 
       let orgSettings = {};
       try {
