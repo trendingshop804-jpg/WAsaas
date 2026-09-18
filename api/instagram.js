@@ -5,10 +5,12 @@
 // - action=publish (default POST): publishes scheduled feed posts, reels, stories, carousels
 
 import { createClient } from '@supabase/supabase-js';
-import { decryptToken } from './_crypto.js';
+import { decryptToken, encryptToken } from './_crypto.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
+const META_APP_ID = process.env.META_APP_ID || '';
+const META_APP_SECRET = process.env.META_APP_SECRET || '';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
@@ -52,6 +54,195 @@ export default async function handler(req, res) {
       return res.status(200).json({ success: true });
     } catch (err) {
       console.error('[Instagram Disconnect] Error:', err);
+      return res.status(500).json({ error: err.message });
+    }
+  }
+
+  // ── 2. SEND DIRECT MESSAGE (CRM Outbound) ──────────────────────────────────
+  if (action === 'send_message' || (req.method === 'POST' && (req.body?.recipientId || req.body?.recipient_id))) {
+    try {
+      const { organizationId, recipientId, recipient_id, text, message, mediaUrl, conversationId, leadId } = req.body || {};
+      const targetRecipient = recipientId || recipient_id;
+      const messageText = text || message || '';
+
+      if (!organizationId || !targetRecipient || (!messageText && !mediaUrl)) {
+        return res.status(400).json({ error: 'organizationId, recipientId, and text or mediaUrl are required' });
+      }
+
+      const { data: conn, error: connErr } = await supabase
+        .from('instagram_connections')
+        .select('*')
+        .eq('organization_id', organizationId)
+        .eq('is_active', true)
+        .single();
+
+      if (connErr || !conn) {
+        return res.status(404).json({ error: 'No active Instagram connection found for this organization' });
+      }
+
+      const token = await decryptToken(conn.access_token_encrypted);
+      if (!token) {
+        return res.status(500).json({ error: 'Could not decrypt Instagram access token' });
+      }
+
+      const targetId = conn.page_id || conn.instagram_business_id;
+      const sendUrl = `https://graph.facebook.com/v22.0/${targetId}/messages`;
+
+      const reqBody = {
+        recipient: { id: targetRecipient },
+        message: mediaUrl
+          ? { attachment: { type: 'image', payload: { url: mediaUrl, is_reusable: true } } }
+          : { text: messageText }
+      };
+
+      const response = await fetch(sendUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(reqBody)
+      });
+
+      const sendResult = await response.json();
+      if (!response.ok) {
+        throw new Error(sendResult.error?.message || `Instagram API error HTTP ${response.status}`);
+      }
+
+      const igMessageId = sendResult.message_id || `ig_out_${Date.now()}`;
+      const sentAt = new Date().toISOString();
+
+      if (conversationId) {
+        await supabase
+          .from('messages')
+          .insert({
+            conversation_id: conversationId,
+            wa_message_id: igMessageId,
+            sender_number: conn.instagram_business_id,
+            sender: 'agent',
+            content: messageText || (mediaUrl ? 'Attachment' : ''),
+            message_type: mediaUrl ? 'image' : 'text',
+            direction: 'outbound',
+            channel: 'instagram',
+            media_url: mediaUrl || null,
+            received_at: sentAt,
+            status: 'sent',
+          });
+
+        await supabase
+          .from('conversations')
+          .update({
+            last_message: messageText || 'Attachment',
+            last_timestamp: sentAt,
+            channel: 'instagram',
+          })
+          .eq('id', conversationId);
+      }
+
+      await supabase
+        .from('instagram_messages')
+        .insert({
+          organization_id: organizationId,
+          ig_message_id: igMessageId,
+          sender_id: conn.instagram_business_id,
+          sender_username: conn.instagram_username || 'business',
+          recipient_id: targetRecipient,
+          content: messageText,
+          direction: 'outbound',
+          received_at: sentAt
+        });
+
+      return res.status(200).json({
+        success: true,
+        messageId: igMessageId,
+        sentAt
+      });
+    } catch (err) {
+      console.error('[Instagram Send Message Error]:', err);
+      return res.status(500).json({ error: err.message });
+    }
+  }
+
+  // ── 3. OAUTH CODE / TOKEN EXCHANGE ─────────────────────────────────────────
+  if (action === 'oauth-exchange' || action === 'code_exchange') {
+    try {
+      const { code, accessToken, organizationId } = req.body || {};
+      if (!organizationId) {
+        return res.status(400).json({ error: 'organizationId is required' });
+      }
+
+      let longLivedToken = accessToken || '';
+      if (code) {
+        if (!META_APP_ID || !META_APP_SECRET) {
+          throw new Error('META_APP_ID and META_APP_SECRET are required for code exchange');
+        }
+        const tokenUrl = `https://graph.facebook.com/v22.0/oauth/access_token?client_id=${META_APP_ID}&client_secret=${META_APP_SECRET}&code=${code}`;
+        const tokenRes = await fetch(tokenUrl);
+        const tokenData = await tokenRes.json();
+        if (!tokenRes.ok || !tokenData.access_token) {
+          throw new Error(tokenData.error?.message || 'Failed to exchange OAuth code for access token');
+        }
+        longLivedToken = tokenData.access_token;
+      }
+
+      // Discover linked Instagram Professional accounts
+      const pagesRes = await fetch(`https://graph.facebook.com/v22.0/me/accounts?fields=id,name,access_token,instagram_business_account{id,username}&access_token=${longLivedToken}`);
+      const pagesData = await pagesRes.json();
+      const discovered = [];
+
+      if (pagesData.data && Array.isArray(pagesData.data)) {
+        for (const page of pagesData.data) {
+          if (page.instagram_business_account?.id) {
+            discovered.push({
+              instagramBusinessId: page.instagram_business_account.id,
+              username: page.instagram_business_account.username || page.name,
+              pageId: page.id,
+              pageName: page.name,
+              pageToken: page.access_token || longLivedToken
+            });
+          }
+        }
+      }
+
+      if (discovered.length === 0) {
+        return res.status(400).json({
+          error: 'No Instagram Business Account found linked to your Facebook Pages. Please link your Instagram Professional account to a Facebook Page first.'
+        });
+      }
+
+      const primary = discovered[0];
+      const encryptedToken = await encryptToken(primary.pageToken || longLivedToken);
+
+      await supabase.from('instagram_connections').upsert({
+        organization_id: organizationId,
+        instagram_business_id: primary.instagramBusinessId,
+        instagram_username: primary.username,
+        page_id: primary.pageId,
+        access_token_encrypted: encryptedToken,
+        is_active: true,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'organization_id, instagram_business_id' });
+
+      // Subscribe page to webhooks
+      try {
+        await fetch(`https://graph.facebook.com/v22.0/${primary.pageId}/subscribed_apps?subscribed_fields=feed,comments,messages,messaging_postbacks,message_reactions&access_token=${primary.pageToken || longLivedToken}`, {
+          method: 'POST'
+        });
+      } catch (e) {
+        console.warn('[Instagram Subscribed Apps Error]:', e.message);
+      }
+
+      return res.status(200).json({
+        success: true,
+        instagram: discovered,
+        connected: {
+          username: primary.username,
+          instagramBusinessId: primary.instagramBusinessId,
+          pageId: primary.pageId
+        }
+      });
+    } catch (err) {
+      console.error('[Instagram OAuth Exchange Error]:', err);
       return res.status(500).json({ error: err.message });
     }
   }
@@ -359,7 +550,66 @@ export default async function handler(req, res) {
     });
 
   } catch (err) {
-    console.error('[instagram-publish Fatal]:', err);
+    // ── 5. RULE & SCHEDULER CRUD ─────────────────────────────────────────────
+    if (action === 'save_rule') {
+      try {
+        const { ruleType, rule } = req.body || {};
+        const table = ruleType === 'dm' ? 'instagram_dm_rules' : 'instagram_reply_rules';
+        const { data, error } = await supabase.from(table).upsert(rule).select().single();
+        if (error) return res.status(400).json({ error: error.message });
+        return res.status(200).json({ success: true, rule: data });
+      } catch (e) {
+        return res.status(500).json({ error: e.message });
+      }
+    }
+
+    if (action === 'toggle_rule') {
+      try {
+        const { ruleType, ruleId, isActive } = req.body || {};
+        const table = ruleType === 'dm' ? 'instagram_dm_rules' : 'instagram_reply_rules';
+        const { error } = await supabase.from(table).update({ is_active: isActive }).eq('id', ruleId);
+        if (error) return res.status(400).json({ error: error.message });
+        return res.status(200).json({ success: true });
+      } catch (e) {
+        return res.status(500).json({ error: e.message });
+      }
+    }
+
+    if (action === 'delete_rule') {
+      try {
+        const { ruleType, ruleId } = req.body || {};
+        const table = ruleType === 'dm' ? 'instagram_dm_rules' : 'instagram_reply_rules';
+        const { error } = await supabase.from(table).delete().eq('id', ruleId);
+        if (error) return res.status(400).json({ error: error.message });
+        return res.status(200).json({ success: true });
+      } catch (e) {
+        return res.status(500).json({ error: e.message });
+      }
+    }
+
+    if (action === 'save_post') {
+      try {
+        const { post } = req.body || {};
+        const { data, error } = await supabase.from('scheduled_posts').insert(post).select().single();
+        if (error) return res.status(400).json({ error: error.message });
+        return res.status(200).json({ success: true, post: data });
+      } catch (e) {
+        return res.status(500).json({ error: e.message });
+      }
+    }
+
+    if (action === 'delete_post') {
+      try {
+        const { postId } = req.body || {};
+        const { error } = await supabase.from('scheduled_posts').delete().eq('id', postId);
+        if (error) return res.status(400).json({ error: error.message });
+        return res.status(200).json({ success: true });
+      } catch (e) {
+        return res.status(500).json({ error: e.message });
+      }
+    }
+
+    console.error('[instagram API Fatal]:', err);
     return res.status(500).json({ error: err.message });
   }
 }

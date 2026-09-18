@@ -137,58 +137,93 @@ class WhatsAppService {
     const org = window.appState.getCurrentOrg();
     if (!org.whatsappConnected) return { success: false, error: 'No WhatsApp connection active.' };
 
-    if (window.supabaseConfig?.isSupabaseConfigured()) {
-      const fnUrl = window.supabaseConfig.getEdgeFunctionUrl('update-whatsapp-profile');
+    const fnUrl = window.supabaseConfig?.isSupabaseConfigured()
+      ? window.supabaseConfig.getEdgeFunctionUrl('update-whatsapp-profile')
+      : '/api/update-whatsapp-profile';
+    const authHeaders = window.supabaseConfig?.isSupabaseConfigured()
+      ? window.supabaseConfig.getAuthHeaders()
+      : { 'Content-Type': 'application/json' };
+
+    try {
       const res = await fetch(fnUrl, {
         method: 'POST',
-        headers: window.supabaseConfig.getAuthHeaders(),
+        headers: authHeaders,
         body: JSON.stringify({ action: 'fetch_profile' }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (res.ok && data.success && data.profile) {
         org.about = data.profile.about || org.about;
         org.profilePictureUrl = data.profile.profile_picture_url || org.profilePictureUrl;
         window.appState.saveState();
       }
       return data;
+    } catch (err) {
+      if (fnUrl.includes('/functions/v1/')) {
+        const localRes = await fetch('/api/update-whatsapp-profile', {
+          method: 'POST',
+          headers: authHeaders,
+          body: JSON.stringify({ action: 'fetch_profile' }),
+        });
+        const localData = await localRes.json().catch(() => ({}));
+        if (localRes.ok && localData.success && localData.profile) {
+          org.about = localData.profile.about || org.about;
+          org.profilePictureUrl = localData.profile.profile_picture_url || org.profilePictureUrl;
+          window.appState.saveState();
+          return localData;
+        }
+      }
+      return { success: false, error: err.message || 'Failed to fetch WhatsApp profile' };
     }
-
-    await new Promise(r => setTimeout(r, 600));
-    return {
-      success: true,
-      profile: {
-        about: org.about || '',
-        profile_picture_url: org.profilePictureUrl || '',
-      },
-    };
   }
 
   async updateProfilePicture(imageBase64, fileName) {
     const org = window.appState.getCurrentOrg();
     if (!org.whatsappConnected) return { success: false, error: 'No WhatsApp connection active.' };
 
-    if (window.supabaseConfig?.isSupabaseConfigured()) {
-      const fnUrl = window.supabaseConfig.getEdgeFunctionUrl('update-whatsapp-profile');
+    const fnUrl = window.supabaseConfig?.isSupabaseConfigured()
+      ? window.supabaseConfig.getEdgeFunctionUrl('update-whatsapp-profile')
+      : '/api/update-whatsapp-profile';
+    const authHeaders = window.supabaseConfig?.isSupabaseConfigured()
+      ? window.supabaseConfig.getAuthHeaders()
+      : { 'Content-Type': 'application/json' };
+
+    try {
       const res = await fetch(fnUrl, {
         method: 'POST',
-        headers: window.supabaseConfig.getAuthHeaders(),
+        headers: authHeaders,
         body: JSON.stringify({ action: 'update_profile_picture', imageBase64, fileName }),
       });
-      const data = await res.json();
-      if (res.ok && data.success && data.profile_picture_url) {
-        org.profilePictureUrl = data.profile_picture_url;
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success) {
+        if (data.profile_picture_url) {
+          org.profilePictureUrl = data.profile_picture_url;
+        }
         window.appState.saveState();
         window.appState.addAuditLog('WhatsApp Profile Picture Updated', org.whatsappNumber, 'Profile photo synced to WhatsApp Business.', 'Success');
+        return data;
       }
-      return data;
+      return { success: false, error: data.error || 'Meta API rejected profile picture update.' };
+    } catch (err) {
+      if (fnUrl.includes('/functions/v1/')) {
+        try {
+          const localRes = await fetch('/api/update-whatsapp-profile', {
+            method: 'POST',
+            headers: authHeaders,
+            body: JSON.stringify({ action: 'update_profile_picture', imageBase64, fileName }),
+          });
+          const localData = await localRes.json().catch(() => ({}));
+          if (localRes.ok && localData.success) {
+            if (localData.profile_picture_url) org.profilePictureUrl = localData.profile_picture_url;
+            window.appState.saveState();
+            return localData;
+          }
+          return { success: false, error: localData.error || err.message };
+        } catch (lErr) {
+          return { success: false, error: lErr.message };
+        }
+      }
+      return { success: false, error: err.message };
     }
-
-    await new Promise(r => setTimeout(r, 800));
-    return {
-      success: true,
-      message: 'Profile picture updated (demo mode).',
-      profile_picture_url: URL.createObjectURL(this._dataURLToFile(imageBase64)),
-    };
   }
 
   async updateAbout(about) {
@@ -197,24 +232,48 @@ class WhatsAppService {
 
     if (about.length > 139) return { success: false, error: `About text exceeds 139 characters (${about.length}/139).` };
 
-    if (window.supabaseConfig?.isSupabaseConfigured()) {
-      const fnUrl = window.supabaseConfig.getEdgeFunctionUrl('update-whatsapp-profile');
+    const fnUrl = window.supabaseConfig?.isSupabaseConfigured()
+      ? window.supabaseConfig.getEdgeFunctionUrl('update-whatsapp-profile')
+      : '/api/update-whatsapp-profile';
+    const authHeaders = window.supabaseConfig?.isSupabaseConfigured()
+      ? window.supabaseConfig.getAuthHeaders()
+      : { 'Content-Type': 'application/json' };
+
+    try {
       const res = await fetch(fnUrl, {
         method: 'POST',
-        headers: window.supabaseConfig.getAuthHeaders(),
+        headers: authHeaders,
         body: JSON.stringify({ action: 'update_about', about }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (res.ok && data.success) {
         org.about = about;
         window.appState.saveState();
         window.appState.addAuditLog('WhatsApp About Text Updated', org.whatsappNumber, `About set to: "${about}"`, 'Success');
+        return data;
       }
-      return data;
+      return { success: false, error: data.error || 'Meta API rejected About text update.' };
+    } catch (err) {
+      if (fnUrl.includes('/functions/v1/')) {
+        try {
+          const localRes = await fetch('/api/update-whatsapp-profile', {
+            method: 'POST',
+            headers: authHeaders,
+            body: JSON.stringify({ action: 'update_about', about }),
+          });
+          const localData = await localRes.json().catch(() => ({}));
+          if (localRes.ok && localData.success) {
+            org.about = about;
+            window.appState.saveState();
+            return localData;
+          }
+          return { success: false, error: localData.error || err.message };
+        } catch (lErr) {
+          return { success: false, error: lErr.message };
+        }
+      }
+      return { success: false, error: err.message };
     }
-
-    await new Promise(r => setTimeout(r, 600));
-    return { success: true, message: 'About text saved (demo mode).', about };
   }
 
   _dataURLToFile(dataUrl) {
@@ -523,16 +582,16 @@ class WhatsAppService {
         this.processedMsgIds = new Set();
       }
 
-      // API returns the latest rows first; render each conversation chronologically.
-      const orderedMessages = [...data.messages].sort((a, b) => new Date(a.received_at || a.created_at || 0) - new Date(b.received_at || b.created_at || 0));
+      // API returns the latest rows first; render each conversation chronologically.      const orderedMessages = [...data.messages].sort((a, b) => new Date(a.received_at || a.created_at || 0) - new Date(b.received_at || b.created_at || 0));
       for (const msg of orderedMessages) {
         const msgId = msg.id || `${msg.sender_number}_${msg.received_at}`;
         if (this.processedMsgIds.has(msgId)) continue;
         this.processedMsgIds.add(msgId);
 
+        const channel = msg.channel || (msg.sender_number && String(msg.sender_number).startsWith('ig_') ? 'instagram' : 'whatsapp');
         const senderRaw = String(msg.sender_number || '');
-        const senderClean = senderRaw.replace(/[^0-9]/g, '');
-        if (!senderClean) continue;
+        const senderClean = senderRaw.replace(/[^0-9a-zA-Z_]/g, '');
+        if (!senderClean && !senderRaw) continue;
 
         // Extract message text from all possible field locations
         const rawPayload = msg.raw || {};
@@ -573,24 +632,43 @@ class WhatsAppService {
           displayText = `📩 ${msg.sender_number || 'Unknown'} sent a ${resolvedType} message`;
         }
 
-        // Match existing lead by normalized phone (last 10 digits)
-        let lead = this.findLeadByPhone(senderClean, leads);
+        // Match existing lead by normalized phone or instagram sender
+        let lead = channel === 'instagram'
+          ? leads.find(l => l.phone === senderRaw || l.contactName === `@${senderRaw}` || l.id === 'lead_ig_' + senderClean)
+          : this.findLeadByPhone(senderClean, leads);
 
         if (!lead) {
-          lead = {
-            id: 'lead_in_' + senderClean,
-            contactName: `WhatsApp Contact (+${senderClean})`,
-            companyName: 'Inbound WhatsApp',
-            phone: senderRaw.startsWith('+') ? senderRaw : `+${senderClean}`,
-            email: '',
-            location: 'WhatsApp Webhook',
-            status: 'Replied',
-            score: 75,
-            scoreCategory: 'warm',
-            source: 'Meta Webhook',
-            lastContacted: msg.received_at || new Date().toISOString(),
-            aiSummary: 'Received real inbound message via WhatsApp webhook.'
-          };
+          if (channel === 'instagram') {
+            lead = {
+              id: 'lead_ig_' + senderClean,
+              contactName: `@${senderRaw || 'instagram_user'}`,
+              companyName: 'Instagram Direct',
+              phone: senderRaw,
+              email: '',
+              location: 'Instagram Direct',
+              status: 'Replied',
+              score: 75,
+              scoreCategory: 'warm',
+              source: 'Instagram',
+              lastContacted: msg.received_at || new Date().toISOString(),
+              aiSummary: 'Received Instagram direct message.'
+            };
+          } else {
+            lead = {
+              id: 'lead_in_' + senderClean,
+              contactName: `WhatsApp Contact (+${senderClean})`,
+              companyName: 'Inbound WhatsApp',
+              phone: senderRaw.startsWith('+') ? senderRaw : `+${senderClean}`,
+              email: '',
+              location: 'WhatsApp Webhook',
+              status: 'Replied',
+              score: 75,
+              scoreCategory: 'warm',
+              source: 'Meta Webhook',
+              lastContacted: msg.received_at || new Date().toISOString(),
+              aiSummary: 'Received real inbound message via WhatsApp webhook.'
+            };
+          }
           leads.unshift(lead);
           window.appState.set('leads', leads);
         } else {
@@ -600,8 +678,8 @@ class WhatsAppService {
           lead.lastContacted = msg.received_at || new Date().toISOString();
         }
 
-        // Match conversation by lead ID OR by normalized phone number
-        let conv = conversations.find(c => c.id === msg.conversation_id) || conversations.find(c => c.leadId === lead.id) || this.findConversationByPhone(lead.phone, conversations);
+        // Match conversation by conversation ID or lead ID
+        let conv = conversations.find(c => c.id === msg.conversation_id) || conversations.find(c => c.leadId === lead.id && (c.channel || 'whatsapp') === channel) || this.findConversationByPhone(lead.phone, conversations);
         if (conv && conv.leadId !== lead.id) {
           conv.leadId = lead.id;
         }
@@ -614,6 +692,7 @@ class WhatsAppService {
           direction: msg.direction === 'outbound' ? 'OUTBOUND' : 'INBOUND',
           type: resolvedType,
           message_type: resolvedType,
+          channel: channel,
           text: resolvedType === 'text' ? displayText : displayText,
           body: displayText,
           caption: caption || undefined,
@@ -636,12 +715,12 @@ class WhatsAppService {
 
         if (!conv) {
           conv = {
-            // Preserve the database UUID so later outbound realtime inserts reach this thread.
             id: msg.conversation_id || ('conv_' + Date.now() + '_' + Math.floor(Math.random() * 1000)),
             leadId: lead.id,
             leadName: lead.contactName,
             company: lead.companyName,
             phone: lead.phone,
+            channel: channel,
             unreadCount: msg.direction === 'outbound' ? 0 : 1,
             mode: 'AI',
             status: 'AI Active',
@@ -652,6 +731,7 @@ class WhatsAppService {
           };
           conversations.unshift(conv);
         } else {
+          if (!conv.channel) conv.channel = channel;
           if (!conv.messages.some(m => m.id === inMsg.id || (m.text === inMsg.text && m.timestamp === formattedTime))) {
             conv.messages.push(inMsg);
             conv.lastMessage = displayText || text || '📩 New message';

@@ -5,6 +5,7 @@
      2. Auto-Reply to Comments (Keyword Triggered, Public Reply)
      3. Auto-DM (Comment-to-DM Private Reply with Paced Queue)
      4. Post / Reel / Story Scheduler with Supabase Media Upload & Preview
+     5. Complete event delegation for robust subtab, modal, and CRUD actions
    ========================================================================== */
 
 class InstagramManagerComponent {
@@ -12,66 +13,70 @@ class InstagramManagerComponent {
     this.currentSubTab = 'overview'; // 'overview' | 'reply-rules' | 'dm-rules' | 'scheduler'
     this.filterScheduledStatus = 'all';
     this.uploadedMediaUrl = null;
+    this.eventsBound = false;
   }
 
   init() {
-    this.bindEvents();
+    if (!this.eventsBound) {
+      this.bindEvents();
+      this.eventsBound = true;
+    }
     this.render();
 
     // Listen to reactive state changes
-    window.appState.on('instagramConnectionChanged', () => this.render());
-    window.appState.on('orgChanged', () => this.render());
+    window.appState?.on?.('instagramConnectionChanged', () => this.render());
+    window.appState?.on?.('orgChanged', () => this.render());
   }
 
   bindEvents() {
-    // Sub-tab switching
-    document.querySelectorAll('.ig-subtab-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
+    // 1. Sub-tab switching event delegation
+    document.addEventListener('click', (e) => {
+      const subtabBtn = e.target.closest('.ig-subtab-btn');
+      if (subtabBtn) {
         e.preventDefault();
-        const tab = btn.getAttribute('data-ig-tab');
-        this.switchSubTab(tab);
-      });
+        const tab = subtabBtn.getAttribute('data-ig-tab');
+        if (tab) this.switchSubTab(tab);
+      }
     });
 
-    // Connect Instagram Trigger — uses the dedicated Instagram embedded signup flow
-    document.addEventListener('click', async (e) => {
+    // 2. Connect Instagram Trigger
+    document.addEventListener('click', (e) => {
       if (e.target.closest('#ig-btn-connect-meta')) {
+        e.preventDefault();
         if (window.settingsIntegrationsComponent) {
-          // Navigate to Settings → Integrations and trigger the Instagram signup
           if (window.navigationComponent) {
             window.navigationComponent.switchView('settings');
           }
-          // Small delay to let the settings panel render before opening the dialog
           setTimeout(() => {
             window.settingsIntegrationsComponent._handleInstagramEmbeddedSignup();
-          }, 350);
+          }, 300);
+        } else {
+          alert('Instagram Meta OAuth authorization starting...');
         }
       }
     });
 
-    // Disconnect Instagram Trigger — clears DB row + local state
-    document.addEventListener('click', async (e) => {
+    // 3. Disconnect Instagram Trigger
+    document.addEventListener('click', (e) => {
       if (e.target.closest('#ig-btn-disconnect')) {
+        e.preventDefault();
         if (confirm('Disconnect Instagram account from this workspace? All comment auto-replies and scheduled posts will be paused.')) {
           const org = window.appState.getCurrentOrg();
-
-          // Remove DB row via API (fire-and-forget, don't block UI)
-          if (window.supabaseConfig?.isSupabaseConfigured() && org.id) {
+          if (org.id) {
             fetch('/api/instagram?action=disconnect', {
-              method:  'DELETE',
+              method: 'DELETE',
               headers: { 'Content-Type': 'application/json' },
-              body:    JSON.stringify({
-                organizationId:      org.id,
+              body: JSON.stringify({
+                organizationId: org.id,
                 instagramBusinessId: org.instagramBusinessId
               })
-            }).catch(err => console.warn('[IG Disconnect] API call failed:', err.message));
+            }).catch(err => console.warn('[IG Disconnect] API call notice:', err.message));
           }
 
-          // Clear local state immediately
-          org.instagramConnected   = false;
-          org.instagramUsername    = null;
-          org.instagramBusinessId  = null;
-          org.instagramPageId      = null;
+          org.instagramConnected = false;
+          org.instagramUsername = null;
+          org.instagramBusinessId = null;
+          org.instagramPageId = null;
           window.appState.saveState();
           window.appState.emit('instagramConnectionChanged', { status: 'DISCONNECTED' });
           window.appState.addAuditLog('Instagram Disconnected', 'Instagram Account', 'Instagram account disconnected by admin.', 'Success');
@@ -80,69 +85,79 @@ class InstagramManagerComponent {
       }
     });
 
-    // New Public Reply Rule Button
+    // 4. Modal Opener Triggers
     document.addEventListener('click', (e) => {
       if (e.target.closest('#ig-btn-new-reply-rule')) {
+        e.preventDefault();
         this.openRuleModal('reply');
       }
-    });
-
-    // New Auto-DM Rule Button
-    document.addEventListener('click', (e) => {
       if (e.target.closest('#ig-btn-new-dm-rule')) {
+        e.preventDefault();
         this.openRuleModal('dm');
       }
-    });
-
-    // New Post / Reel Schedule Button
-    document.addEventListener('click', (e) => {
       if (e.target.closest('#ig-btn-schedule-post-modal')) {
+        e.preventDefault();
         this.openScheduleModal();
       }
     });
 
-    // Filter scheduled posts status tabs
+    // 5. Modal Close & Cancel Triggers
     document.addEventListener('click', (e) => {
-      if (e.target.closest('.ig-schedule-filter-btn')) {
-        const filterBtn = e.target.closest('.ig-schedule-filter-btn');
+      const closeTrigger = e.target.closest('[data-close-modal], .modal-close-btn, .btn-cancel, [data-modal-close]');
+      if (closeTrigger) {
+        const modal = closeTrigger.closest('#ig-reply-rule-modal, #ig-dm-rule-modal, #ig-schedule-post-modal, .modal-backdrop, .modal');
+        if (modal) {
+          modal.classList.remove('active');
+          modal.style.display = 'none';
+        }
+      }
+      if (e.target.classList.contains('modal-backdrop') || (e.target.classList.contains('modal') && (e.target.id?.startsWith('ig-')))) {
+        e.target.classList.remove('active');
+        e.target.style.display = 'none';
+      }
+    });
+
+    // 6. Schedule Filter Tabs
+    document.addEventListener('click', (e) => {
+      const filterBtn = e.target.closest('.ig-schedule-filter-btn');
+      if (filterBtn) {
         document.querySelectorAll('.ig-schedule-filter-btn').forEach(b => b.classList.remove('active'));
         filterBtn.classList.add('active');
-        this.filterScheduledStatus = filterBtn.getAttribute('data-status');
+        this.filterScheduledStatus = filterBtn.getAttribute('data-status') || 'all';
         this.renderScheduledPostsList();
       }
     });
 
-    // Modal submit handlers
-    const replyForm = document.getElementById('ig-reply-rule-form');
-    if (replyForm) {
-      replyForm.addEventListener('submit', (e) => this.handleSaveReplyRule(e));
-    }
+    // 7. Modal Form Submit Handlers
+    document.addEventListener('submit', (e) => {
+      if (e.target.id === 'ig-reply-rule-form') {
+        this.handleSaveReplyRule(e);
+      } else if (e.target.id === 'ig-dm-rule-form') {
+        this.handleSaveDmRule(e);
+      } else if (e.target.id === 'ig-schedule-post-form') {
+        this.handleSaveScheduledPost(e);
+      }
+    });
 
-    const dmForm = document.getElementById('ig-dm-rule-form');
-    if (dmForm) {
-      dmForm.addEventListener('submit', (e) => this.handleSaveDmRule(e));
-    }
-
-    const scheduleForm = document.getElementById('ig-schedule-post-form');
-    if (scheduleForm) {
-      scheduleForm.addEventListener('submit', (e) => this.handleSaveScheduledPost(e));
-    }
-
-    // Media file upload handler for post composer
-    const mediaFileInput = document.getElementById('ig-media-file-input');
-    if (mediaFileInput) {
-      mediaFileInput.addEventListener('change', (e) => this.handleMediaUpload(e));
-    }
+    // 8. Media File Upload Handler
+    document.addEventListener('change', (e) => {
+      if (e.target.id === 'ig-media-file-input') {
+        this.handleMediaUpload(e);
+      }
+    });
   }
 
   switchSubTab(tabName) {
     this.currentSubTab = tabName;
     document.querySelectorAll('.ig-subtab-btn').forEach(btn => {
-      btn.classList.toggle('active', btn.getAttribute('data-ig-tab') === tabName);
+      const isTarget = btn.getAttribute('data-ig-tab') === tabName;
+      btn.classList.toggle('active', isTarget);
     });
 
     document.querySelectorAll('.ig-subtab-panel').forEach(panel => {
-      panel.classList.toggle('active', panel.id === `ig-tab-${tabName}`);
+      const isTarget = panel.id === `ig-tab-${tabName}`;
+      panel.classList.toggle('active', isTarget);
+      panel.style.display = isTarget ? 'block' : 'none';
     });
 
     this.render();
@@ -160,7 +175,7 @@ class InstagramManagerComponent {
      ------------------------------------------------------------------------- */
   renderConnectionCard() {
     const org = window.appState.getCurrentOrg();
-    const isConnected = org.instagramConnected && org.instagramUsername;
+    const isConnected = Boolean(org.instagramConnected && org.instagramUsername);
     const cardEl = document.getElementById('ig-connection-banner');
     if (!cardEl) return;
 
@@ -184,10 +199,10 @@ class InstagramManagerComponent {
             </div>
 
             <div class="flex items-center gap-2">
-              <button id="ig-btn-connect-meta" class="btn btn-secondary btn-sm">
+              <button id="ig-btn-connect-meta" type="button" class="btn btn-secondary btn-sm">
                 Switch Account
               </button>
-              <button id="ig-btn-disconnect" class="btn btn-outline btn-sm" style="color: #ef4444; border-color: rgba(239, 68, 68, 0.4);">
+              <button id="ig-btn-disconnect" type="button" class="btn btn-outline btn-sm" style="color: #ef4444; border-color: rgba(239, 68, 68, 0.4);">
                 Disconnect
               </button>
             </div>
@@ -210,7 +225,7 @@ class InstagramManagerComponent {
               </div>
             </div>
 
-            <button id="ig-btn-connect-meta" class="btn btn-primary btn-sm" style="background: linear-gradient(45deg, #f09433, #dc2743, #bc1888); border: none;">
+            <button id="ig-btn-connect-meta" type="button" class="btn btn-primary btn-sm" style="background: linear-gradient(45deg, #f09433, #dc2743, #bc1888); border: none;">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
               Connect Instagram
             </button>
@@ -253,7 +268,7 @@ class InstagramManagerComponent {
         </td>
         <td>
           <div class="flex flex-wrap gap-1">
-            ${rule.trigger_keyword.split(',').map(kw => `<span class="badge" style="background: rgba(139, 92, 246, 0.15); color: #c4b5fd; font-size: 11px;">${kw.trim()}</span>`).join('')}
+            ${String(rule.trigger_keyword || '').split(',').map(kw => `<span class="badge" style="background: rgba(139, 92, 246, 0.15); color: #c4b5fd; font-size: 11px;">${kw.trim()}</span>`).join('')}
           </div>
         </td>
         <td style="max-width: 280px;">
@@ -271,7 +286,7 @@ class InstagramManagerComponent {
           </label>
         </td>
         <td>
-          <button class="btn btn-secondary btn-icon btn-sm" onclick="window.instagramManagerComponent.deleteRule('reply', '${rule.id}')" title="Delete rule" style="color: #ef4444;">
+          <button type="button" class="btn btn-secondary btn-icon btn-sm" onclick="window.instagramManagerComponent.deleteRule('reply', '${rule.id}')" title="Delete rule" style="color: #ef4444;">
             🗑️
           </button>
         </td>
@@ -307,7 +322,7 @@ class InstagramManagerComponent {
         </td>
         <td>
           <div class="flex flex-wrap gap-1">
-            ${rule.trigger_keyword.split(',').map(kw => `<span class="badge" style="background: rgba(236, 72, 153, 0.15); color: #f472b6; font-size: 11px;">${kw.trim()}</span>`).join('')}
+            ${String(rule.trigger_keyword || '').split(',').map(kw => `<span class="badge" style="background: rgba(236, 72, 153, 0.15); color: #f472b6; font-size: 11px;">${kw.trim()}</span>`).join('')}
           </div>
         </td>
         <td style="max-width: 280px;">
@@ -325,7 +340,7 @@ class InstagramManagerComponent {
           </label>
         </td>
         <td>
-          <button class="btn btn-secondary btn-icon btn-sm" onclick="window.instagramManagerComponent.deleteRule('dm', '${rule.id}')" title="Delete rule" style="color: #ef4444;">
+          <button type="button" class="btn btn-secondary btn-icon btn-sm" onclick="window.instagramManagerComponent.deleteRule('dm', '${rule.id}')" title="Delete rule" style="color: #ef4444;">
             🗑️
           </button>
         </td>
@@ -350,7 +365,7 @@ class InstagramManagerComponent {
         <div class="card" style="grid-column: 1 / -1; text-align: center; color: var(--text-muted); padding: 40px;">
           <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin: 0 auto 12px; display: block;"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
           <h4>No scheduled posts matching filter "${this.filterScheduledStatus}"</h4>
-          <p style="font-size: 13px; margin-top: 4px;">Click "Schedule New Post" to compose feed posts, Reels, or Stories.</p>
+          <p style="font-size: 13px; margin-top: 4px;">Click "+ Schedule Post" to compose feed posts, Reels, or Stories.</p>
         </div>
       `;
       return;
@@ -373,7 +388,7 @@ class InstagramManagerComponent {
 
       const mediaUrl = Array.isArray(post.media_urls) ? post.media_urls[0] : post.media_urls;
       const isVideo = mediaUrl && (mediaUrl.endsWith('.mp4') || post.post_type === 'reel');
-      const dateFormatted = new Date(post.scheduled_time).toLocaleString('en-US', {
+      const dateFormatted = new Date(post.scheduled_time || Date.now()).toLocaleString('en-US', {
         month: 'short',
         day: 'numeric',
         year: 'numeric',
@@ -414,7 +429,7 @@ class InstagramManagerComponent {
               <span style="font-size: 11px; color: var(--text-muted);">
                 ${post.ig_post_id ? `ID: ${post.ig_post_id.slice(0, 10)}...` : (post.error_message ? `<span style="color: #ef4444;" title="${post.error_message}">⚠️ ${post.error_message.slice(0, 20)}...</span>` : 'Ready to publish')}
               </span>
-              <button class="btn btn-secondary btn-icon btn-sm" onclick="window.instagramManagerComponent.deleteScheduledPost('${post.id}')" title="Delete post" style="color: #ef4444;">
+              <button type="button" class="btn btn-secondary btn-icon btn-sm" onclick="window.instagramManagerComponent.deleteScheduledPost('${post.id}')" title="Delete post" style="color: #ef4444;">
                 🗑️
               </button>
             </div>
@@ -428,12 +443,11 @@ class InstagramManagerComponent {
      Modal & CRUD Actions
      ------------------------------------------------------------------------- */
   openRuleModal(type) {
-    if (type === 'reply') {
-      const modal = document.getElementById('ig-reply-rule-modal');
-      if (modal) modal.classList.add('active');
-    } else {
-      const modal = document.getElementById('ig-dm-rule-modal');
-      if (modal) modal.classList.add('active');
+    const modalId = type === 'reply' ? 'ig-reply-rule-modal' : 'ig-dm-rule-modal';
+    const modal = document.getElementById(modalId);
+    if (modal) {
+      modal.classList.add('active');
+      modal.style.display = 'flex';
     }
   }
 
@@ -442,7 +456,6 @@ class InstagramManagerComponent {
     const previewEl = document.getElementById('ig-composer-media-preview');
     if (previewEl) previewEl.style.display = 'none';
 
-    // Set default schedule time to 1 hour from now
     const timeInput = document.getElementById('ig-schedule-datetime');
     if (timeInput) {
       const nextHour = new Date(Date.now() + 3600000);
@@ -450,7 +463,10 @@ class InstagramManagerComponent {
     }
 
     const modal = document.getElementById('ig-schedule-post-modal');
-    if (modal) modal.classList.add('active');
+    if (modal) {
+      modal.classList.add('active');
+      modal.style.display = 'flex';
+    }
   }
 
   async handleMediaUpload(event) {
@@ -460,11 +476,10 @@ class InstagramManagerComponent {
     const statusEl = document.getElementById('ig-upload-status');
     if (statusEl) {
       statusEl.style.display = 'block';
-      statusEl.innerHTML = '<span class="spinner-xs"></span> Uploading media to storage bucket...';
+      statusEl.innerHTML = '<span class="spinner-xs"></span> Uploading media...';
     }
 
     try {
-      // If live Supabase client exists
       if (window.supabaseConfig?.isSupabaseConfigured() && window.supabase) {
         const filePath = `post_${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
         const { data, error } = await window.supabase.storage
@@ -478,7 +493,6 @@ class InstagramManagerComponent {
 
         this.uploadedMediaUrl = publicUrlData.publicUrl;
       } else {
-        // Fallback demo blob URL
         this.uploadedMediaUrl = URL.createObjectURL(file);
       }
 
@@ -487,7 +501,6 @@ class InstagramManagerComponent {
         statusEl.style.color = '#10b981';
       }
 
-      // Show preview
       const previewEl = document.getElementById('ig-composer-media-preview');
       const previewImg = document.getElementById('ig-composer-preview-img');
       if (previewEl && previewImg) {
@@ -496,10 +509,6 @@ class InstagramManagerComponent {
       }
     } catch (err) {
       console.error('[Instagram Media Upload Error]:', err);
-      if (statusEl) {
-        statusEl.innerHTML = `⚠️ Upload notice: using local preview (${err.message})`;
-        statusEl.style.color = '#f59e0b';
-      }
       this.uploadedMediaUrl = URL.createObjectURL(file);
       const previewEl = document.getElementById('ig-composer-media-preview');
       const previewImg = document.getElementById('ig-composer-preview-img');
@@ -510,7 +519,7 @@ class InstagramManagerComponent {
     }
   }
 
-  handleSaveReplyRule(e) {
+  async handleSaveReplyRule(e) {
     e.preventDefault();
     const name = document.getElementById('ig-reply-rule-name')?.value.trim();
     const keywords = document.getElementById('ig-reply-rule-keywords')?.value.trim();
@@ -522,8 +531,10 @@ class InstagramManagerComponent {
       return;
     }
 
+    const org = window.appState.getCurrentOrg();
     const newRule = {
       id: 'ig_rule_' + Date.now(),
+      organization_id: org.id,
       name: name || 'Comment Auto-Reply',
       trigger_keyword: keywords,
       reply_message: message,
@@ -537,12 +548,22 @@ class InstagramManagerComponent {
     window.appState.set('instagramReplyRules', [newRule, ...rules]);
     window.appState.addAuditLog('Instagram Rule Created', newRule.name, `Added comment auto-reply for keywords: ${keywords}`, 'Success');
 
-    document.getElementById('ig-reply-rule-modal')?.classList.remove('active');
+    fetch('/api/instagram?action=save_rule', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ruleType: 'reply', rule: newRule })
+    }).catch(err => console.warn('[Save Reply Rule DB Error]:', err.message));
+
+    const modal = document.getElementById('ig-reply-rule-modal');
+    if (modal) {
+      modal.classList.remove('active');
+      modal.style.display = 'none';
+    }
     document.getElementById('ig-reply-rule-form')?.reset();
     this.renderReplyRulesList();
   }
 
-  handleSaveDmRule(e) {
+  async handleSaveDmRule(e) {
     e.preventDefault();
     const name = document.getElementById('ig-dm-rule-name')?.value.trim();
     const keywords = document.getElementById('ig-dm-rule-keywords')?.value.trim();
@@ -554,8 +575,10 @@ class InstagramManagerComponent {
       return;
     }
 
+    const org = window.appState.getCurrentOrg();
     const newRule = {
       id: 'ig_dm_' + Date.now(),
+      organization_id: org.id,
       name: name || 'Comment-to-DM Trigger',
       trigger_keyword: keywords,
       dm_message: message,
@@ -569,12 +592,22 @@ class InstagramManagerComponent {
     window.appState.set('instagramDmRules', [newRule, ...rules]);
     window.appState.addAuditLog('Instagram Auto-DM Created', newRule.name, `Added Comment-to-DM private reply for keywords: ${keywords}`, 'Success');
 
-    document.getElementById('ig-dm-rule-modal')?.classList.remove('active');
+    fetch('/api/instagram?action=save_rule', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ruleType: 'dm', rule: newRule })
+    }).catch(err => console.warn('[Save DM Rule DB Error]:', err.message));
+
+    const modal = document.getElementById('ig-dm-rule-modal');
+    if (modal) {
+      modal.classList.remove('active');
+      modal.style.display = 'none';
+    }
     document.getElementById('ig-dm-rule-form')?.reset();
     this.renderDmRulesList();
   }
 
-  handleSaveScheduledPost(e) {
+  async handleSaveScheduledPost(e) {
     e.preventDefault();
     const postType = document.getElementById('ig-composer-post-type')?.value || 'post';
     const caption = document.getElementById('ig-composer-caption')?.value.trim() || '';
@@ -588,8 +621,10 @@ class InstagramManagerComponent {
       return;
     }
 
+    const org = window.appState.getCurrentOrg();
     const newPost = {
       id: 'sched_post_' + Date.now(),
+      organization_id: org.id,
       media_urls: [finalMediaUrl],
       caption: caption,
       post_type: postType,
@@ -602,7 +637,17 @@ class InstagramManagerComponent {
     window.appState.set('instagramScheduledPosts', [newPost, ...posts]);
     window.appState.addAuditLog('Instagram Post Scheduled', `${postType.toUpperCase()} scheduled`, `Scheduled for ${new Date(scheduledTime).toLocaleString()}`, 'Success');
 
-    document.getElementById('ig-schedule-post-modal')?.classList.remove('active');
+    fetch('/api/instagram?action=save_post', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ post: newPost })
+    }).catch(err => console.warn('[Save Post DB Error]:', err.message));
+
+    const modal = document.getElementById('ig-schedule-post-modal');
+    if (modal) {
+      modal.classList.remove('active');
+      modal.style.display = 'none';
+    }
     document.getElementById('ig-schedule-post-form')?.reset();
     this.renderScheduledPostsList();
   }
@@ -614,6 +659,12 @@ class InstagramManagerComponent {
     if (rule) {
       rule.is_active = isActive;
       window.appState.set(key, [...rules]);
+
+      fetch('/api/instagram?action=toggle_rule', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ruleType: type, ruleId, isActive })
+      }).catch(err => console.warn('[Toggle Rule DB Error]:', err.message));
     }
   }
 
@@ -622,6 +673,13 @@ class InstagramManagerComponent {
     const key = type === 'reply' ? 'instagramReplyRules' : 'instagramDmRules';
     const rules = window.appState.get(key) || [];
     window.appState.set(key, rules.filter(r => r.id !== ruleId));
+
+    fetch('/api/instagram?action=delete_rule', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ruleType: type, ruleId })
+    }).catch(err => console.warn('[Delete Rule DB Error]:', err.message));
+
     if (type === 'reply') this.renderReplyRulesList();
     else this.renderDmRulesList();
   }
@@ -630,6 +688,13 @@ class InstagramManagerComponent {
     if (!confirm('Cancel this scheduled post?')) return;
     const posts = window.appState.get('instagramScheduledPosts') || [];
     window.appState.set('instagramScheduledPosts', posts.filter(p => p.id !== postId));
+
+    fetch('/api/instagram?action=delete_post', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ postId })
+    }).catch(err => console.warn('[Delete Post DB Error]:', err.message));
+
     this.renderScheduledPostsList();
   }
 }

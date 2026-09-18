@@ -33,9 +33,11 @@ function extFromMime(mimeType) {
   return /^[a-z0-9]{1,8}$/.test(sub) ? sub : 'bin';
 }
 
-async function downloadMediaFromMeta(mediaId) {
+async function downloadMediaFromMeta(mediaId, customToken) {
+  const token = customToken || WHATSAPP_ACCESS_TOKEN;
+  const headers = token ? { Authorization: `Bearer ${token}` } : {};
   const metaRes = await fetch(`https://graph.facebook.com/v21.0/${mediaId}`, {
-    headers: { Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}` }
+    headers
   });
   if (!metaRes.ok) {
     const err = await metaRes.text();
@@ -46,7 +48,7 @@ async function downloadMediaFromMeta(mediaId) {
   if (!downloadUrl) throw new Error(`No download URL returned for media ${mediaId}`);
 
   const downloadRes = await fetch(downloadUrl, {
-    headers: { Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}` }
+    headers
   });
   if (!downloadRes.ok) {
     throw new Error(`Failed to download media ${mediaId}: ${downloadRes.status}`);
@@ -80,7 +82,7 @@ async function uploadMediaToStorage(senderNumber, mediaId, fileName, mimeType, b
   return uploadData?.path || storagePath;
 }
 
-async function processInboundMedia(msg, mediaType) {
+async function processInboundMedia(msg, mediaType, customToken) {
   const mediaId = msg[mediaType]?.id;
   if (!mediaId) {
     console.warn(`Media message ${msg.id} has no ${mediaType}.id — skipping media download`);
@@ -88,7 +90,7 @@ async function processInboundMedia(msg, mediaType) {
   }
 
   try {
-    const { buffer, mimeType, fileName } = await downloadMediaFromMeta(mediaId);
+    const { buffer, mimeType, fileName } = await downloadMediaFromMeta(mediaId, customToken);
     const storagePath = await uploadMediaToStorage(msg.from, mediaId, fileName, mimeType, buffer);
     return {
       mediaUrl: storagePath,
@@ -113,6 +115,17 @@ async function getWhatsAppOrganizationId(phoneNumberId) {
   return data?.[0]?.organization_id || null;
 }
 
+async function getWhatsAppConnection(phoneNumberId) {
+  const { data } = await supabase
+    .from('whatsapp_connections')
+    .select('*')
+    .eq('phone_number_id', phoneNumberId)
+    .eq('is_active', true)
+    .limit(1);
+
+  return data?.[0] || null;
+}
+
 async function getInstagramConnection(instagramBusinessId) {
   const { data } = await supabase
     .from('instagram_connections')
@@ -124,26 +137,31 @@ async function getInstagramConnection(instagramBusinessId) {
   return data?.[0] || null;
 }
 
-async function findOrCreateLead(organizationId, phoneNumber) {
-  const { data: existing } = await supabase
+async function findOrCreateLead(organizationId, phoneNumber, contactName = '', source = 'WhatsApp') {
+  let query = supabase
     .from('leads')
     .select('id')
-    .eq('organization_id', organizationId)
-    .eq('phone', phoneNumber)
-    .limit(1);
+    .eq('organization_id', organizationId);
+
+  if (phoneNumber) {
+    query = query.eq('phone', phoneNumber);
+  }
+
+  const { data: existing } = await query.limit(1);
 
   if (existing && existing.length > 0) {
     return existing[0].id;
   }
 
+  const defaultName = source === 'Instagram' ? (contactName ? `@${contactName}` : 'Instagram Lead') : 'WhatsApp Lead';
   const { data: newLead, error } = await supabase
     .from('leads')
     .insert({
       organization_id: organizationId,
-      company_name: 'WhatsApp Lead',
-      contact_name: '',
-      phone: phoneNumber,
-      source: 'WhatsApp',
+      company_name: defaultName,
+      contact_name: contactName || '',
+      phone: phoneNumber || null,
+      source: source,
       status: 'NEW',
       score: 50,
       score_category: 'WARM',
@@ -159,15 +177,26 @@ async function findOrCreateLead(organizationId, phoneNumber) {
   return newLead.id;
 }
 
-async function findOrCreateConversation(organizationId, leadId) {
+async function findOrCreateConversation(organizationId, leadId, channel = 'whatsapp') {
   const { data: existing } = await supabase
+    .from('conversations')
+    .select('id')
+    .eq('lead_id', leadId)
+    .eq('channel', channel)
+    .limit(1);
+
+  if (existing && existing.length > 0) {
+    return existing[0].id;
+  }
+
+  const { data: fallbackExisting } = await supabase
     .from('conversations')
     .select('id')
     .eq('lead_id', leadId)
     .limit(1);
 
-  if (existing && existing.length > 0) {
-    return existing[0].id;
+  if (fallbackExisting && fallbackExisting.length > 0) {
+    return fallbackExisting[0].id;
   }
 
   const { data: newConv, error } = await supabase
@@ -175,6 +204,7 @@ async function findOrCreateConversation(organizationId, leadId) {
     .insert({
       organization_id: organizationId,
       lead_id: leadId,
+      channel: channel,
       mode: 'AI',
       unread_count: 0,
     })
@@ -532,7 +562,106 @@ async function handleInstagramDirectMessage(entry, messagingItem, igConnection) 
 
   if (!messageId) return;
 
-  const { error: msgErr } = await supabase
+  // 1. Deduplication check
+  const { data: existing } = await supabase
+    .from('messages')
+    .select('id')
+    .eq('wa_message_id', messageId)
+    .limit(1);
+
+  if (existing && existing.length > 0) {
+    console.log('[Instagram Webhook] Duplicate message, skipping:', messageId);
+    return;
+  }
+
+  // 2. Handle attachments (images, video, audio, files)
+  let mediaInfo = null;
+  let msgType = 'text';
+  const attachments = message.attachments || [];
+  if (attachments.length > 0) {
+    const att = attachments[0];
+    const attType = att.type || 'image';
+    msgType = attType === 'file' ? 'document' : attType;
+    const mediaUrl = att.payload?.url;
+    if (mediaUrl) {
+      try {
+        const rawToken = await decryptToken(igConnection.access_token_encrypted);
+        const downloadRes = await fetch(mediaUrl, {
+          headers: rawToken ? { Authorization: `Bearer ${rawToken}` } : {}
+        });
+        if (downloadRes.ok) {
+          const buffer = await downloadRes.arrayBuffer();
+          const mimeType = downloadRes.headers.get('content-type') || 'application/octet-stream';
+          const safeId = String(messageId).replace(/[^a-zA-Z0-9_-]/g, '_');
+          const ext = extFromMime(mimeType);
+          const fileName = `ig_${safeId}.${ext}`;
+          const storagePath = await uploadMediaToStorage(senderId, safeId, fileName, mimeType, buffer);
+          mediaInfo = {
+            mediaUrl: storagePath,
+            mediaMimeType: mimeType,
+            fileName: fileName,
+            mediaSize: buffer.byteLength,
+          };
+        }
+      } catch (err) {
+        console.error('[Instagram Media] Download/Upload failed:', err.message);
+      }
+    }
+  }
+
+  // 3. Lead & Conversation setup
+  let leadId = null;
+  let conversationId = null;
+  try {
+    leadId = await findOrCreateLead(organizationId, senderId, senderId, 'Instagram');
+    conversationId = await findOrCreateConversation(organizationId, leadId, 'instagram');
+  } catch (err) {
+    console.error('[Instagram Webhook] Lead/Conversation error:', err);
+  }
+
+  if (!conversationId) {
+    console.error('[Instagram Webhook] Skipping message — no conversation_id');
+    return;
+  }
+
+  const caption = message.caption || '';
+  const displayContent = messageText || (mediaInfo ? (msgType === 'audio' ? 'Voice message' : `${msgType} message`) : '');
+
+  // 4. Save message in messages table
+  const messageRecord = {
+    conversation_id: conversationId,
+    wa_message_id: messageId,
+    sender_number: senderId,
+    content: displayContent,
+    message_type: msgType,
+    direction: isEcho ? 'outbound' : 'inbound',
+    channel: 'instagram',
+    received_at: new Date(messagingItem.timestamp || Date.now()).toISOString(),
+    media_url: mediaInfo?.mediaUrl || null,
+    media_mime_type: mediaInfo?.mediaMimeType || null,
+    file_name: mediaInfo?.fileName || null,
+    media_caption: caption || null,
+    media_size: mediaInfo?.mediaSize || 0,
+    status: 'SENT',
+  };
+
+  const { error: msgErr } = await supabase.from('messages').insert(messageRecord);
+  if (msgErr) {
+    console.error('[Instagram Message] Supabase insert error:', msgErr);
+  }
+
+  // 5. Update conversation
+  await supabase
+    .from('conversations')
+    .update({
+      last_message: displayContent,
+      last_timestamp: new Date(messagingItem.timestamp || Date.now()).toISOString(),
+      channel: 'instagram',
+    })
+    .eq('id', conversationId);
+
+  // 6. Also upsert in instagram_messages for compatibility
+  await supabase
     .from('instagram_messages')
     .upsert({
       organization_id: organizationId,
@@ -540,14 +669,10 @@ async function handleInstagramDirectMessage(entry, messagingItem, igConnection) 
       sender_id: senderId || 'unknown',
       recipient_id: recipientId || 'unknown',
       content: messageText,
-      message_type: 'text',
+      message_type: msgType,
       direction: isEcho ? 'outbound' : 'inbound',
       received_at: new Date(messagingItem.timestamp || Date.now()).toISOString(),
     }, { onConflict: 'ig_message_id' });
-
-  if (msgErr) {
-    console.error('[Instagram Message] Upsert error:', msgErr.message);
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -623,10 +748,20 @@ export default async function handler(req, res) {
         return res.status(200).json({ received: true });
       }
 
-      const organizationId = await getWhatsAppOrganizationId(phoneNumberId);
+      const waConnection = await getWhatsAppConnection(phoneNumberId);
+      const organizationId = waConnection?.organization_id || (await getWhatsAppOrganizationId(phoneNumberId));
       if (!organizationId) {
         console.error('[Webhook] No active WhatsApp connection found for phone_number_id:', phoneNumberId);
         return res.status(200).json({ received: true });
+      }
+
+      let decryptedToken = null;
+      if (waConnection?.access_token_encrypted) {
+        try {
+          decryptedToken = await decryptToken(waConnection.access_token_encrypted);
+        } catch (e) {
+          console.warn('[Webhook] Could not decrypt org WhatsApp token:', e.message);
+        }
       }
 
       let orgSettings = {};
@@ -661,7 +796,7 @@ export default async function handler(req, res) {
 
         let mediaInfo = null;
         if (isMedia) {
-          mediaInfo = await processInboundMedia(msg, msgType);
+          mediaInfo = await processInboundMedia(msg, msgType, decryptedToken);
           if (!mediaInfo) {
             console.warn(`Media download failed for ${msg.id} (${msgType}) — saving message metadata only`);
           }
@@ -675,8 +810,8 @@ export default async function handler(req, res) {
         let chatHistory = [];
 
         try {
-          leadId = await findOrCreateLead(organizationId, sender);
-          conversationId = await findOrCreateConversation(organizationId, leadId);
+          leadId = await findOrCreateLead(organizationId, sender, '', 'WhatsApp');
+          conversationId = await findOrCreateConversation(organizationId, leadId, 'whatsapp');
 
           if (isOptOut(userText) && leadId) {
             await supabase
@@ -720,6 +855,7 @@ export default async function handler(req, res) {
           content: userText || (isMedia ? (msgType === 'audio' ? 'Voice message' : `${msgType} message`) : ''),
           message_type: msgType,
           direction: 'inbound',
+          channel: 'whatsapp',
           received_at: new Date().toISOString(),
           media_url: mediaInfo?.mediaUrl || null,
           media_mime_type: mediaInfo?.mediaMimeType || null,
@@ -733,6 +869,15 @@ export default async function handler(req, res) {
         if (msgError) {
           console.error('[Webhook] Supabase insert error:', msgError);
         }
+
+        await supabase
+          .from('conversations')
+          .update({
+            last_message: messageRecord.content,
+            last_timestamp: messageRecord.received_at,
+            channel: 'whatsapp',
+          })
+          .eq('id', conversationId);
 
         if (userText && msgType === 'text' && leadId && !isOptOut(userText)) {
           let aiRaw = null;

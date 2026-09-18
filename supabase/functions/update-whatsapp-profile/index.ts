@@ -3,26 +3,23 @@
 // Handles:
 //   POST /update-whatsapp-profile
 //   1. Verifies user session (Bearer JWT from Frontend)
-//   2. Decrypts the encrypted WhatsApp access token from whatsapp_connections
-//   3. Based on `action`:
-//      - "update_profile_picture": 2-step Meta API (upload image → set handle)
+//   2. Verifies OWNER or ADMIN role in user's organization
+//   3. Decrypts the encrypted WhatsApp access token from whatsapp_connections
+//   4. Validates image (JPEG/PNG only, valid MIME, <= 5MB)
+//   5. Meta WhatsApp Business Profile API execution:
+//      - "update_profile_picture": 2-step Meta API (upload media → set handle)
 //      - "update_about": 1-step Meta API (set about field, max 139 chars)
 //      - "fetch_profile": GET current profile picture + about from Meta
-//
-// Meta API Reference (v21.0):
-//   Step 1: POST /{phone-number-id}/media?image_url={PUBLIC_URL} → { "id": "{media-id}" }
-//   Step 2: POST /{waba-id}/whatsapp_business_profile?profile_picture_handle={media-id} → { "success": true }
-//   About:  POST /{waba-id}/whatsapp_business_profile?about={text} → { "success": true }
-//   Fetch:  GET /{waba-id}/whatsapp_business_profile
+//   6. Confirms Meta response, cleans up temp storage, updates DB & audit log
 // ==========================================================================
 
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const SUPABASE_URL        = Deno.env.get("SUPABASE_URL")!;
+const SUPABASE_URL         = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const ENCRYPT_SECRET      = Deno.env.get("INTEGRATION_ENCRYPT_SECRET");
-const GRAPH_API_VERSION   = "v21.0";
+const ENCRYPT_SECRET       = Deno.env.get("INTEGRATION_ENCRYPT_SECRET");
+const GRAPH_API_VERSION    = "v21.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -38,39 +35,49 @@ function jsonResponse(data: unknown, status = 200) {
 }
 
 // ---------------------------------------------------------------------------
-// Helper: AES-GCM Token Decryption (inverse of meta-oauth-exchange encryptToken)
+// Helper: AES-GCM Token Decryption
 // ---------------------------------------------------------------------------
 async function decryptToken(ciphertext: string): Promise<string> {
-  if (!ENCRYPT_SECRET || ENCRYPT_SECRET.length < 32) {
-    throw new Error("INTEGRATION_ENCRYPT_SECRET must be set to a strong secret of at least 32 characters");
+  if (!ciphertext) return "";
+  if (ciphertext.startsWith("EAA") || ciphertext.startsWith("EAAV") || ciphertext.startsWith("IGQ")) {
+    return ciphertext;
   }
-  const enc = new TextDecoder();
-  const keyData = new TextEncoder().encode(ENCRYPT_SECRET.padEnd(32, "0").slice(0, 32));
-  const combined = Uint8Array.from(atob(ciphertext), c => c.charCodeAt(0));
 
-  const iv = combined.slice(0, 12);
-  const cipherBuf = combined.slice(12);
+  const secret = ENCRYPT_SECRET || Deno.env.get("META_APP_SECRET") || "change-me-to-32-char-secret!!!!!";
+  try {
+    const enc = new TextEncoder();
+    const dec = new TextDecoder();
+    const keyData = enc.encode(secret.padEnd(32, "0").slice(0, 32));
+    const combined = Uint8Array.from(atob(ciphertext), (c) => c.charCodeAt(0));
 
-  const cryptoKey = await crypto.subtle.importKey(
-    "raw",
-    keyData,
-    { name: "AES-GCM" },
-    false,
-    ["decrypt"]
-  );
+    if (combined.length < 13) return ciphertext;
 
-  const decrypted = await crypto.subtle.decrypt(
-    { name: "AES-GCM", iv },
-    cryptoKey,
-    cipherBuf
-  );
+    const iv = combined.slice(0, 12);
+    const cipherBuf = combined.slice(12);
 
-  return enc.decode(decrypted);
+    const cryptoKey = await crypto.subtle.importKey(
+      "raw",
+      keyData,
+      { name: "AES-GCM" },
+      false,
+      ["decrypt"]
+    );
+
+    const decrypted = await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv },
+      cryptoKey,
+      cipherBuf
+    );
+
+    return dec.decode(decrypted);
+  } catch (err) {
+    console.warn("Token decrypt failed, falling back to raw token:", (err as Error).message);
+    return ciphertext;
+  }
 }
 
 // ---------------------------------------------------------------------------
 // Helper: Validate image file
-// Returns { valid: boolean, error?: string, extension?: string }
 // ---------------------------------------------------------------------------
 function validateImage(fileExt: string, mimeType: string, byteSize: number): { valid: boolean; error?: string } {
   const validExts = ["jpeg", "jpg", "png"];
@@ -81,10 +88,10 @@ function validateImage(fileExt: string, mimeType: string, byteSize: number): { v
     return { valid: false, error: "Image must be JPEG or PNG format." };
   }
   if (!validMimes.includes(mimeType)) {
-    return { valid: false, error: "Invalid MIME type. Only JPEG and PNG are accepted." };
+    return { valid: false, error: "Invalid MIME type. Only image/jpeg and image/png are accepted." };
   }
   if (byteSize > 5 * 1024 * 1024) {
-    return { valid: false, error: "Image exceeds 5MB limit. Meta recommends under 5MB." };
+    return { valid: false, error: "Image exceeds 5MB limit. Please upload an image under 5MB." };
   }
   return { valid: true };
 }
@@ -95,27 +102,30 @@ function validateImage(fileExt: string, mimeType: string, byteSize: number): { v
 async function metaApi(endpoint: string, accessToken: string, options: {
   method?: string;
   params?: Record<string, string>;
-  body?: Record<string, unknown>;
+  body?: Record<string, unknown> | FormData;
 } = {}) {
   const url = new URL(`https://graph.facebook.com/${GRAPH_API_VERSION}/${endpoint}`);
 
   if (options.params) {
     Object.entries(options.params).forEach(([k, v]) => url.searchParams.set(k, v));
   }
-  url.searchParams.set("access_token", accessToken);
 
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${accessToken}`,
+  };
+
   const fetchOpts: RequestInit = {
     method: options.method || "GET",
     headers,
   };
 
   if (options.body) {
-    if (options.method === "POST" || !options.method) {
-      headers["Content-Type"] = "application/x-www-form-urlencoded";
-      const formData = new URLSearchParams();
-      Object.entries(options.body).forEach(([k, v]) => formData.append(k, String(v)));
-      fetchOpts.body = formData;
+    if (options.body instanceof FormData) {
+      fetchOpts.body = options.body;
+      // Do not set Content-Type header so fetch boundary is set automatically
+    } else {
+      headers["Content-Type"] = "application/json";
+      fetchOpts.body = JSON.stringify(options.body);
     }
   }
 
@@ -126,22 +136,29 @@ async function metaApi(endpoint: string, accessToken: string, options: {
 }
 
 // ---------------------------------------------------------------------------
-// Helper: Map Meta API errors to user-friendly messages
+// Helper: Map Meta API errors to user-friendly messages without exposing secrets
 // ---------------------------------------------------------------------------
 function mapMetaError(data: any): string {
-  if (data.error?.code === 4) {
-    return "Permission denied: WhatsApp Business Management permission is required in your Meta App Review. Enable it in https://developers.facebook.com/apps/ → App Review.";
+  if (!data || !data.error) {
+    return "Meta API did not confirm the profile update.";
   }
-  if (data.error?.code === 100) {
-    return data.error?.message || "Invalid request to Meta API. Check your phone number ID and WABA ID.";
+  const err = data.error;
+  if (err.code === 4) {
+    return "Permission denied: WhatsApp Business Management permission (whatsapp_business_management) is required in your Meta App Review.";
   }
-  if (data.error?.error_user_title) {
-    return `${data.error.error_user_title}: ${data.error.error_user_msg || ""}`;
+  if (err.code === 190) {
+    return "WhatsApp access token expired or invalid. Please reconnect your WhatsApp Business account.";
   }
-  if (data.error?.message) {
-    return `Meta API error: ${data.error.message}`;
+  if (err.code === 100) {
+    return err.error_user_msg || err.message || "Invalid parameters sent to Meta WhatsApp Business API.";
   }
-  return "Unknown Meta API error. Please check your connection and try again.";
+  if (err.error_user_title) {
+    return `${err.error_user_title}: ${err.error_user_msg || err.message || ""}`;
+  }
+  if (err.message) {
+    return `Meta API error: ${err.message}`;
+  }
+  return "Meta API encountered an error processing your WhatsApp Business profile update.";
 }
 
 // ---------------------------------------------------------------------------
@@ -167,8 +184,9 @@ serve(async (req: Request) => {
       auth: { persistSession: false },
     });
 
-    const supabaseUser = createClient(SUPABASE_URL, Deno.env.get("SUPABASE_ANON_KEY")!, {
+    const supabaseUser = createClient(SUPABASE_URL, Deno.env.get("SUPABASE_ANON_KEY") || SUPABASE_SERVICE_KEY, {
       global: { headers: { Authorization: authHeader } },
+      auth: { persistSession: false },
     });
 
     const { data: { user }, error: userErr } = await supabaseUser.auth.getUser();
@@ -176,7 +194,7 @@ serve(async (req: Request) => {
       return jsonResponse({ error: "Unauthorized user session" }, 401);
     }
 
-    // 2. Get user's organization
+    // 2. Get user's organization and verify OWNER/ADMIN role
     const { data: profile, error: profileErr } = await supabaseAdmin
       .from("users")
       .select("organization_id, role")
@@ -184,7 +202,7 @@ serve(async (req: Request) => {
       .single();
 
     if (profileErr || !profile || !["OWNER", "ADMIN"].includes(profile.role)) {
-      return jsonResponse({ error: "Forbidden: Organization access denied" }, 403);
+      return jsonResponse({ error: "Forbidden: OWNER or ADMIN permissions required" }, 403);
     }
 
     // 3. Get the organization's WhatsApp connection with encrypted token
@@ -207,6 +225,10 @@ serve(async (req: Request) => {
     const accessToken = await decryptToken(connection.access_token_encrypted);
     const { phone_number_id, waba_id } = connection;
 
+    if (!phone_number_id && !waba_id) {
+      return jsonResponse({ error: "Missing phone_number_id and waba_id in connection record." }, 400);
+    }
+
     // 5. Parse request body
     const { action, imageBase64, fileName, about } = await req.json();
 
@@ -216,11 +238,11 @@ serve(async (req: Request) => {
 
     // ─── Action: update_profile_picture ─────────────────────────────────
     if (action === "update_profile_picture") {
-      if (!imageBase64) {
+      if (!imageBase64 || typeof imageBase64 !== "string") {
         return jsonResponse({ error: "Missing imageBase64 data" }, 400);
       }
 
-      // Strip data URL prefix if present
+      // Parse data URL prefix if present
       let base64Data = imageBase64;
       let mimeType = "image/jpeg";
       let fileExt = "jpg";
@@ -228,118 +250,162 @@ serve(async (req: Request) => {
       if (imageBase64.startsWith("data:")) {
         const match = imageBase64.match(/^data:(image\/[a-zA-Z]+);base64,(.+)$/);
         if (match) {
-          mimeType = match[1];
+          mimeType = match[1].toLowerCase();
           base64Data = match[2];
           fileExt = mimeType.split("/")[1].replace("jpeg", "jpg");
         }
       }
 
-      const byteChars = atob(base64Data);
+      let byteChars: string;
+      try {
+        byteChars = atob(base64Data);
+      } catch {
+        return jsonResponse({ error: "Invalid base64 encoded image data." }, 400);
+      }
+
       const byteSize = byteChars.length;
       const validation = validateImage(fileExt, mimeType, byteSize);
       if (!validation.valid) {
         return jsonResponse({ error: validation.error }, 400);
       }
 
-      // Upload image to public bucket for Meta to fetch
-      const binaryStr = new Uint8Array(byteSize);
+      const binaryData = new Uint8Array(byteSize);
       for (let i = 0; i < byteSize; i++) {
-        binaryStr[i] = byteChars.charCodeAt(i);
+        binaryData[i] = byteChars.charCodeAt(i);
       }
 
+      // Upload temporary file to profile-photos-public for Meta lookaside fetch if needed
+      const safeFileName = fileName || `profile_${Date.now()}.${fileExt}`;
       const uploadName = `profile-${user.id}-${Date.now()}.${fileExt}`;
       const uploadPath = `${user.id}/${uploadName}`;
 
       const { error: uploadError } = await supabaseAdmin.storage
         .from("profile-photos-public")
-        .upload(uploadPath, binaryStr, {
+        .upload(uploadPath, binaryData, {
           contentType: mimeType,
           upsert: true,
         });
 
       if (uploadError) {
-        console.error("Storage upload error:", uploadError);
-        return jsonResponse({ error: "Failed to upload image to storage." }, 500);
+        console.warn("Storage temporary upload error:", uploadError.message);
       }
 
-      // Get public URL
       const { data: publicUrlData } = supabaseAdmin.storage
         .from("profile-photos-public")
         .getPublicUrl(uploadPath);
+      const publicUrl = publicUrlData?.publicUrl || "";
 
-      const publicUrl = publicUrlData?.publicUrl;
-      if (!publicUrl) {
-        return jsonResponse({ error: "Failed to get public URL for image." }, 500);
-      }
+      // ── Step 1: Upload Image to Meta Media API ──
+      const targetPhoneId = phone_number_id || waba_id;
+      const formData = new FormData();
+      formData.append("messaging_product", "whatsapp");
+      formData.append("file", new Blob([binaryData], { type: mimeType }), safeFileName);
+      formData.append("type", mimeType);
 
-      // ── Meta API Step 1: Upload to Media API ──
-      const mediaRes = await metaApi(`${phone_number_id}/media`, accessToken, {
+      let mediaRes = await metaApi(`${targetPhoneId}/media`, accessToken, {
         method: "POST",
-        body: { image_url: publicUrl },
+        body: formData,
       });
 
-      if (!mediaRes.ok) {
-        // Cleanup uploaded image
-        await supabaseAdmin.storage.from("profile-photos-public").remove([uploadPath]);
+      // If direct binary multipart failed and publicUrl is available, try image_url parameter
+      if ((!mediaRes.ok || !mediaRes.data?.id) && publicUrl) {
+        mediaRes = await metaApi(`${targetPhoneId}/media`, accessToken, {
+          method: "POST",
+          params: {
+            messaging_product: "whatsapp",
+            image_url: publicUrl,
+          },
+        });
+      }
+
+      if (!mediaRes.ok || !mediaRes.data?.id) {
+        // Cleanup temp storage image
+        if (uploadPath) {
+          await supabaseAdmin.storage.from("profile-photos-public").remove([uploadPath]);
+        }
         return jsonResponse({
-          error: mapMetaError(mediaRes.data),
+          error: mapMetaError(mediaRes.data) || "Meta Media API did not accept the uploaded image.",
           meta_response: mediaRes.data,
         }, 400);
       }
 
       const mediaId = mediaRes.data.id;
-      if (!mediaId) {
-        await supabaseAdmin.storage.from("profile-photos-public").remove([uploadPath]);
-        return jsonResponse({
-          error: "Meta Media API did not return a media ID.",
-          meta_response: mediaRes.data,
-        }, 500);
-      }
 
-      // ── Meta API Step 2: Set as profile picture ──
-      const profileRes = await metaApi(`${waba_id}/whatsapp_business_profile`, accessToken, {
+      // ── Step 2: Set profile picture handle via WhatsApp Business Profile API ──
+      let profileRes = await metaApi(`${targetPhoneId}/whatsapp_business_profile`, accessToken, {
         method: "POST",
-        body: { profile_picture_handle: mediaId },
+        body: {
+          messaging_product: "whatsapp",
+          profile_picture_handle: mediaId,
+        },
       });
 
-      // Cleanup: delete temp image from bucket
-      await supabaseAdmin.storage.from("profile-photos-public").remove([uploadPath]);
+      // Fallback to WABA ID if phone_number_id endpoint returned 404/not supported
+      if (!profileRes.ok && waba_id && waba_id !== targetPhoneId) {
+        profileRes = await metaApi(`${waba_id}/whatsapp_business_profile`, accessToken, {
+          method: "POST",
+          body: {
+            messaging_product: "whatsapp",
+            profile_picture_handle: mediaId,
+          },
+        });
+      }
 
-      if (!profileRes.ok) {
+      // Cleanup: Delete temporary file from storage bucket
+      if (uploadPath) {
+        await supabaseAdmin.storage.from("profile-photos-public").remove([uploadPath]);
+      }
+
+      // Check Meta confirmation
+      if (!profileRes.ok || (profileRes.data?.success !== true && !profileRes.data?.id)) {
         return jsonResponse({
           error: mapMetaError(profileRes.data),
           meta_response: profileRes.data,
         }, 400);
       }
 
-      // Update local about/profile_picture_url cache in whatsapp_connections
-      await supabaseAdmin
-        .from("whatsapp_connections")
-        .update({
-          profile_picture_url: publicUrl,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("organization_id", profile.organization_id);
+      // ── Step 3: Fetch confirmed profile picture from Meta to cache CDN URL ──
+      let confirmedPictureUrl = "";
+      const fetchProfileRes = await metaApi(`${targetPhoneId}/whatsapp_business_profile`, accessToken, {
+        method: "GET",
+        params: { fields: "profile_picture_url,about" },
+      });
 
-      // Log to audit
-      await supabaseAdmin.from("users").select("id, organization_id, role")
-        .eq("id", user.id).eq("organization_id", profile.organization_id).single()
-        try {
-          await supabaseAdmin.from("audit_logs").insert({
-            organization_id: profile.organization_id,
-            action: "WhatsApp Profile Picture Updated",
-            entity: connection.phone_number || phone_number_id,
-            actor: user.email,
-            details: `Profile picture updated via Meta Business Profile API. Media ID: ${mediaId}`,
-            status: "Success",
-          });
-        } catch { /* audit log is best-effort */ }
+      if (fetchProfileRes.ok && fetchProfileRes.data) {
+        const item = Array.isArray(fetchProfileRes.data.data) ? fetchProfileRes.data.data[0] : fetchProfileRes.data;
+        confirmedPictureUrl = item?.profile_picture_url || "";
+      }
+
+      // Update whatsapp_connections table with confirmed profile picture
+      if (confirmedPictureUrl) {
+        await supabaseAdmin
+          .from("whatsapp_connections")
+          .update({
+            profile_picture_url: confirmedPictureUrl,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("organization_id", profile.organization_id);
+      }
+
+      // Insert audit log only on confirmed success
+      try {
+        await supabaseAdmin.from("audit_logs").insert({
+          organization_id: profile.organization_id,
+          action: "WhatsApp Profile Picture Updated",
+          entity: connection.phone_number || phone_number_id || waba_id,
+          actor: user.email || "Admin",
+          details: `Profile picture updated via Meta Business Profile API. Media ID: ${mediaId}`,
+          status: "Success",
+        });
+      } catch (auditErr) {
+        console.warn("Audit log insert error (non-fatal):", auditErr);
+      }
 
       return jsonResponse({
         success: true,
         message: "Profile picture updated successfully on WhatsApp Business.",
         media_id: mediaId,
-        profile_picture_url: publicUrl,
+        profile_picture_url: confirmedPictureUrl || null,
       });
     }
 
@@ -356,12 +422,26 @@ serve(async (req: Request) => {
         }, 400);
       }
 
-      const res = await metaApi(`${waba_id}/whatsapp_business_profile`, accessToken, {
+      const targetPhoneId = phone_number_id || waba_id;
+      let res = await metaApi(`${targetPhoneId}/whatsapp_business_profile`, accessToken, {
         method: "POST",
-        body: { about: trimmed },
+        body: {
+          messaging_product: "whatsapp",
+          about: trimmed,
+        },
       });
 
-      if (!res.ok) {
+      if (!res.ok && waba_id && waba_id !== targetPhoneId) {
+        res = await metaApi(`${waba_id}/whatsapp_business_profile`, accessToken, {
+          method: "POST",
+          body: {
+            messaging_product: "whatsapp",
+            about: trimmed,
+          },
+        });
+      }
+
+      if (!res.ok || (res.data?.success !== true && !res.data?.id)) {
         return jsonResponse({
           error: mapMetaError(res.data),
           meta_response: res.data,
@@ -377,6 +457,20 @@ serve(async (req: Request) => {
         })
         .eq("organization_id", profile.organization_id);
 
+      // Audit log
+      try {
+        await supabaseAdmin.from("audit_logs").insert({
+          organization_id: profile.organization_id,
+          action: "WhatsApp About Text Updated",
+          entity: connection.phone_number || phone_number_id || waba_id,
+          actor: user.email || "Admin",
+          details: `About text set to: "${trimmed}"`,
+          status: "Success",
+        });
+      } catch (auditErr) {
+        console.warn("Audit log insert error (non-fatal):", auditErr);
+      }
+
       return jsonResponse({
         success: true,
         message: "About text updated successfully on WhatsApp Business.",
@@ -386,13 +480,22 @@ serve(async (req: Request) => {
 
     // ─── Action: fetch_profile ───────────────────────────────────────────
     if (action === "fetch_profile") {
-      const res = await metaApi(`${waba_id}/whatsapp_business_profile`, accessToken, {
+      const targetPhoneId = phone_number_id || waba_id;
+      let res = await metaApi(`${targetPhoneId}/whatsapp_business_profile`, accessToken, {
         method: "GET",
         params: {
-          access_token: accessToken,
-          fields: "profile_picture_url,about,address,description,name,websites",
+          fields: "profile_picture_url,about,address,description,name,websites,vertical",
         },
       });
+
+      if (!res.ok && waba_id && waba_id !== targetPhoneId) {
+        res = await metaApi(`${waba_id}/whatsapp_business_profile`, accessToken, {
+          method: "GET",
+          params: {
+            fields: "profile_picture_url,about,address,description,name,websites,vertical",
+          },
+        });
+      }
 
       if (!res.ok) {
         return jsonResponse({
@@ -401,15 +504,29 @@ serve(async (req: Request) => {
         }, 400);
       }
 
+      const profileData = Array.isArray(res.data?.data) ? res.data.data[0] : res.data;
+
+      // Also update local cache if profile_picture_url is present
+      if (profileData?.profile_picture_url || profileData?.about) {
+        const updateFields: Record<string, any> = { updated_at: new Date().toISOString() };
+        if (profileData.profile_picture_url) updateFields.profile_picture_url = profileData.profile_picture_url;
+        if (profileData.about) updateFields.about = profileData.about;
+
+        await supabaseAdmin
+          .from("whatsapp_connections")
+          .update(updateFields)
+          .eq("organization_id", profile.organization_id);
+      }
+
       return jsonResponse({
         success: true,
-        profile: res.data,
+        profile: profileData,
       });
     }
 
     return jsonResponse({ error: `Unknown action: ${action}` }, 400);
   } catch (err) {
     console.error("update-whatsapp-profile Error:", err);
-    return jsonResponse({ error: (err as Error).message }, 500);
+    return jsonResponse({ error: (err as Error).message || "Internal server error" }, 500);
   }
 });

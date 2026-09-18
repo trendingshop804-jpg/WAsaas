@@ -137,58 +137,93 @@ class WhatsAppService {
     const org = window.appState.getCurrentOrg();
     if (!org.whatsappConnected) return { success: false, error: 'No WhatsApp connection active.' };
 
-    if (window.supabaseConfig?.isSupabaseConfigured()) {
-      const fnUrl = window.supabaseConfig.getEdgeFunctionUrl('update-whatsapp-profile');
+    const fnUrl = window.supabaseConfig?.isSupabaseConfigured()
+      ? window.supabaseConfig.getEdgeFunctionUrl('update-whatsapp-profile')
+      : '/api/update-whatsapp-profile';
+    const authHeaders = window.supabaseConfig?.isSupabaseConfigured()
+      ? window.supabaseConfig.getAuthHeaders()
+      : { 'Content-Type': 'application/json' };
+
+    try {
       const res = await fetch(fnUrl, {
         method: 'POST',
-        headers: window.supabaseConfig.getAuthHeaders(),
+        headers: authHeaders,
         body: JSON.stringify({ action: 'fetch_profile' }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (res.ok && data.success && data.profile) {
         org.about = data.profile.about || org.about;
         org.profilePictureUrl = data.profile.profile_picture_url || org.profilePictureUrl;
         window.appState.saveState();
       }
       return data;
+    } catch (err) {
+      if (fnUrl.includes('/functions/v1/')) {
+        const localRes = await fetch('/api/update-whatsapp-profile', {
+          method: 'POST',
+          headers: authHeaders,
+          body: JSON.stringify({ action: 'fetch_profile' }),
+        });
+        const localData = await localRes.json().catch(() => ({}));
+        if (localRes.ok && localData.success && localData.profile) {
+          org.about = localData.profile.about || org.about;
+          org.profilePictureUrl = localData.profile.profile_picture_url || org.profilePictureUrl;
+          window.appState.saveState();
+          return localData;
+        }
+      }
+      return { success: false, error: err.message || 'Failed to fetch WhatsApp profile' };
     }
-
-    await new Promise(r => setTimeout(r, 600));
-    return {
-      success: true,
-      profile: {
-        about: org.about || '',
-        profile_picture_url: org.profilePictureUrl || '',
-      },
-    };
   }
 
   async updateProfilePicture(imageBase64, fileName) {
     const org = window.appState.getCurrentOrg();
     if (!org.whatsappConnected) return { success: false, error: 'No WhatsApp connection active.' };
 
-    if (window.supabaseConfig?.isSupabaseConfigured()) {
-      const fnUrl = window.supabaseConfig.getEdgeFunctionUrl('update-whatsapp-profile');
+    const fnUrl = window.supabaseConfig?.isSupabaseConfigured()
+      ? window.supabaseConfig.getEdgeFunctionUrl('update-whatsapp-profile')
+      : '/api/update-whatsapp-profile';
+    const authHeaders = window.supabaseConfig?.isSupabaseConfigured()
+      ? window.supabaseConfig.getAuthHeaders()
+      : { 'Content-Type': 'application/json' };
+
+    try {
       const res = await fetch(fnUrl, {
         method: 'POST',
-        headers: window.supabaseConfig.getAuthHeaders(),
+        headers: authHeaders,
         body: JSON.stringify({ action: 'update_profile_picture', imageBase64, fileName }),
       });
-      const data = await res.json();
-      if (res.ok && data.success && data.profile_picture_url) {
-        org.profilePictureUrl = data.profile_picture_url;
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success) {
+        if (data.profile_picture_url) {
+          org.profilePictureUrl = data.profile_picture_url;
+        }
         window.appState.saveState();
         window.appState.addAuditLog('WhatsApp Profile Picture Updated', org.whatsappNumber, 'Profile photo synced to WhatsApp Business.', 'Success');
+        return data;
       }
-      return data;
+      return { success: false, error: data.error || 'Meta API rejected profile picture update.' };
+    } catch (err) {
+      if (fnUrl.includes('/functions/v1/')) {
+        try {
+          const localRes = await fetch('/api/update-whatsapp-profile', {
+            method: 'POST',
+            headers: authHeaders,
+            body: JSON.stringify({ action: 'update_profile_picture', imageBase64, fileName }),
+          });
+          const localData = await localRes.json().catch(() => ({}));
+          if (localRes.ok && localData.success) {
+            if (localData.profile_picture_url) org.profilePictureUrl = localData.profile_picture_url;
+            window.appState.saveState();
+            return localData;
+          }
+          return { success: false, error: localData.error || err.message };
+        } catch (lErr) {
+          return { success: false, error: lErr.message };
+        }
+      }
+      return { success: false, error: err.message };
     }
-
-    await new Promise(r => setTimeout(r, 800));
-    return {
-      success: true,
-      message: 'Profile picture updated (demo mode).',
-      profile_picture_url: URL.createObjectURL(this._dataURLToFile(imageBase64)),
-    };
   }
 
   async updateAbout(about) {
@@ -197,24 +232,48 @@ class WhatsAppService {
 
     if (about.length > 139) return { success: false, error: `About text exceeds 139 characters (${about.length}/139).` };
 
-    if (window.supabaseConfig?.isSupabaseConfigured()) {
-      const fnUrl = window.supabaseConfig.getEdgeFunctionUrl('update-whatsapp-profile');
+    const fnUrl = window.supabaseConfig?.isSupabaseConfigured()
+      ? window.supabaseConfig.getEdgeFunctionUrl('update-whatsapp-profile')
+      : '/api/update-whatsapp-profile';
+    const authHeaders = window.supabaseConfig?.isSupabaseConfigured()
+      ? window.supabaseConfig.getAuthHeaders()
+      : { 'Content-Type': 'application/json' };
+
+    try {
       const res = await fetch(fnUrl, {
         method: 'POST',
-        headers: window.supabaseConfig.getAuthHeaders(),
+        headers: authHeaders,
         body: JSON.stringify({ action: 'update_about', about }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (res.ok && data.success) {
         org.about = about;
         window.appState.saveState();
         window.appState.addAuditLog('WhatsApp About Text Updated', org.whatsappNumber, `About set to: "${about}"`, 'Success');
+        return data;
       }
-      return data;
+      return { success: false, error: data.error || 'Meta API rejected About text update.' };
+    } catch (err) {
+      if (fnUrl.includes('/functions/v1/')) {
+        try {
+          const localRes = await fetch('/api/update-whatsapp-profile', {
+            method: 'POST',
+            headers: authHeaders,
+            body: JSON.stringify({ action: 'update_about', about }),
+          });
+          const localData = await localRes.json().catch(() => ({}));
+          if (localRes.ok && localData.success) {
+            org.about = about;
+            window.appState.saveState();
+            return localData;
+          }
+          return { success: false, error: localData.error || err.message };
+        } catch (lErr) {
+          return { success: false, error: lErr.message };
+        }
+      }
+      return { success: false, error: err.message };
     }
-
-    await new Promise(r => setTimeout(r, 600));
-    return { success: true, message: 'About text saved (demo mode).', about };
   }
 
   _dataURLToFile(dataUrl) {

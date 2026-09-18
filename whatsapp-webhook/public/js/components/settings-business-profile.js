@@ -1,13 +1,13 @@
 /* ==========================================================================
    NexusLead AI — Business Profile Settings Component
    Handles:
-     - WhatsApp Business profile picture upload (via Edge Function)
-     - WhatsApp Business About text sync (via Edge Function)
-     - Error handling with user-friendly messages
-     - Demo mode fallback when Supabase is not configured
+     - WhatsApp Business profile picture upload (via Edge Function or API)
+     - WhatsApp Business About text sync (via Edge Function or API)
+     - Error handling with real Meta API feedback
+     - Zero fake success responses or demo media placeholders
 
    Backend wiring:
-     POST /functions/v1/update-whatsapp-profile
+     POST /functions/v1/update-whatsapp-profile OR /api/update-whatsapp-profile
      { action: "update_profile_picture", imageBase64: "...", fileName: "..." }
      { action: "update_about", about: "Available for demos 9AM-6PM" }
      { action: "fetch_profile" }
@@ -18,6 +18,7 @@ class SettingsBusinessProfileComponent {
     this.currentOrg = null;
     this.selectedImageBase64 = null;
     this.selectedImageFile = null;
+    this.defaultAvatarSvg = 'data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'%239ca3af\' stroke-width=\'1.5\'%3E%3Ccircle cx=\'12\' cy=\'8\' r=\'4\'/%3E%3Cpath d=\'M6 20v-2a6 6 0 0 1 12 0v2\'/%3E%3C/svg%3E';
     this.init();
   }
 
@@ -31,7 +32,7 @@ class SettingsBusinessProfileComponent {
 
   renderProfileSection() {
     this.currentOrg = window.appState.getCurrentOrg();
-    const waConnected = this.currentOrg?.whatsappConnected;
+    const waConnected = Boolean(this.currentOrg?.whatsappConnected);
 
     const preview = document.getElementById('wa-profile-preview');
     const changeBtn = document.getElementById('wa-change-photo-btn');
@@ -40,12 +41,11 @@ class SettingsBusinessProfileComponent {
     const counter = document.getElementById('wa-about-counter');
 
     if (preview) {
-      if (waConnected && this.currentOrg.profilePictureUrl) {
-        preview.src = this.currentOrg.profilePictureUrl;
-      } else if (waConnected) {
-        preview.src = 'https://wa.me/profile-picture/placeholder';
+      const picUrl = this.currentOrg?.profilePictureUrl;
+      if (waConnected && picUrl && !picUrl.includes('placeholder')) {
+        preview.src = picUrl;
       } else {
-        preview.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9ImN1cnJlbnRDb2xvciIgc3Ryb2tlLXdpZHRoPSIyIjBmaWxsPSJub25lIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZT1ub25lPjxjaXJjbGUgY3g9IjE1IiBjeT0iMTUiIHI9IjMiIGZpbGw9Im5vbmUiIHN0cm9rZT0iY3VycmVudENvbG9yIi8+PC9zdmc+';
+        preview.src = this.defaultAvatarSvg;
       }
     }
 
@@ -67,7 +67,7 @@ class SettingsBusinessProfileComponent {
     }
 
     if (counter) {
-      counter.style.color = this.currentOrg?.about?.length > 139 ? '#ef4444' : 'var(--text-muted)';
+      counter.style.color = (this.currentOrg?.about?.length || 0) > 139 ? '#ef4444' : 'var(--text-muted)';
     }
 
     if (!waConnected) {
@@ -172,24 +172,27 @@ class SettingsBusinessProfileComponent {
         fileName: this.selectedImageFile?.name || 'profile.jpg',
       });
 
-      if (result.success) {
+      if (result && result.success) {
         this.showStatus('wa-profile-status', 'Profile picture updated successfully! Changes may take a few minutes to appear on WhatsApp.', 'success');
 
-        const org = this.currentOrg;
-        if (org && result.profile_picture_url) {
-          org.profilePictureUrl = result.profile_picture_url;
+        if (this.currentOrg && result.profile_picture_url) {
+          this.currentOrg.profilePictureUrl = result.profile_picture_url;
+          window.appState.saveState();
         }
 
         window.appState.addAuditLog(
           'WhatsApp Profile Picture Updated',
-          this.currentOrg.whatsappNumber || 'WhatsApp Business',
-          `Profile picture updated. Media ID: ${result.media_id}`,
+          this.currentOrg?.whatsappNumber || 'WhatsApp Business',
+          `Profile picture updated via Meta Business Profile API. Media ID: ${result.media_id || 'confirmed'}`,
           'Success'
         );
 
         this.cancelProfilePicture();
+        if (window.whatsappService?.fetchCurrentProfile) {
+          window.whatsappService.fetchCurrentProfile().catch(() => {});
+        }
       } else {
-        this.showStatus('wa-profile-status', result.error || 'Failed to update profile picture.', 'error');
+        this.showStatus('wa-profile-status', result?.error || 'Meta API rejected the profile picture update.', 'error');
       }
     } catch (err) {
       this.showStatus('wa-profile-status', `Error: ${err.message}`, 'error');
@@ -234,25 +237,27 @@ class SettingsBusinessProfileComponent {
         about,
       });
 
-      if (result.success) {
+      if (result && result.success) {
         if (statusEl) {
           statusEl.style.color = '#10b981';
           statusEl.textContent = 'About text saved to WhatsApp Business profile.';
         }
 
-        const org = this.currentOrg;
-        if (org) org.about = about;
+        if (this.currentOrg) {
+          this.currentOrg.about = about;
+          window.appState.saveState();
+        }
 
         window.appState.addAuditLog(
           'WhatsApp About Text Updated',
-          this.currentOrg.whatsappNumber || 'WhatsApp Business',
+          this.currentOrg?.whatsappNumber || 'WhatsApp Business',
           `About text set to: "${about}"`,
           'Success'
         );
       } else {
         if (statusEl) {
           statusEl.style.color = '#ef4444';
-          statusEl.textContent = result.error || 'Failed to save About text.';
+          statusEl.textContent = result?.error || 'Failed to save About text.';
         }
       }
     } catch (err) {
@@ -269,38 +274,43 @@ class SettingsBusinessProfileComponent {
   }
 
   async callEdgeFunction(body) {
+    let fnUrl = null;
+    let authHeaders = { 'Content-Type': 'application/json' };
+
     if (window.supabaseConfig?.isSupabaseConfigured()) {
-      const fnUrl = window.supabaseConfig.getEdgeFunctionUrl('update-whatsapp-profile');
+      fnUrl = window.supabaseConfig.getEdgeFunctionUrl('update-whatsapp-profile');
+      authHeaders = window.supabaseConfig.getAuthHeaders();
+    } else {
+      fnUrl = '/api/update-whatsapp-profile';
+    }
+
+    try {
       const res = await fetch(fnUrl, {
         method: 'POST',
-        headers: window.supabaseConfig.getAuthHeaders(),
+        headers: authHeaders,
         body: JSON.stringify(body),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || `HTTP ${res.status}: Failed to update profile`);
+      }
       return data;
+    } catch (err) {
+      if (fnUrl && fnUrl.includes('/functions/v1/')) {
+        const localRes = await fetch('/api/update-whatsapp-profile', {
+          method: 'POST',
+          headers: authHeaders,
+          body: JSON.stringify(body),
+        });
+        const localData = await localRes.json().catch(() => ({}));
+        if (localRes.ok && localData.success) {
+          return localData;
+        }
+        throw new Error(localData.error || err.message);
+      }
+      throw err;
     }
-
-    await new Promise(r => setTimeout(r, 800));
-
-    if (body.action === 'update_profile_picture') {
-      return {
-        success: true,
-        message: 'Profile picture updated (demo mode).',
-        media_id: 'demo_media_' + Date.now(),
-        profile_picture_url: URL.createObjectURL(this.selectedImageFile),
-      };
-    }
-
-    if (body.action === 'update_about') {
-      return {
-        success: true,
-        message: 'About text saved (demo mode).',
-        about: body.about,
-      };
-    }
-
-    return { success: false, error: 'Demo mode does not support this action.' };
   }
 
   showStatus(elementId, message, type = 'info') {
@@ -310,7 +320,7 @@ class SettingsBusinessProfileComponent {
     const icons = {
       success: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>',
       error: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>',
-      info: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>',
+      info: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>',
     };
 
     el.innerHTML = `${icons[type] || icons.info} ${message}`;
