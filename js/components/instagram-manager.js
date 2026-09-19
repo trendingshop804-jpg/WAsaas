@@ -458,8 +458,9 @@ class InstagramManagerComponent {
 
     const timeInput = document.getElementById('ig-schedule-datetime');
     if (timeInput) {
-      const nextHour = new Date(Date.now() + 3600000);
-      timeInput.value = nextHour.toISOString().slice(0, 16);
+      const now = new Date(Date.now() + 3600000);
+      const localIso = new Date(now.getTime() - (now.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
+      timeInput.value = localIso;
     }
 
     const modal = document.getElementById('ig-schedule-post-modal');
@@ -479,6 +480,20 @@ class InstagramManagerComponent {
       statusEl.innerHTML = '<span class="spinner-xs"></span> Uploading media...';
     }
 
+    const setPreviewAndStatus = (url) => {
+      this.uploadedMediaUrl = url;
+      if (statusEl) {
+        statusEl.innerHTML = '✓ Media ready for publishing!';
+        statusEl.style.color = '#10b981';
+      }
+      const previewEl = document.getElementById('ig-composer-media-preview');
+      const previewImg = document.getElementById('ig-composer-preview-img');
+      if (previewEl && previewImg) {
+        previewEl.style.display = 'block';
+        previewImg.src = url;
+      }
+    };
+
     try {
       if (window.supabaseConfig?.isSupabaseConfigured() && window.supabase) {
         const filePath = `post_${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
@@ -491,31 +506,17 @@ class InstagramManagerComponent {
           .from('instagram-media-public')
           .getPublicUrl(filePath);
 
-        this.uploadedMediaUrl = publicUrlData.publicUrl;
+        setPreviewAndStatus(publicUrlData.publicUrl);
       } else {
-        this.uploadedMediaUrl = URL.createObjectURL(file);
-      }
-
-      if (statusEl) {
-        statusEl.innerHTML = '✓ Media ready for publishing!';
-        statusEl.style.color = '#10b981';
-      }
-
-      const previewEl = document.getElementById('ig-composer-media-preview');
-      const previewImg = document.getElementById('ig-composer-preview-img');
-      if (previewEl && previewImg) {
-        previewEl.style.display = 'block';
-        previewImg.src = this.uploadedMediaUrl;
+        const reader = new FileReader();
+        reader.onload = (e) => setPreviewAndStatus(e.target.result);
+        reader.readAsDataURL(file);
       }
     } catch (err) {
-      console.error('[Instagram Media Upload Error]:', err);
-      this.uploadedMediaUrl = URL.createObjectURL(file);
-      const previewEl = document.getElementById('ig-composer-media-preview');
-      const previewImg = document.getElementById('ig-composer-preview-img');
-      if (previewEl && previewImg) {
-        previewEl.style.display = 'block';
-        previewImg.src = this.uploadedMediaUrl;
-      }
+      console.warn('[Instagram Media Upload Supabase Notice]:', err.message);
+      const reader = new FileReader();
+      reader.onload = (e) => setPreviewAndStatus(e.target.result);
+      reader.readAsDataURL(file);
     }
   }
 

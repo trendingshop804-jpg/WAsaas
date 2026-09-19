@@ -395,7 +395,66 @@ export default async function handler(req, res) {
     }
   }
 
-  // ── 3. PUBLISH (default POST) ─────────────────────────────────────────────
+  // ── 4. RULE & SCHEDULER CRUD ─────────────────────────────────────────────
+  if (action === 'save_rule') {
+    try {
+      const { ruleType, rule } = req.body || {};
+      const table = ruleType === 'dm' ? 'instagram_dm_rules' : 'instagram_reply_rules';
+      const { data, error } = await supabase.from(table).upsert(rule).select().single();
+      if (error) return res.status(400).json({ error: error.message });
+      return res.status(200).json({ success: true, rule: data });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
+
+  if (action === 'toggle_rule') {
+    try {
+      const { ruleType, ruleId, isActive } = req.body || {};
+      const table = ruleType === 'dm' ? 'instagram_dm_rules' : 'instagram_reply_rules';
+      const { error } = await supabase.from(table).update({ is_active: isActive }).eq('id', ruleId);
+      if (error) return res.status(400).json({ error: error.message });
+      return res.status(200).json({ success: true });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
+
+  if (action === 'delete_rule') {
+    try {
+      const { ruleType, ruleId } = req.body || {};
+      const table = ruleType === 'dm' ? 'instagram_dm_rules' : 'instagram_reply_rules';
+      const { error } = await supabase.from(table).delete().eq('id', ruleId);
+      if (error) return res.status(400).json({ error: error.message });
+      return res.status(200).json({ success: true });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
+
+  if (action === 'save_post') {
+    try {
+      const { post } = req.body || {};
+      const { data, error } = await supabase.from('scheduled_posts').insert(post).select().single();
+      if (error) return res.status(400).json({ error: error.message });
+      return res.status(200).json({ success: true, post: data });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
+
+  if (action === 'delete_post') {
+    try {
+      const { postId } = req.body || {};
+      const { error } = await supabase.from('scheduled_posts').delete().eq('id', postId);
+      if (error) return res.status(400).json({ error: error.message });
+      return res.status(200).json({ success: true });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
+
+  // ── 5. PUBLISH (default POST) ─────────────────────────────────────────────
   try {
     const nowIso = new Date().toISOString();
     const { data: posts, error: fetchErr } = await supabase
@@ -550,65 +609,6 @@ export default async function handler(req, res) {
     });
 
   } catch (err) {
-    // ── 5. RULE & SCHEDULER CRUD ─────────────────────────────────────────────
-    if (action === 'save_rule') {
-      try {
-        const { ruleType, rule } = req.body || {};
-        const table = ruleType === 'dm' ? 'instagram_dm_rules' : 'instagram_reply_rules';
-        const { data, error } = await supabase.from(table).upsert(rule).select().single();
-        if (error) return res.status(400).json({ error: error.message });
-        return res.status(200).json({ success: true, rule: data });
-      } catch (e) {
-        return res.status(500).json({ error: e.message });
-      }
-    }
-
-    if (action === 'toggle_rule') {
-      try {
-        const { ruleType, ruleId, isActive } = req.body || {};
-        const table = ruleType === 'dm' ? 'instagram_dm_rules' : 'instagram_reply_rules';
-        const { error } = await supabase.from(table).update({ is_active: isActive }).eq('id', ruleId);
-        if (error) return res.status(400).json({ error: error.message });
-        return res.status(200).json({ success: true });
-      } catch (e) {
-        return res.status(500).json({ error: e.message });
-      }
-    }
-
-    if (action === 'delete_rule') {
-      try {
-        const { ruleType, ruleId } = req.body || {};
-        const table = ruleType === 'dm' ? 'instagram_dm_rules' : 'instagram_reply_rules';
-        const { error } = await supabase.from(table).delete().eq('id', ruleId);
-        if (error) return res.status(400).json({ error: error.message });
-        return res.status(200).json({ success: true });
-      } catch (e) {
-        return res.status(500).json({ error: e.message });
-      }
-    }
-
-    if (action === 'save_post') {
-      try {
-        const { post } = req.body || {};
-        const { data, error } = await supabase.from('scheduled_posts').insert(post).select().single();
-        if (error) return res.status(400).json({ error: error.message });
-        return res.status(200).json({ success: true, post: data });
-      } catch (e) {
-        return res.status(500).json({ error: e.message });
-      }
-    }
-
-    if (action === 'delete_post') {
-      try {
-        const { postId } = req.body || {};
-        const { error } = await supabase.from('scheduled_posts').delete().eq('id', postId);
-        if (error) return res.status(400).json({ error: error.message });
-        return res.status(200).json({ success: true });
-      } catch (e) {
-        return res.status(500).json({ error: e.message });
-      }
-    }
-
     console.error('[instagram API Fatal]:', err);
     return res.status(500).json({ error: err.message });
   }
