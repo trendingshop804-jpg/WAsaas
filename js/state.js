@@ -19,6 +19,23 @@ class StateStore {
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
+        if (parsed.fakeDataCleared) {
+          return {
+            leads: [],
+            conversations: [],
+            campaigns: [],
+            products: [],
+            orders: [],
+            followUps: [],
+            aiAgents: [],
+            instagramReplyRules: [],
+            instagramDmRules: [],
+            instagramScheduledPosts: [],
+            auditLogs: [],
+            ...parsed
+          };
+        }
+
         if (parsed.organizations && window.DEMO_DATA.organizations) {
           const primaryOrg = window.DEMO_DATA.organizations[0];
           const existing = parsed.organizations.find(o => o.id === primaryOrg.id);

@@ -34,6 +34,41 @@ class StorageService {
       window.location.reload();
     }
   }
+
+  clearFakeData() {
+    if (confirm('Delete all fake/demo data? This will clear demo leads, conversations, campaigns, products, orders, and demo rules, giving you a clean empty workspace.')) {
+      const emptyState = {
+        fakeDataCleared: true,
+        currentOrgId: 'org_main',
+        currentUser: window.appState.state?.currentUser || { name: 'Owner', role: 'Super Admin' },
+        organizations: window.appState.state?.organizations || [{ id: 'org_main', name: 'My Business' }],
+        leads: [],
+        conversations: [],
+        campaigns: [],
+        products: [],
+        orders: [],
+        followUps: [],
+        aiAgents: [],
+        instagramReplyRules: [],
+        instagramDmRules: [],
+        instagramScheduledPosts: [],
+        auditLogs: [
+          {
+            id: 'log_' + Date.now(),
+            timestamp: new Date().toISOString(),
+            action: 'Demo Data Deleted',
+            entity: 'System State',
+            actor: 'User',
+            details: 'All fake demo data deleted by user.',
+            status: 'Success'
+          }
+        ]
+      };
+      window.appState.state = emptyState;
+      window.appState.saveState();
+      window.location.reload();
+    }
+  }
 }
 
 window.storageService = new StorageService();

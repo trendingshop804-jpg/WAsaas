@@ -262,7 +262,19 @@ class InboxComponent {
         const file = e.target.files[0];
         if (file) {
           this.selectedAttachment = file;
-          if (attachmentNameEl) attachmentNameEl.textContent = `📎 Selected: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+          const msgType = this.getMediaMessageType(file);
+          const ext = (file.name || '').split('.').pop()?.toLowerCase() || '';
+          let icon = '📎';
+          if (msgType === 'image') icon = '🖼️';
+          else if (msgType === 'video') icon = '🎬';
+          else if (msgType === 'audio') icon = '🎵';
+          else if (['xls', 'xlsx', 'csv'].includes(ext)) icon = '📊';
+          else if (['ppt', 'pptx'].includes(ext)) icon = '📊';
+          else if (['zip', 'rar', '7z', 'tar', 'gz'].includes(ext)) icon = '📦';
+          else if (['txt', 'json', 'xml', 'js', 'py', 'html', 'css'].includes(ext)) icon = '💻';
+          else if (['pdf', 'doc', 'docx'].includes(ext)) icon = '📄';
+          
+          if (attachmentNameEl) attachmentNameEl.textContent = `${icon} Selected: ${file.name} (${this.formatFileSize(file.size)})`;
           if (previewBar) previewBar.style.display = 'flex';
         }
       });
@@ -493,16 +505,12 @@ class InboxComponent {
   }
 
   getMediaMessageType(file) {
-    const type = file.type || '';
-    if (type.startsWith('image/')) return 'image';
-    if (type.startsWith('audio/')) return 'audio';
-    if (type.startsWith('video/')) return 'video';
-    if (type.startsWith('text/') || type === 'application/pdf' || type.includes('spreadsheet') || type.includes('document') || type.includes('presentation')) return 'document';
-    const ext = file.name.split('.').pop()?.toLowerCase() || '';
-    if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext)) return 'image';
-    if (['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac'].includes(ext)) return 'audio';
-    if (['mp4', 'mov', 'avi', 'mkv', 'webm'].includes(ext)) return 'video';
-    if (['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'csv'].includes(ext)) return 'document';
+    const type = (file.type || '').toLowerCase();
+    const ext = (file.name || '').split('.').pop()?.toLowerCase() || '';
+
+    if (type.startsWith('image/') || ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'ico'].includes(ext)) return 'image';
+    if (type.startsWith('audio/') || ['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac', 'opus', 'amr'].includes(ext)) return 'audio';
+    if (type.startsWith('video/') || ['mp4', 'mov', 'avi', 'mkv', 'webm', '3gp'].includes(ext)) return 'video';
     return 'document';
   }
 
@@ -1092,18 +1100,41 @@ class InboxComponent {
   renderDocumentBubble(msg, isOutbound, mediaUrl, fileName, mimeType, mediaSize, caption) {
     const safeName = String(fileName || 'document');
     const ext = safeName.split('.').pop()?.toUpperCase() || 'FILE';
-    // Filenames come from the sender, so keep only alphanumerics for the badge.
-    const iconLetter = (ext.replace(/[^A-Z0-9]/gi, '') || 'FILE').slice(0, 4);
+    const cleanExt = (ext.replace(/[^A-Z0-9]/gi, '') || 'FILE').slice(0, 4);
     const sizeStr = mediaSize ? this.formatFileSize(mediaSize) : '';
     const isUnavailable = !mediaUrl;
     const cardClass = isUnavailable ? 'msg-document-card disabled' : 'msg-document-card';
-    const iconBg = isUnavailable ? 'rgba(107, 114, 128, 0.15)' : 'rgba(37, 211, 102, 0.15)';
-    const iconColor = isUnavailable ? '#6b7280' : '#25d366';
+
+    let iconBg = 'rgba(37, 211, 102, 0.15)';
+    let iconColor = '#25d366';
+    let iconLabel = cleanExt;
+
+    if (isUnavailable) {
+      iconBg = 'rgba(107, 114, 128, 0.15)';
+      iconColor = '#6b7280';
+    } else {
+      const extLower = safeName.split('.').pop()?.toLowerCase() || '';
+      if (extLower === 'pdf') {
+        iconBg = 'rgba(239, 68, 68, 0.18)'; iconColor = '#ef4444'; iconLabel = 'PDF';
+      } else if (['doc', 'docx'].includes(extLower)) {
+        iconBg = 'rgba(59, 130, 246, 0.18)'; iconColor = '#3b82f6'; iconLabel = 'DOC';
+      } else if (['xls', 'xlsx', 'csv'].includes(extLower)) {
+        iconBg = 'rgba(16, 185, 129, 0.18)'; iconColor = '#10b981'; iconLabel = extLower === 'csv' ? 'CSV' : 'XLS';
+      } else if (['ppt', 'pptx'].includes(extLower)) {
+        iconBg = 'rgba(249, 115, 22, 0.18)'; iconColor = '#f97316'; iconLabel = 'PPT';
+      } else if (['zip', 'rar', '7z', 'tar', 'gz', 'bz2'].includes(extLower)) {
+        iconBg = 'rgba(168, 85, 247, 0.18)'; iconColor = '#a855f7'; iconLabel = 'ZIP';
+      } else if (['txt', 'json', 'xml', 'html', 'css', 'js', 'py', 'ts', 'java', 'c', 'cpp', 'sh', 'md'].includes(extLower)) {
+        iconBg = 'rgba(6, 182, 212, 0.18)'; iconColor = '#06b6d4'; iconLabel = cleanExt;
+      } else if (['apk', 'exe', 'dmz', 'iso'].includes(extLower)) {
+        iconBg = 'rgba(244, 63, 94, 0.18)'; iconColor = '#f43f5e'; iconLabel = cleanExt;
+      }
+    }
 
     if (isUnavailable) {
       return `
         <div class="${cardClass}">
-          <div class="msg-document-icon" style="background: ${iconBg}; color: ${iconColor};">${iconLetter}</div>
+          <div class="msg-document-icon" style="background: ${iconBg}; color: ${iconColor}; font-weight: 700;">${iconLabel}</div>
           <div class="msg-document-info">
             <div class="msg-document-name">${this.escapeHtml(fileName)}</div>
             <div class="msg-document-unavailable">Unavailable</div>
@@ -1114,7 +1145,7 @@ class InboxComponent {
 
     return `
       <a href="${this.escapeAttr(mediaUrl)}" target="_blank" rel="noopener noreferrer" class="${cardClass}" download="${this.escapeAttr(fileName)}">
-        <div class="msg-document-icon" style="background: ${iconBg}; color: ${iconColor};">${iconLetter}</div>
+        <div class="msg-document-icon" style="background: ${iconBg}; color: ${iconColor}; font-weight: 700;">${iconLabel}</div>
         <div class="msg-document-info">
           <div class="msg-document-name">${this.escapeHtml(fileName)}</div>
           ${sizeStr ? `<div class="msg-document-size">${sizeStr}</div>` : ''}

@@ -29,6 +29,9 @@ class SettingsComponent {
       if (e.target.closest('#export-backup-btn')) {
         window.storageService?.exportBackup?.();
       }
+      if (e.target.closest('#clear-fake-data-btn')) {
+        window.storageService?.clearFakeData?.();
+      }
       if (e.target.closest('#reset-demo-data-btn')) {
         window.storageService?.resetToDemo?.();
       }

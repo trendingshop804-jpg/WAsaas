@@ -794,10 +794,10 @@
                   <button type="button" id="inbox-emoji-trigger-btn" class="btn btn-secondary btn-icon btn-sm" title="Insert Emoji" style="padding: 6px 8px; font-size: 15px;">
                     😊
                   </button>
-                  <label for="inbox-media-file-input" class="btn btn-secondary btn-icon btn-sm" title="Attach Image or Document" style="padding: 6px 8px; font-size: 15px; cursor: pointer;">
+                  <label for="inbox-media-file-input" class="btn btn-secondary btn-icon btn-sm" title="Attach Any File (Images, Videos, Audio, Docs, Archives & more)" style="padding: 6px 8px; font-size: 15px; cursor: pointer;">
                     📎
                   </label>
-                  <input type="file" id="inbox-media-file-input" style="display: none;" accept="image/*,application/pdf,application/msword,.docx">
+                  <input type="file" id="inbox-media-file-input" style="display: none;" accept="*/*">
                   
                   <button type="button" id="inbox-template-selector-btn" class="btn btn-secondary btn-icon btn-sm" title="Insert Approved WhatsApp Template" style="padding: 6px 8px; font-size: 14px;">
                     📑
@@ -1645,7 +1645,10 @@
               <button id="export-backup-btn" class="btn btn-secondary btn-sm">
                 💾 Export JSON Backup
               </button>
-              <button id="reset-demo-data-btn" class="btn btn-outline btn-sm" style="color: var(--status-danger);">
+              <button id="clear-fake-data-btn" class="btn btn-outline btn-sm" style="color: var(--status-danger);">
+                🗑️ Delete Fake Data
+              </button>
+              <button id="reset-demo-data-btn" class="btn btn-outline btn-sm" style="color: var(--text-secondary);">
                 Reset Demo Dataset
               </button>
             </div>
