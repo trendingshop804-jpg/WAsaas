@@ -701,6 +701,65 @@ class InstagramManagerComponent {
 
     this.renderScheduledPostsList();
   }
+
+  applyPreset(type, presetKey) {
+    const presets = {
+      reply: {
+        pricing: {
+          name: 'Pricing Inquiry Auto-Reply',
+          keywords: 'price, cost, pricing, how much, rate, fees',
+          message: 'Hi! 👋 Thanks for asking about pricing. We\'ve sent you a DM with all the details and packages. Check your inbox! 💌'
+        },
+        demo: {
+          name: 'Free Demo Auto-Reply',
+          keywords: 'demo, trial, free, try, test, access',
+          message: '🚀 Awesome! We\'d love to show you a quick demo. Check your DMs — we just sent you a booking link!'
+        },
+        contact: {
+          name: 'Support / Contact Auto-Reply',
+          keywords: 'support, help, contact, issue, problem, question',
+          message: '📞 Our support team is here! We\'ve sent you a DM with direct contact info. We typically respond within 1 hour!'
+        }
+      },
+      dm: {
+        pricing: {
+          name: 'Pricing Brochure DM',
+          keywords: 'price, cost, pricing, how much, rate',
+          message: 'Hi {name}! 👋 Thanks for your interest in our pricing. Here\'s our complete package breakdown:\n\n💎 Starter Plan: ₹2,999/mo\n🚀 Growth Plan: ₹6,999/mo\n🏆 Enterprise: Custom\n\nWant a free consultation call? Book here: https://cal.com/demo'
+        },
+        demo: {
+          name: 'Instant Demo Link DM',
+          keywords: 'demo, trial, free, try, test, access',
+          message: 'Hey {name}! 🎯 Excited to show you what we can do!\n\n🔑 Your instant demo access: https://app.example.com/demo\n📅 Or book a live walkthrough: https://cal.com/demo\n\nFeel free to reply to this DM with any questions!'
+        },
+        whatsapp: {
+          name: 'WhatsApp Connect DM',
+          keywords: 'whatsapp, wp, wa, connect, chat',
+          message: 'Hi {name}! 💬 Let\'s continue this conversation on WhatsApp where I can share more details, videos, and files with you easily!\n\n👇 Join our WhatsApp channel:\nhttps://wa.me/919876543210\n\nSee you there!'
+        }
+      }
+    };
+
+    const preset = presets[type]?.[presetKey];
+    if (!preset) return;
+
+    if (type === 'reply') {
+      const nameEl = document.getElementById('ig-reply-rule-name');
+      const keywordsEl = document.getElementById('ig-reply-rule-keywords');
+      const messageEl = document.getElementById('ig-reply-rule-message');
+      if (nameEl) nameEl.value = preset.name;
+      if (keywordsEl) keywordsEl.value = preset.keywords;
+      if (messageEl) messageEl.value = preset.message;
+    } else if (type === 'dm') {
+      const nameEl = document.getElementById('ig-dm-rule-name');
+      const keywordsEl = document.getElementById('ig-dm-rule-keywords');
+      const messageEl = document.getElementById('ig-dm-rule-message');
+      if (nameEl) nameEl.value = preset.name;
+      if (keywordsEl) keywordsEl.value = preset.keywords;
+      if (messageEl) messageEl.value = preset.message;
+    }
+  }
 }
 
 window.instagramManagerComponent = new InstagramManagerComponent();
+

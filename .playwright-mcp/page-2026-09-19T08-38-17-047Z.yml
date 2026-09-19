@@ -1,0 +1,41 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - generic [ref=e4]:
+      - heading "NexusLead AI" [level=1] [ref=e8]
+      - paragraph [ref=e9]: AI Lead Generation & WhatsApp Sales Automation
+    - generic [ref=e10]:
+      - button "Sign In" [ref=e11] [cursor=pointer]
+      - button "Create Account" [ref=e12] [cursor=pointer]
+    - generic [ref=e13]:
+      - generic [ref=e14]:
+        - generic [ref=e15]:
+          - generic [ref=e16]: Work Email
+          - textbox "Work Email" [ref=e17]:
+            - /placeholder: name@company.com
+        - generic [ref=e18]:
+          - generic [ref=e19]:
+            - generic [ref=e20]: Password
+            - link "Forgot password?" [ref=e21] [cursor=pointer]:
+              - /url: "#"
+          - textbox "Password" [ref=e22]:
+            - /placeholder: ••••••••
+        - button "Sign In to NexusLead" [ref=e23] [cursor=pointer]
+      - generic [ref=e24]:
+        - text: Don't have an account?
+        - link "Start 14-day free trial" [ref=e25] [cursor=pointer]:
+          - /url: "#"
+  - generic:
+    - generic:
+      - generic:
+        - heading "Reset Password" [level=3]
+        - button "✕"
+      - generic:
+        - generic:
+          - paragraph: Enter your work email address and we'll send you instructions to reset your password.
+          - generic:
+            - generic: Account Email
+            - textbox "Account Email":
+              - /placeholder: name@company.com
+        - generic:
+          - button "Send Reset Link"
+  - text: 1 0 0 0 0

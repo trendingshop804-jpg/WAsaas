@@ -1341,6 +1341,12 @@
               <p style="color: var(--text-secondary); font-size: 13.5px;">Automate public comment responses, paced comment-to-DM triggers, and cross-format post scheduling.</p>
             </div>
             <div class="flex items-center gap-2">
+              <button type="button" class="btn btn-secondary btn-sm" onclick="window.instagramManagerComponent.openRuleModal('reply')">
+                💬 + Auto-Reply Rule
+              </button>
+              <button type="button" class="btn btn-secondary btn-sm" onclick="window.instagramManagerComponent.openRuleModal('dm')">
+                ✉️ + Comment-to-DM Rule
+              </button>
               <button id="ig-btn-schedule-post-modal" class="btn btn-primary btn-sm">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                 Schedule New Post / Reel
@@ -2302,18 +2308,39 @@
           </div>
         </form>
       </div>
+    </div>
+
     <!-- New Instagram Public Reply Rule Modal -->
     <div id="ig-reply-rule-modal" class="modal-backdrop">
-      <div class="modal-dialog" style="max-width: 520px;">
+      <div class="modal-dialog" style="max-width: 560px;">
         <div class="modal-header">
           <h3>Create Auto-Reply Rule (Public Comment)</h3>
           <button class="btn btn-secondary btn-icon btn-sm" data-close-modal>✕</button>
         </div>
         <form id="ig-reply-rule-form">
           <div class="modal-body">
+            <!-- Preset Quick Auto-Fill Options -->
+            <div style="margin-bottom: 14px; padding: 10px; background: var(--bg-tertiary); border-radius: 8px;">
+              <label class="form-label" style="font-size: 11.5px; margin-bottom: 6px; color: var(--text-secondary);">⚡ Quick Preset Templates:</label>
+              <div class="flex flex-wrap gap-2">
+                <button type="button" class="btn btn-outline btn-sm" style="font-size: 11px; padding: 3px 8px;" onclick="window.instagramManagerComponent.applyPreset('reply', 'pricing')">💰 Price / Cost</button>
+                <button type="button" class="btn btn-outline btn-sm" style="font-size: 11px; padding: 3px 8px;" onclick="window.instagramManagerComponent.applyPreset('reply', 'demo')">🚀 Free Demo Link</button>
+                <button type="button" class="btn btn-outline btn-sm" style="font-size: 11px; padding: 3px 8px;" onclick="window.instagramManagerComponent.applyPreset('reply', 'contact')">📞 Support / Contact</button>
+              </div>
+            </div>
+
             <div class="form-group">
               <label class="form-label">Rule Name</label>
               <input type="text" id="ig-reply-rule-name" class="form-input" placeholder="e.g. Pricing Inquiries Reply" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Trigger Match Type</label>
+              <select id="ig-reply-rule-match-type" class="form-select">
+                <option value="contains" selected>Contains Any Keyword (Flexible Match)</option>
+                <option value="exact">Exact Phrase Match</option>
+                <option value="starts_with">Starts With Keyword</option>
+                <option value="all">Any Comment (Catch-all Reply)</option>
+              </select>
             </div>
             <div class="form-group">
               <label class="form-label">Trigger Keywords (Comma-separated)</label>
@@ -2339,16 +2366,35 @@
 
     <!-- New Instagram Auto-DM Rule Modal -->
     <div id="ig-dm-rule-modal" class="modal-backdrop">
-      <div class="modal-dialog" style="max-width: 520px;">
+      <div class="modal-dialog" style="max-width: 560px;">
         <div class="modal-header">
           <h3>Create Comment-to-DM Private Reply Rule</h3>
           <button class="btn btn-secondary btn-icon btn-sm" data-close-modal>✕</button>
         </div>
         <form id="ig-dm-rule-form">
           <div class="modal-body">
+            <!-- Preset Quick Auto-Fill Options -->
+            <div style="margin-bottom: 14px; padding: 10px; background: var(--bg-tertiary); border-radius: 8px;">
+              <label class="form-label" style="font-size: 11.5px; margin-bottom: 6px; color: var(--text-secondary);">⚡ Quick Preset Templates:</label>
+              <div class="flex flex-wrap gap-2">
+                <button type="button" class="btn btn-outline btn-sm" style="font-size: 11px; padding: 3px 8px;" onclick="window.instagramManagerComponent.applyPreset('dm', 'pricing')">📄 Send Pricing Brochure</button>
+                <button type="button" class="btn btn-outline btn-sm" style="font-size: 11px; padding: 3px 8px;" onclick="window.instagramManagerComponent.applyPreset('dm', 'demo')">🔑 Send Instant Demo Link</button>
+                <button type="button" class="btn btn-outline btn-sm" style="font-size: 11px; padding: 3px 8px;" onclick="window.instagramManagerComponent.applyPreset('dm', 'whatsapp')">💬 Connect via WhatsApp</button>
+              </div>
+            </div>
+
             <div class="form-group">
               <label class="form-label">Rule Name</label>
               <input type="text" id="ig-dm-rule-name" class="form-input" placeholder="e.g. Demo Link to DM" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Trigger Match Type</label>
+              <select id="ig-dm-rule-match-type" class="form-select">
+                <option value="contains" selected>Contains Any Keyword (Flexible Match)</option>
+                <option value="exact">Exact Phrase Match</option>
+                <option value="starts_with">Starts With Keyword</option>
+                <option value="all">Any Comment (Catch-all Private DM)</option>
+              </select>
             </div>
             <div class="form-group">
               <label class="form-label">Trigger Keywords (Comma-separated)</label>
