@@ -30,6 +30,7 @@ const SUPABASE_CONFIG = {
    * Found at: Meta App Dashboard → Settings → Basic → App ID
    */
   metaAppId: '1480548923617105',
+  instagramAppId: '1016450274656980',
   // Custom base URL for Edge Functions (e.g., Vercel deployment)
   edgeBaseUrl: 'https://w-asaas.vercel.app',
 
@@ -77,12 +78,14 @@ async function loadPublicSupabaseConfig() {
       SUPABASE_CONFIG.projectUrl = config.projectUrl;
       SUPABASE_CONFIG.anonKey = config.anonKey;
       if (config.metaAppId) SUPABASE_CONFIG.metaAppId = config.metaAppId;
+      if (config.instagramAppId) SUPABASE_CONFIG.instagramAppId = config.instagramAppId;
       if (config.metaApiVersion) SUPABASE_CONFIG.metaApiVersion = config.metaApiVersion;
       if (config.whatsappConfigId) SUPABASE_CONFIG.whatsappConfigId = config.whatsappConfigId;
       Object.assign(window.supabaseConfig, {
         projectUrl: config.projectUrl,
         anonKey: config.anonKey,
         metaAppId: SUPABASE_CONFIG.metaAppId,
+        instagramAppId: SUPABASE_CONFIG.instagramAppId,
         metaApiVersion: SUPABASE_CONFIG.metaApiVersion,
         whatsappConfigId: SUPABASE_CONFIG.whatsappConfigId,
         instagramConfigId: config.instagramConfigId || SUPABASE_CONFIG.instagramConfigId || '',
