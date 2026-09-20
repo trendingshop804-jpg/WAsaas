@@ -26,6 +26,11 @@ class CRMComponent {
     this.render();
 
     window.appState.on('leads', () => this.render());
+    window.appState.on('conversations', () => this.render());
+    window.appState.on('inboundReceived', () => this.render());
+    window.appState.on('*', (data) => {
+      if (data?.key === 'inboundSync') this.render();
+    });
     window.appState.on('viewChanged', (view) => {
       if (view === 'crm') this.render();
     });

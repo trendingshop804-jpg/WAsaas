@@ -64,7 +64,12 @@ class InboxComponent {
               const conversation = conversations.find(c => c.id === newMsg.conversation_id)
                 || conversations.find(c => window.whatsappService.normalizePhone(c.phone) === window.whatsappService.normalizePhone(phone));
 
-              if (!conversation) return;
+              if (!conversation) {
+                if (window.whatsappService?.syncInboundMessagesFromSupabase) {
+                  await window.whatsappService.syncInboundMessagesFromSupabase();
+                }
+                return;
+              }
 
               let resolvedMediaUrl = newMsg.media_url || undefined;
               if (resolvedMediaUrl && !/^https?:\/\//i.test(resolvedMediaUrl)) {
@@ -493,10 +498,65 @@ class InboxComponent {
       return;
     }
 
-    window.whatsappService.sendMessage({ leadId: conv.leadId, text }).catch(error => {
-      console.error('Inbox message send failed:', error);
-      alert(error.message || 'Unable to send message.');
-    });
+    if (conv.channel === 'instagram') {
+      const org = window.appState.getCurrentOrg();
+      const tempId = 'm_ig_' + Date.now();
+      const formattedTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const outMsg = {
+        id: tempId,
+        sender: 'outbound',
+        direction: 'OUTBOUND',
+        channel: 'instagram',
+        type: 'text',
+        message_type: 'text',
+        text: text,
+        body: text,
+        content: text,
+        timestamp: formattedTime,
+        received_at: new Date().toISOString(),
+        status: 'SENDING',
+        sentByHuman: true
+      };
+      if (!conv.messages) conv.messages = [];
+      conv.messages.push(outMsg);
+      conv.lastMessage = text;
+      conv.lastTimestamp = new Date().toISOString();
+      window.appState.saveState();
+      this.render();
+      this.scrollToBottom(true);
+
+      fetch('/api/instagram?action=send_message', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          organizationId: org.id,
+          recipientId: conv.phone,
+          text,
+          conversationId: conv.id,
+          leadId: conv.leadId
+        })
+      })
+        .then(res => res.json())
+        .then(data => {
+          if (data.error) throw new Error(data.error);
+          outMsg.status = 'SENT';
+          outMsg.wa_message_id = data.messageId;
+          window.appState.saveState();
+          this.render();
+        })
+        .catch(err => {
+          console.error('[Instagram DM Send Error]:', err);
+          outMsg.status = 'FAILED';
+          window.appState.saveState();
+          this.render();
+          alert(`Failed to send Instagram DM: ${err.message}`);
+        });
+    } else {
+      window.whatsappService.sendMessage({ leadId: conv.leadId, text }).catch(error => {
+        console.error('Inbox message send failed:', error);
+        alert(error.message || 'Unable to send message.');
+      });
+    }
 
     if (input && !suggestedText) {
       input.value = '';
@@ -658,6 +718,10 @@ class InboxComponent {
       convs = convs.filter(c => c.mode === 'AI');
     } else if (this.filterMode === 'human_active') {
       convs = convs.filter(c => c.mode === 'HUMAN' || c.mode === 'MANUAL');
+    } else if (this.filterMode === 'whatsapp') {
+      convs = convs.filter(c => (c.channel || 'whatsapp') === 'whatsapp');
+    } else if (this.filterMode === 'instagram') {
+      convs = convs.filter(c => c.channel === 'instagram');
     } else {
       // 'all': show all conversations
       convs = convs.filter(c => c.status !== 'RESOLVED');
@@ -666,7 +730,8 @@ class InboxComponent {
     // Search filter
     if (this.searchTerm) {
       convs = convs.filter(c =>
-        c.contactName.toLowerCase().includes(this.searchTerm) ||
+        (c.contactName && c.contactName.toLowerCase().includes(this.searchTerm)) ||
+        (c.leadName && c.leadName.toLowerCase().includes(this.searchTerm)) ||
         (c.company && c.company.toLowerCase().includes(this.searchTerm)) ||
         (c.phone && c.phone.toLowerCase().includes(this.searchTerm))
       );
@@ -679,23 +744,28 @@ class InboxComponent {
 
     container.innerHTML = convs.map(conv => {
       const isActive = conv.id === this.selectedConvId;
-      const displayName = conv.contactName || conv.leadName || conv.name || (conv.phone ? (conv.phone.startsWith('+') || conv.phone.startsWith('91') || conv.phone.length >= 10 ? `WhatsApp Contact (${conv.phone})` : conv.phone) : 'WhatsApp Contact');
-      const initials = displayName ? displayName.split(' ').map(n=>n[0]).filter(Boolean).join('').substring(0,2).toUpperCase() : 'WC';
+      const isInstagram = conv.channel === 'instagram';
+      const displayName = conv.contactName || conv.leadName || conv.name || (conv.phone ? (conv.phone.startsWith('+') || conv.phone.startsWith('91') || conv.phone.length >= 10 ? `WhatsApp Contact (${conv.phone})` : conv.phone) : (isInstagram ? 'Instagram Lead' : 'WhatsApp Contact'));
+      const initials = isInstagram ? 'IG' : (displayName ? displayName.split(' ').map(n=>n[0]).filter(Boolean).join('').substring(0,2).toUpperCase() : 'WC');
       const statusClass = conv.mode === 'AI' ? 'status-ai-active' : 'status-human-active';
+
+      const channelPill = isInstagram
+        ? `<span style="background: linear-gradient(45deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888); color: #fff; font-size: 9.5px; font-weight: 700; padding: 1px 5px; border-radius: 3px; display: inline-flex; align-items: center; gap: 2px;">📸 IG</span>`
+        : `<span style="background: #25d366; color: #fff; font-size: 9.5px; font-weight: 700; padding: 1px 5px; border-radius: 3px; display: inline-flex; align-items: center; gap: 2px;">💬 WA</span>`;
 
       return `
         <div class="conversation-item ${isActive ? 'active' : ''}" data-conv-id="${conv.id}">
-          <div class="conversation-avatar">
+          <div class="conversation-avatar ${isInstagram ? 'avatar-instagram' : ''}" style="${isInstagram ? 'background: linear-gradient(135deg, #833ab4, #fd1d1d, #fcb045); color: #fff;' : ''}">
             ${initials}
             <div class="avatar-badge-status ${statusClass}"></div>
           </div>
           <div class="conversation-meta">
             <div class="conv-top-row">
-              <span class="conv-name">${displayName}</span>
+              <span class="conv-name" style="display:flex;align-items:center;gap:6px;">${channelPill} ${displayName}</span>
               <span class="conv-time">${conv.lastTimestamp ? this.formatTimestamp(conv.lastTimestamp) : ''}</span>
             </div>
             <div class="conv-snippet">${conv.lastMessage || 'No messages yet'}</div>
-            ${conv.unreadCount > 0 ? `<div class="badge badge-whatsapp" style="margin-top: 4px; font-size: 10px; padding: 2px 6px;">${conv.unreadCount} new</div>` : ''}
+            ${conv.unreadCount > 0 ? `<div class="badge ${isInstagram ? 'badge-instagram' : 'badge-whatsapp'}" style="margin-top: 4px; font-size: 10px; padding: 2px 6px;">${conv.unreadCount} new</div>` : ''}
           </div>
         </div>
       `;
@@ -724,6 +794,7 @@ class InboxComponent {
     if (!lead) return false;
 
     const conversations = window.appState.get('conversations') || [];
+    const leadChannel = lead.source === 'Instagram' ? 'instagram' : 'whatsapp';
     let conversation = conversations.find(item => item.leadId === leadId)
       || window.whatsappService.findConversationByPhone(lead.phone, conversations);
 
@@ -731,9 +802,10 @@ class InboxComponent {
       conversation = {
         id: `conv_${lead.id}`,
         leadId: lead.id,
-        leadName: lead.contactName || lead.name || 'WhatsApp Contact',
+        leadName: lead.contactName || lead.name || (leadChannel === 'instagram' ? '@Instagram Lead' : 'WhatsApp Contact'),
         company: lead.companyName || lead.company || '',
         phone: lead.phone || '',
+        channel: leadChannel,
         unreadCount: 0,
         mode: 'HUMAN',
         status: 'OPEN',
@@ -768,8 +840,28 @@ class InboxComponent {
       return;
     }
 
-    const displayName = conv.contactName || conv.leadName || conv.name || (conv.phone ? (conv.phone.startsWith('+') || conv.phone.startsWith('91') || conv.phone.length >= 10 ? `WhatsApp Contact (${conv.phone})` : conv.phone) : 'WhatsApp Contact');
-    if (nameEl) nameEl.innerHTML = `<span style="font-weight: 700;">${displayName}</span> <span style="font-size: 13px; color: var(--text-muted); font-weight: 400; margin-left: 6px;">${conv.company ? conv.company + ' · ' : ''}${conv.phone || ''}</span>`;
+    const isInstagram = conv.channel === 'instagram';
+    const channelName = isInstagram ? 'Instagram' : 'WhatsApp';
+    const channelBadge = isInstagram
+      ? `<span style="background: linear-gradient(45deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888); color: #fff; font-size: 10.5px; font-weight: 700; padding: 2px 7px; border-radius: 4px; display: inline-flex; align-items: center; gap: 4px;">📸 Instagram</span>`
+      : `<span style="background: #25d366; color: #fff; font-size: 10.5px; font-weight: 700; padding: 2px 7px; border-radius: 4px; display: inline-flex; align-items: center; gap: 4px;">💬 WhatsApp</span>`;
+
+    const displayName = conv.contactName || conv.leadName || conv.name || (conv.phone ? (conv.phone.startsWith('+') || conv.phone.startsWith('91') || conv.phone.length >= 10 ? `WhatsApp Contact (${conv.phone})` : conv.phone) : (isInstagram ? 'Instagram Lead' : 'WhatsApp Contact'));
+    const accountInfo = isInstagram
+      ? (conv.phone?.startsWith('@') ? conv.phone : `@${conv.phone || conv.contactName || 'user'}`)
+      : (conv.phone || '');
+
+    if (nameEl) {
+      nameEl.innerHTML = `
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          ${channelBadge}
+          <span style="font-weight: 700;">${displayName}</span>
+          <span style="font-size: 12.5px; color: var(--text-muted); font-weight: 400;">
+            ${conv.company ? conv.company + ' · ' : ''}Account: <strong>${accountInfo}</strong>
+          </span>
+        </div>
+      `;
+    }
     if (compEl) compEl.style.display = 'none';
 
     if (resolveBtn) {
@@ -846,7 +938,20 @@ class InboxComponent {
     msgs.forEach((msg, index) => {
       const isOutbound = msg.direction === 'OUTBOUND' || msg.sender === 'outbound';
       const isSystem = msg.direction === 'SYSTEM' || msg.sender === 'system' || msg.isSystem;
-      const msgType = (msg.type || msg.message_type || 'text').toLowerCase();
+      let msgType = (msg.type || msg.message_type || '').toLowerCase();
+      const hasMedia = Boolean(msg.mediaUrl || msg.media_url);
+      if (!msgType || msgType === 'text') {
+        if (hasMedia) {
+          const mime = (msg.mimeType || msg.media_mime_type || '').toLowerCase();
+          if (mime.startsWith('image/')) msgType = 'image';
+          else if (mime.startsWith('audio/')) msgType = 'audio';
+          else if (mime.startsWith('video/')) msgType = 'video';
+          else if (mime.includes('pdf') || mime.includes('document')) msgType = 'document';
+          else msgType = 'image';
+        } else if (/^image message$/i.test(String(msg.text || msg.body || msg.content || '').trim())) {
+          msgType = 'image';
+        }
+      }
       const isMedia = ['image', 'video', 'audio', 'document', 'sticker'].includes(msgType);
       const isUnsupported = msgType === 'unsupported';
 
@@ -992,7 +1097,9 @@ class InboxComponent {
     const mediaUrl = msg.mediaUrl || msg.media_url || '';
     const mimeType = msg.mimeType || msg.media_mime_type || '';
     const fileName = msg.fileName || msg.file_name || (msgType === 'document' ? 'document' : `${msgType}`);
-    const caption = msg.caption || msg.media_caption || '';
+    const rawCaption = msg.caption || msg.media_caption || (msgType !== 'document' && !/^(image|photo|video|audio|voice|document|media)\s+message$/i.test(String(msg.text || msg.body || msg.content || '').trim()) ? (msg.text || msg.body || msg.content || '') : '');
+    const isPlaceholderCaption = /^(image|photo|video|audio|voice|document|media)\s+message$/i.test(String(rawCaption).trim());
+    const caption = isPlaceholderCaption ? '' : rawCaption;
     const mediaSize = msg.mediaSize || msg.media_size || 0;
 
     switch (msgType) {
@@ -1016,7 +1123,7 @@ class InboxComponent {
       return `
         <div class="media-image-placeholder">
           <span style="font-size: 24px;">🖼️</span>
-          <span>Photo unavailable</span>
+          <span>Image unavailable</span>
         </div>
       `;
     }
@@ -1030,7 +1137,7 @@ class InboxComponent {
              style="max-width: 100%; max-height: 320px; object-fit: cover; display: block; border-radius: 8px; cursor: pointer; opacity: 0; transition: opacity 0.3s ease;"
              loading="lazy"
              onload="this.style.opacity='1'; const shim=this.parentElement.querySelector('.media-loading-shimmer'); if(shim) shim.style.display='none';"
-             onerror="this.style.display='none'; this.parentElement.innerHTML='<div class=\\'media-image-placeholder\\' style=\\'display:flex;align-items:center;justify-content:center;padding:16px;color:var(--text-muted);\\'><span>⚠️ Image failed to load</span></div>';">
+             onerror="this.style.display='none'; this.parentElement.innerHTML='<div class=\\'media-image-placeholder\\' style=\\'display:flex;align-items:center;justify-content:center;padding:16px;color:var(--text-muted);\\'><span>⚠️ Image unavailable</span></div>';">
         ${caption ? `<div class="msg-media-caption" style="font-size: 12.5px; color: ${captionColor}; margin-top: 6px; max-width: 280px; line-height: 1.4; opacity: 0.92;">${this.escapeHtml(caption)}</div>` : ''}
       </div>
     `;

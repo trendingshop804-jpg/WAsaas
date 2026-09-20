@@ -144,11 +144,13 @@ class WhatsAppService {
       ? window.supabaseConfig.getAuthHeaders()
       : { 'Content-Type': 'application/json' };
 
+    const orgId = org?.id || window.appState?.get('currentOrgId');
+
     try {
       const res = await fetch(fnUrl, {
         method: 'POST',
         headers: authHeaders,
-        body: JSON.stringify({ action: 'fetch_profile' }),
+        body: JSON.stringify({ action: 'fetch_profile', organizationId: orgId }),
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.success && data.profile) {
@@ -162,7 +164,7 @@ class WhatsAppService {
         const localRes = await fetch('/api/update-whatsapp-profile', {
           method: 'POST',
           headers: authHeaders,
-          body: JSON.stringify({ action: 'fetch_profile' }),
+          body: JSON.stringify({ action: 'fetch_profile', organizationId: orgId }),
         });
         const localData = await localRes.json().catch(() => ({}));
         if (localRes.ok && localData.success && localData.profile) {
@@ -180,6 +182,7 @@ class WhatsAppService {
     const org = window.appState.getCurrentOrg();
     if (!org.whatsappConnected) return { success: false, error: 'No WhatsApp connection active.' };
 
+    const orgId = org?.id || window.appState?.get('currentOrgId');
     const fnUrl = window.supabaseConfig?.isSupabaseConfigured()
       ? window.supabaseConfig.getEdgeFunctionUrl('update-whatsapp-profile')
       : '/api/update-whatsapp-profile';
@@ -191,7 +194,7 @@ class WhatsAppService {
       const res = await fetch(fnUrl, {
         method: 'POST',
         headers: authHeaders,
-        body: JSON.stringify({ action: 'update_profile_picture', imageBase64, fileName }),
+        body: JSON.stringify({ action: 'update_profile_picture', imageBase64, fileName, organizationId: orgId }),
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.success) {
@@ -209,7 +212,7 @@ class WhatsAppService {
           const localRes = await fetch('/api/update-whatsapp-profile', {
             method: 'POST',
             headers: authHeaders,
-            body: JSON.stringify({ action: 'update_profile_picture', imageBase64, fileName }),
+            body: JSON.stringify({ action: 'update_profile_picture', imageBase64, fileName, organizationId: orgId }),
           });
           const localData = await localRes.json().catch(() => ({}));
           if (localRes.ok && localData.success) {
@@ -232,6 +235,7 @@ class WhatsAppService {
 
     if (about.length > 139) return { success: false, error: `About text exceeds 139 characters (${about.length}/139).` };
 
+    const orgId = org?.id || window.appState?.get('currentOrgId');
     const fnUrl = window.supabaseConfig?.isSupabaseConfigured()
       ? window.supabaseConfig.getEdgeFunctionUrl('update-whatsapp-profile')
       : '/api/update-whatsapp-profile';
@@ -243,7 +247,7 @@ class WhatsAppService {
       const res = await fetch(fnUrl, {
         method: 'POST',
         headers: authHeaders,
-        body: JSON.stringify({ action: 'update_about', about }),
+        body: JSON.stringify({ action: 'update_about', about, organizationId: orgId }),
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.success) {
@@ -259,7 +263,7 @@ class WhatsAppService {
           const localRes = await fetch('/api/update-whatsapp-profile', {
             method: 'POST',
             headers: authHeaders,
-            body: JSON.stringify({ action: 'update_about', about }),
+            body: JSON.stringify({ action: 'update_about', about, organizationId: orgId }),
           });
           const localData = await localRes.json().catch(() => ({}));
           if (localRes.ok && localData.success) {
@@ -569,10 +573,36 @@ class WhatsAppService {
   // Real-time Supabase Inbound Message Synchronization
   async syncInboundMessagesFromSupabase() {
     try {
-      const res = await fetch('/api/messages');
-      if (!res.ok) return;
-      const data = await res.json();
-      if (!data.messages || !Array.isArray(data.messages)) return;
+      let rawMessages = [];
+      try {
+        const res = await fetch('/api/messages');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.messages && Array.isArray(data.messages)) {
+            rawMessages = data.messages;
+          }
+        }
+      } catch (fErr) {
+        console.warn('Local /api/messages fetch failed:', fErr.message);
+      }
+
+      // If no messages from local /api/messages, try client Supabase if configured
+      if (rawMessages.length === 0 && window.authService?.supabase) {
+        try {
+          const { data: sbMsgs, error: sbErr } = await window.authService.supabase
+            .from('messages')
+            .select('*')
+            .order('created_at', { ascending: false })
+            .limit(100);
+          if (!sbErr && sbMsgs) {
+            rawMessages = sbMsgs;
+          }
+        } catch (sbEx) {
+          console.warn('Direct Supabase messages query fallback failed:', sbEx.message);
+        }
+      }
+
+      if (rawMessages.length === 0) return;
 
       const leads = window.appState.get('leads') || [];
       const conversations = window.appState.get('conversations') || [];
@@ -583,15 +613,16 @@ class WhatsAppService {
       }
 
       // API returns the latest rows first; render each conversation chronologically.
-      const orderedMessages = [...data.messages].sort((a, b) => new Date(a.received_at || a.created_at || 0) - new Date(b.received_at || b.created_at || 0));
+      const orderedMessages = [...rawMessages].sort((a, b) => new Date(a.received_at || a.created_at || 0) - new Date(b.received_at || b.created_at || 0));
       for (const msg of orderedMessages) {
-        const msgId = msg.id || `${msg.sender_number}_${msg.received_at}`;
+        const msgId = msg.id || `${msg.sender_number}_${msg.received_at || msg.created_at}`;
         if (this.processedMsgIds.has(msgId)) continue;
         this.processedMsgIds.add(msgId);
 
-        const senderRaw = String(msg.sender_number || '');
-        const senderClean = senderRaw.replace(/[^0-9]/g, '');
-        if (!senderClean) continue;
+        const channel = msg.channel || (msg.sender_number && String(msg.sender_number).startsWith('ig_') ? 'instagram' : 'whatsapp');
+        const senderRaw = String(msg.sender_number || msg.sender || '');
+        const senderClean = senderRaw.replace(/[^0-9a-zA-Z_]/g, '');
+        if (!senderClean && !senderRaw) continue;
 
         // Extract message text from all possible field locations
         const rawPayload = msg.raw || {};
@@ -632,24 +663,43 @@ class WhatsAppService {
           displayText = `📩 ${msg.sender_number || 'Unknown'} sent a ${resolvedType} message`;
         }
 
-        // Match existing lead by normalized phone (last 10 digits)
-        let lead = this.findLeadByPhone(senderClean, leads);
+        // Match existing lead by normalized phone or instagram sender
+        let lead = channel === 'instagram'
+          ? leads.find(l => l.phone === senderRaw || l.contactName === `@${senderRaw}` || l.id === 'lead_ig_' + senderClean)
+          : this.findLeadByPhone(senderClean, leads);
 
         if (!lead) {
-          lead = {
-            id: 'lead_in_' + senderClean,
-            contactName: `WhatsApp Contact (+${senderClean})`,
-            companyName: 'Inbound WhatsApp',
-            phone: senderRaw.startsWith('+') ? senderRaw : `+${senderClean}`,
-            email: '',
-            location: 'WhatsApp Webhook',
-            status: 'Replied',
-            score: 75,
-            scoreCategory: 'warm',
-            source: 'Meta Webhook',
-            lastContacted: msg.received_at || new Date().toISOString(),
-            aiSummary: 'Received real inbound message via WhatsApp webhook.'
-          };
+          if (channel === 'instagram') {
+            lead = {
+              id: 'lead_ig_' + senderClean,
+              contactName: `@${senderRaw || 'instagram_user'}`,
+              companyName: 'Instagram Direct',
+              phone: senderRaw,
+              email: '',
+              location: 'Instagram Direct',
+              status: 'Replied',
+              score: 75,
+              scoreCategory: 'warm',
+              source: 'Instagram',
+              lastContacted: msg.received_at || new Date().toISOString(),
+              aiSummary: 'Received Instagram direct message.'
+            };
+          } else {
+            lead = {
+              id: 'lead_in_' + senderClean,
+              contactName: `WhatsApp Contact (+${senderClean})`,
+              companyName: 'Inbound WhatsApp',
+              phone: senderRaw.startsWith('+') ? senderRaw : `+${senderClean}`,
+              email: '',
+              location: 'WhatsApp Webhook',
+              status: 'Replied',
+              score: 75,
+              scoreCategory: 'warm',
+              source: 'Meta Webhook',
+              lastContacted: msg.received_at || new Date().toISOString(),
+              aiSummary: 'Received real inbound message via WhatsApp webhook.'
+            };
+          }
           leads.unshift(lead);
           window.appState.set('leads', leads);
         } else {
@@ -659,8 +709,8 @@ class WhatsAppService {
           lead.lastContacted = msg.received_at || new Date().toISOString();
         }
 
-        // Match conversation by lead ID OR by normalized phone number
-        let conv = conversations.find(c => c.id === msg.conversation_id) || conversations.find(c => c.leadId === lead.id) || this.findConversationByPhone(lead.phone, conversations);
+        // Match conversation by conversation ID or lead ID
+        let conv = conversations.find(c => c.id === msg.conversation_id) || conversations.find(c => c.leadId === lead.id && (c.channel || 'whatsapp') === channel) || this.findConversationByPhone(lead.phone, conversations);
         if (conv && conv.leadId !== lead.id) {
           conv.leadId = lead.id;
         }
@@ -673,6 +723,7 @@ class WhatsAppService {
           direction: msg.direction === 'outbound' ? 'OUTBOUND' : 'INBOUND',
           type: resolvedType,
           message_type: resolvedType,
+          channel: channel,
           text: resolvedType === 'text' ? displayText : displayText,
           body: displayText,
           caption: caption || undefined,
@@ -695,12 +746,12 @@ class WhatsAppService {
 
         if (!conv) {
           conv = {
-            // Preserve the database UUID so later outbound realtime inserts reach this thread.
             id: msg.conversation_id || ('conv_' + Date.now() + '_' + Math.floor(Math.random() * 1000)),
             leadId: lead.id,
             leadName: lead.contactName,
             company: lead.companyName,
             phone: lead.phone,
+            channel: channel,
             unreadCount: msg.direction === 'outbound' ? 0 : 1,
             mode: 'AI',
             status: 'AI Active',
@@ -711,6 +762,7 @@ class WhatsAppService {
           };
           conversations.unshift(conv);
         } else {
+          if (!conv.channel) conv.channel = channel;
           if (!conv.messages.some(m => m.id === inMsg.id || (m.text === inMsg.text && m.timestamp === formattedTime))) {
             conv.messages.push(inMsg);
             conv.lastMessage = displayText || text || '📩 New message';

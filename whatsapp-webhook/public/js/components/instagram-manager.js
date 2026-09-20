@@ -39,7 +39,7 @@ class InstagramManagerComponent {
       }
     });
 
-    // 2. Connect Instagram Trigger
+    // 2. Connect Instagram Trigger (Meta OAuth)
     document.addEventListener('click', (e) => {
       if (e.target.closest('#ig-btn-connect-meta')) {
         e.preventDefault();
@@ -53,6 +53,22 @@ class InstagramManagerComponent {
         } else {
           alert('Instagram Meta OAuth authorization starting...');
         }
+      }
+    });
+
+    // 2b. Connect Instagram Trigger (Manual Token & ID Modal)
+    document.addEventListener('click', (e) => {
+      if (e.target.closest('#ig-btn-connect-manual, #ig-btn-edit-manual')) {
+        e.preventDefault();
+        this.openManualConnectModal();
+      }
+    });
+
+    // 2c. Test Manual Instagram Token Connection
+    document.addEventListener('click', (e) => {
+      if (e.target.closest('#ig-manual-test-btn')) {
+        e.preventDefault();
+        this.testManualInstagramConnection();
       }
     });
 
@@ -136,6 +152,8 @@ class InstagramManagerComponent {
         this.handleSaveDmRule(e);
       } else if (e.target.id === 'ig-schedule-post-form') {
         this.handleSaveScheduledPost(e);
+      } else if (e.target.id === 'ig-manual-connect-form') {
+        this.handleSaveManualConnection(e);
       }
     });
 
@@ -190,7 +208,7 @@ class InstagramManagerComponent {
               <div>
                 <div class="flex items-center gap-2">
                   <span style="font-size: 16px; font-weight: 700; color: var(--text-primary);">@${org.instagramUsername}</span>
-                  <span class="badge" style="background: rgba(16, 185, 129, 0.2); color: #34d399; font-size: 11px;">● Connected & Verified</span>
+                  <span class="badge" style="background: rgba(16, 185, 129, 0.2); color: #34d399; font-size: 11px;">● Connected &amp; Verified</span>
                 </div>
                 <div style="font-size: 12.5px; color: var(--text-secondary); margin-top: 2px;">
                   Instagram Professional Account ID: <code class="font-mono" style="color: #f472b6;">${org.instagramBusinessId || 'Active'}</code> · Page ID: <code class="font-mono">${org.instagramPageId || 'Linked'}</code>
@@ -199,8 +217,11 @@ class InstagramManagerComponent {
             </div>
 
             <div class="flex items-center gap-2">
+              <button id="ig-btn-edit-manual" type="button" class="btn btn-secondary btn-sm" title="Edit Manual Token &amp; IDs">
+                🔑 Edit Manual Token
+              </button>
               <button id="ig-btn-connect-meta" type="button" class="btn btn-secondary btn-sm">
-                Switch Account
+                Switch via OAuth
               </button>
               <button id="ig-btn-disconnect" type="button" class="btn btn-outline btn-sm" style="color: #ef4444; border-color: rgba(239, 68, 68, 0.4);">
                 Disconnect
@@ -225,15 +246,20 @@ class InstagramManagerComponent {
               </div>
             </div>
 
-            <button id="ig-btn-connect-meta" type="button" class="btn btn-primary btn-sm" style="background: linear-gradient(45deg, #f09433, #dc2743, #bc1888); border: none;">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-              Connect Instagram
-            </button>
+            <div class="flex items-center gap-2">
+              <button id="ig-btn-connect-manual" type="button" class="btn btn-secondary btn-sm" style="border-color: rgba(139, 92, 246, 0.4); color: #c4b5fd;">
+                🔑 Connect Manually (Token)
+              </button>
+              <button id="ig-btn-connect-meta" type="button" class="btn btn-primary btn-sm" style="background: linear-gradient(45deg, #f09433, #dc2743, #bc1888); border: none;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                Connect via Meta Login
+              </button>
+            </div>
           </div>
 
           <!-- Business Account Requirement Notice -->
           <div style="margin-top: 14px; padding: 10px 14px; background: rgba(245, 158, 11, 0.1); border-left: 3px solid #f59e0b; border-radius: 4px; font-size: 12px; color: #fbbf24;">
-            <strong>⚠️ Meta Platform Constraint:</strong> Instagram Graph API requires an <strong>Instagram Business or Creator account</strong> linked to a Facebook Page. Personal profiles cannot use automated replies or scheduling. To switch: Open Instagram App → Settings → Account Type → Switch to Professional Account.
+            <strong>⚠️ Meta Platform Requirement:</strong> Instagram Graph API requires an <strong>Instagram Business or Creator account</strong> linked to a Facebook Page. Personal profiles cannot use automated replies or scheduling. You can connect using official Meta OAuth or directly enter your <strong>System User Permanent Access Token</strong>.
           </div>
         </div>
       `;
@@ -453,8 +479,20 @@ class InstagramManagerComponent {
 
   openScheduleModal() {
     this.uploadedMediaUrl = null;
+    const form = document.getElementById('ig-schedule-post-form');
+    if (form) form.reset();
+
     const previewEl = document.getElementById('ig-composer-media-preview');
-    if (previewEl) previewEl.style.display = 'none';
+    if (previewEl) {
+      previewEl.style.display = 'none';
+      previewEl.innerHTML = '<img id="ig-composer-preview-img" src="" alt="Preview" style="max-height: 180px; width: auto; margin: 0 auto; display: block;">';
+    }
+
+    const statusEl = document.getElementById('ig-upload-status');
+    if (statusEl) {
+      statusEl.style.display = 'none';
+      statusEl.textContent = '';
+    }
 
     const timeInput = document.getElementById('ig-schedule-datetime');
     if (timeInput) {
@@ -470,55 +508,7 @@ class InstagramManagerComponent {
     }
   }
 
-  async handleMediaUpload(event) {
-    const file = event.target.files?.[0];
-    if (!file) return;
 
-    const statusEl = document.getElementById('ig-upload-status');
-    if (statusEl) {
-      statusEl.style.display = 'block';
-      statusEl.innerHTML = '<span class="spinner-xs"></span> Uploading media...';
-    }
-
-    const setPreviewAndStatus = (url) => {
-      this.uploadedMediaUrl = url;
-      if (statusEl) {
-        statusEl.innerHTML = '✓ Media ready for publishing!';
-        statusEl.style.color = '#10b981';
-      }
-      const previewEl = document.getElementById('ig-composer-media-preview');
-      const previewImg = document.getElementById('ig-composer-preview-img');
-      if (previewEl && previewImg) {
-        previewEl.style.display = 'block';
-        previewImg.src = url;
-      }
-    };
-
-    try {
-      if (window.supabaseConfig?.isSupabaseConfigured() && window.supabase) {
-        const filePath = `post_${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
-        const { data, error } = await window.supabase.storage
-          .from('instagram-media-public')
-          .upload(filePath, file, { upsert: true });
-
-        if (error) throw error;
-        const { data: publicUrlData } = window.supabase.storage
-          .from('instagram-media-public')
-          .getPublicUrl(filePath);
-
-        setPreviewAndStatus(publicUrlData.publicUrl);
-      } else {
-        const reader = new FileReader();
-        reader.onload = (e) => setPreviewAndStatus(e.target.result);
-        reader.readAsDataURL(file);
-      }
-    } catch (err) {
-      console.warn('[Instagram Media Upload Supabase Notice]:', err.message);
-      const reader = new FileReader();
-      reader.onload = (e) => setPreviewAndStatus(e.target.result);
-      reader.readAsDataURL(file);
-    }
-  }
 
   async handleSaveReplyRule(e) {
     e.preventDefault();
@@ -549,6 +539,7 @@ class InstagramManagerComponent {
     window.appState.set('instagramReplyRules', [newRule, ...rules]);
     window.appState.addAuditLog('Instagram Rule Created', newRule.name, `Added comment auto-reply for keywords: ${keywords}`, 'Success');
 
+    // Persist to DB asynchronously
     fetch('/api/instagram?action=save_rule', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -593,6 +584,7 @@ class InstagramManagerComponent {
     window.appState.set('instagramDmRules', [newRule, ...rules]);
     window.appState.addAuditLog('Instagram Auto-DM Created', newRule.name, `Added Comment-to-DM private reply for keywords: ${keywords}`, 'Success');
 
+    // Persist to DB asynchronously
     fetch('/api/instagram?action=save_rule', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -606,6 +598,331 @@ class InstagramManagerComponent {
     }
     document.getElementById('ig-dm-rule-form')?.reset();
     this.renderDmRulesList();
+  }
+
+  /* -------------------------------------------------------------------------
+     Media File Upload Handler
+     - Validates file type & size
+     - Shows a live preview in the modal
+     - Uploads to Supabase Storage (instagram-media bucket)
+     - Falls back to local object URL if Supabase is not configured
+     ------------------------------------------------------------------------- */
+  async handleMediaUpload(e) {
+    const fileInput = e.target;
+    const file = fileInput.files?.[0];
+    const statusEl = document.getElementById('ig-upload-status');
+    const previewContainer = document.getElementById('ig-composer-media-preview');
+    const previewImg = document.getElementById('ig-composer-preview-img');
+
+    // Reset previous state
+    this.uploadedMediaUrl = null;
+    if (statusEl) { statusEl.style.display = 'none'; statusEl.textContent = ''; }
+    if (previewContainer) previewContainer.style.display = 'none';
+
+    if (!file) return;
+
+    // Validate file type
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'video/mp4', 'video/quicktime'];
+    if (!allowedTypes.includes(file.type)) {
+      if (statusEl) {
+        statusEl.style.display = 'block';
+        statusEl.innerHTML = '<span style="color: #ef4444;">❌ Unsupported file type. Use JPEG, PNG, WebP, or MP4.</span>';
+      }
+      fileInput.value = '';
+      return;
+    }
+
+    // Validate file size (max 50MB for video, 10MB for images)
+    const maxSize = file.type.startsWith('video/') ? 50 * 1024 * 1024 : 10 * 1024 * 1024;
+    if (file.size > maxSize) {
+      const limitMB = maxSize / (1024 * 1024);
+      if (statusEl) {
+        statusEl.style.display = 'block';
+        statusEl.innerHTML = `<span style="color: #ef4444;">❌ File too large (${(file.size / (1024 * 1024)).toFixed(1)}MB). Max: ${limitMB}MB.</span>`;
+      }
+      fileInput.value = '';
+      return;
+    }
+
+    // Show live preview
+    if (previewContainer && previewImg) {
+      if (file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          previewImg.src = ev.target.result;
+          previewImg.style.display = 'block';
+          previewContainer.style.display = 'block';
+        };
+        reader.readAsDataURL(file);
+      } else {
+        // For video, show a video element instead
+        previewImg.style.display = 'none';
+        previewContainer.innerHTML = `
+          <video src="${URL.createObjectURL(file)}" controls
+            style="max-height: 180px; width: auto; margin: 0 auto; display: block;"
+          ></video>`;
+        previewContainer.style.display = 'block';
+      }
+    }
+
+    // Show uploading status
+    if (statusEl) {
+      statusEl.style.display = 'block';
+      statusEl.innerHTML = '<span style="color: #60a5fa;">⏳ Uploading media...</span>';
+    }
+
+    try {
+      // Try Supabase Storage upload
+      const config = window.supabaseConfig;
+      if (config?.projectUrl && config?.anonKey) {
+        const org = window.appState.getCurrentOrg();
+        const timestamp = Date.now();
+        const sanitizedName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+        const filePath = `${org.id || 'default'}/${timestamp}_${sanitizedName}`;
+
+        const uploadUrl = `${config.projectUrl}/storage/v1/object/instagram-media/${filePath}`;
+        const headers = {
+          'Authorization': `Bearer ${config.anonKey}`,
+          'apikey': config.anonKey,
+        };
+
+        const uploadResponse = await fetch(uploadUrl, {
+          method: 'POST',
+          headers: headers,
+          body: file,
+        });
+
+        if (uploadResponse.ok) {
+          // Build public URL
+          this.uploadedMediaUrl = `${config.projectUrl}/storage/v1/object/public/instagram-media/${filePath}`;
+          if (statusEl) {
+            statusEl.innerHTML = `<span style="color: #34d399;">✅ Uploaded successfully! (${(file.size / 1024).toFixed(0)} KB)</span>`;
+          }
+          return;
+        } else {
+          const errText = await uploadResponse.text().catch(() => '');
+          console.warn('[IG Media Upload] Supabase storage error:', uploadResponse.status, errText);
+          // Fall through to local fallback
+        }
+      }
+
+      // Fallback: Use local object URL (works for preview/demo, not for Meta Graph API publishing)
+      this.uploadedMediaUrl = URL.createObjectURL(file);
+      if (statusEl) {
+        statusEl.innerHTML = '<span style="color: #fbbf24;">⚠️ Media loaded locally (preview only). Configure Supabase Storage for production publishing.</span>';
+      }
+    } catch (err) {
+      console.error('[IG Media Upload] Error:', err);
+      // Still use local fallback
+      this.uploadedMediaUrl = URL.createObjectURL(file);
+      if (statusEl) {
+        statusEl.innerHTML = '<span style="color: #fbbf24;">⚠️ Upload failed, using local preview. Error: ' + err.message + '</span>';
+      }
+    }
+  }
+
+  /* -------------------------------------------------------------------------
+     Manual Instagram Token Connection Handlers
+     - openManualConnectModal: opens the ig-manual-connect-modal and pre-fills
+       any existing connection data from the current org state.
+     - testManualInstagramConnection: validates the token against the Meta
+       Graph API via /api/instagram?action=test_connection.
+     - handleSaveManualConnection: submits the form to
+       /api/instagram?action=connect_manual and saves org state.
+     ------------------------------------------------------------------------- */
+  openManualConnectModal() {
+    const modal = document.getElementById('ig-manual-connect-modal');
+    if (!modal) return;
+
+    // Pre-fill with existing data if already connected
+    const org = window.appState.getCurrentOrg();
+    const usernameEl = document.getElementById('ig-manual-username');
+    const businessIdEl = document.getElementById('ig-manual-business-id');
+    const pageIdEl = document.getElementById('ig-manual-page-id');
+    const pageNameEl = document.getElementById('ig-manual-page-name');
+    const tokenEl = document.getElementById('ig-manual-token');
+    const statusEl = document.getElementById('ig-manual-status-msg');
+
+    if (usernameEl && org.instagramUsername) {
+      usernameEl.value = org.instagramUsername.replace(/^@/, '');
+    }
+    if (businessIdEl && org.instagramBusinessId) {
+      businessIdEl.value = org.instagramBusinessId;
+    }
+    if (pageIdEl && org.instagramPageId) {
+      pageIdEl.value = org.instagramPageId;
+    }
+    if (tokenEl) {
+      tokenEl.value = ''; // Never pre-fill token for security
+      tokenEl.placeholder = org.instagramConnected ? 'Enter new token to replace existing…' : 'EAAG…';
+    }
+    if (statusEl) {
+      statusEl.style.display = 'none';
+      statusEl.textContent = '';
+    }
+
+    modal.classList.add('active');
+    modal.style.display = '';
+  }
+
+  async testManualInstagramConnection() {
+    const token = document.getElementById('ig-manual-token')?.value.trim();
+    const businessId = document.getElementById('ig-manual-business-id')?.value.trim();
+    const statusEl = document.getElementById('ig-manual-status-msg');
+
+    if (!token || !businessId) {
+      if (statusEl) {
+        statusEl.style.display = 'block';
+        statusEl.style.background = 'rgba(239, 68, 68, 0.12)';
+        statusEl.style.color = '#f87171';
+        statusEl.textContent = '⚠️ Please enter both Instagram Business ID and Access Token to test.';
+      }
+      return;
+    }
+
+    const testBtn = document.getElementById('ig-manual-test-btn');
+    if (testBtn) {
+      testBtn.disabled = true;
+      testBtn.textContent = '⏳ Testing…';
+    }
+    if (statusEl) {
+      statusEl.style.display = 'block';
+      statusEl.style.background = 'rgba(96, 165, 250, 0.1)';
+      statusEl.style.color = '#93c5fd';
+      statusEl.textContent = 'Testing Meta Graph API connection…';
+    }
+
+    try {
+      const testUrl = `https://graph.facebook.com/v22.0/${businessId}?fields=id,username,name,followers_count&access_token=${encodeURIComponent(token)}`;
+      const res = await fetch(testUrl);
+      const data = await res.json();
+
+      if (data?.id) {
+        const username = data.username || data.name || `ID:${businessId}`;
+        if (statusEl) {
+          statusEl.style.background = 'rgba(16, 185, 129, 0.12)';
+          statusEl.style.color = '#34d399';
+          statusEl.textContent = `✅ Connection verified! Account: @${username}${data.followers_count ? ` · ${data.followers_count.toLocaleString()} followers` : ''}`;
+        }
+        // Auto-fill username from verified response
+        const usernameEl = document.getElementById('ig-manual-username');
+        if (usernameEl && data.username && !usernameEl.value) {
+          usernameEl.value = data.username;
+        }
+      } else {
+        const errMsg = data?.error?.message || 'Invalid token or Business ID';
+        const errCode = data?.error?.code ? ` [Code ${data.error.code}]` : '';
+        if (statusEl) {
+          statusEl.style.background = 'rgba(239, 68, 68, 0.12)';
+          statusEl.style.color = '#f87171';
+          statusEl.textContent = `❌ Meta API Error${errCode}: ${errMsg}`;
+        }
+      }
+    } catch (err) {
+      if (statusEl) {
+        statusEl.style.background = 'rgba(239, 68, 68, 0.12)';
+        statusEl.style.color = '#f87171';
+        statusEl.textContent = `❌ Network error: ${err.message}`;
+      }
+    } finally {
+      if (testBtn) {
+        testBtn.disabled = false;
+        testBtn.textContent = '🧪 Test Meta Connection';
+      }
+    }
+  }
+
+  async handleSaveManualConnection(e) {
+    e.preventDefault();
+    const org = window.appState.getCurrentOrg();
+    const username = document.getElementById('ig-manual-username')?.value.trim().replace(/^@/, '');
+    const businessId = document.getElementById('ig-manual-business-id')?.value.trim();
+    const pageId = document.getElementById('ig-manual-page-id')?.value.trim() || null;
+    const pageName = document.getElementById('ig-manual-page-name')?.value.trim() || null;
+    const token = document.getElementById('ig-manual-token')?.value.trim();
+    const statusEl = document.getElementById('ig-manual-status-msg');
+    const submitBtn = document.getElementById('ig-manual-submit-btn');
+
+    if (!username || !businessId || !token) {
+      if (statusEl) {
+        statusEl.style.display = 'block';
+        statusEl.style.background = 'rgba(239, 68, 68, 0.12)';
+        statusEl.style.color = '#f87171';
+        statusEl.textContent = '⚠️ Username, Business Account ID, and Access Token are required.';
+      }
+      return;
+    }
+
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.textContent = '⏳ Saving…';
+    }
+    if (statusEl) {
+      statusEl.style.display = 'block';
+      statusEl.style.background = 'rgba(96, 165, 250, 0.1)';
+      statusEl.style.color = '#93c5fd';
+      statusEl.textContent = 'Saving Instagram connection…';
+    }
+
+    try {
+      const res = await fetch('/api/instagram?action=connect_manual', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          organizationId: org.id,
+          accessToken: token,
+          instagramBusinessId: businessId,
+          username,
+          pageId,
+          pageName,
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (res.ok && data.success) {
+        // Update org state locally
+        org.instagramConnected = true;
+        org.instagramUsername = data.account?.username || username;
+        org.instagramBusinessId = data.account?.instagramBusinessId || businessId;
+        org.instagramPageId = data.account?.pageId || pageId;
+        org.instagramPageName = data.account?.pageName || pageName;
+        window.appState.saveState();
+        window.appState.emit('instagramConnectionChanged', { status: 'CONNECTED', account: data.account });
+        window.appState.addAuditLog(
+          'Instagram Manual Token Connected',
+          `@${org.instagramUsername}`,
+          `Instagram Business Account ID: ${org.instagramBusinessId} connected via permanent token.`,
+          'Success'
+        );
+
+        // Close modal
+        const modal = document.getElementById('ig-manual-connect-modal');
+        if (modal) {
+          modal.classList.remove('active');
+          modal.style.display = 'none';
+        }
+        this.render();
+      } else {
+        const errMsg = data.error || `Server error (HTTP ${res.status})`;
+        if (statusEl) {
+          statusEl.style.background = 'rgba(239, 68, 68, 0.12)';
+          statusEl.style.color = '#f87171';
+          statusEl.textContent = `❌ ${errMsg}`;
+        }
+      }
+    } catch (err) {
+      if (statusEl) {
+        statusEl.style.background = 'rgba(239, 68, 68, 0.12)';
+        statusEl.style.color = '#f87171';
+        statusEl.textContent = `❌ Network error: ${err.message}`;
+      }
+    } finally {
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Save & Activate Instagram →';
+      }
+    }
   }
 
   async handleSaveScheduledPost(e) {
@@ -638,6 +955,7 @@ class InstagramManagerComponent {
     window.appState.set('instagramScheduledPosts', [newPost, ...posts]);
     window.appState.addAuditLog('Instagram Post Scheduled', `${postType.toUpperCase()} scheduled`, `Scheduled for ${new Date(scheduledTime).toLocaleString()}`, 'Success');
 
+    // Persist to DB asynchronously
     fetch('/api/instagram?action=save_post', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -698,6 +1016,65 @@ class InstagramManagerComponent {
 
     this.renderScheduledPostsList();
   }
+
+  applyPreset(type, presetKey) {
+    const presets = {
+      reply: {
+        pricing: {
+          name: 'Pricing Inquiry Auto-Reply',
+          keywords: 'price, cost, pricing, how much, rate, fees',
+          message: 'Hi! 👋 Thanks for asking about pricing. We\'ve sent you a DM with all the details and packages. Check your inbox! 💌'
+        },
+        demo: {
+          name: 'Free Demo Auto-Reply',
+          keywords: 'demo, trial, free, try, test, access',
+          message: '🚀 Awesome! We\'d love to show you a quick demo. Check your DMs — we just sent you a booking link!'
+        },
+        contact: {
+          name: 'Support / Contact Auto-Reply',
+          keywords: 'support, help, contact, issue, problem, question',
+          message: '📞 Our support team is here! We\'ve sent you a DM with direct contact info. We typically respond within 1 hour!'
+        }
+      },
+      dm: {
+        pricing: {
+          name: 'Pricing Brochure DM',
+          keywords: 'price, cost, pricing, how much, rate',
+          message: 'Hi {name}! 👋 Thanks for your interest in our pricing. Here\'s our complete package breakdown:\n\n💎 Starter Plan: ₹2,999/mo\n🚀 Growth Plan: ₹6,999/mo\n🏆 Enterprise: Custom\n\nWant a free consultation call? Book here: https://cal.com/demo'
+        },
+        demo: {
+          name: 'Instant Demo Link DM',
+          keywords: 'demo, trial, free, try, test, access',
+          message: 'Hey {name}! 🎯 Excited to show you what we can do!\n\n🔑 Your instant demo access: https://app.example.com/demo\n📅 Or book a live walkthrough: https://cal.com/demo\n\nFeel free to reply to this DM with any questions!'
+        },
+        whatsapp: {
+          name: 'WhatsApp Connect DM',
+          keywords: 'whatsapp, wp, wa, connect, chat',
+          message: 'Hi {name}! 💬 Let\'s continue this conversation on WhatsApp where I can share more details, videos, and files with you easily!\n\n👇 Join our WhatsApp channel:\nhttps://wa.me/919876543210\n\nSee you there!'
+        }
+      }
+    };
+
+    const preset = presets[type]?.[presetKey];
+    if (!preset) return;
+
+    if (type === 'reply') {
+      const nameEl = document.getElementById('ig-reply-rule-name');
+      const keywordsEl = document.getElementById('ig-reply-rule-keywords');
+      const messageEl = document.getElementById('ig-reply-rule-message');
+      if (nameEl) nameEl.value = preset.name;
+      if (keywordsEl) keywordsEl.value = preset.keywords;
+      if (messageEl) messageEl.value = preset.message;
+    } else if (type === 'dm') {
+      const nameEl = document.getElementById('ig-dm-rule-name');
+      const keywordsEl = document.getElementById('ig-dm-rule-keywords');
+      const messageEl = document.getElementById('ig-dm-rule-message');
+      if (nameEl) nameEl.value = preset.name;
+      if (keywordsEl) keywordsEl.value = preset.keywords;
+      if (messageEl) messageEl.value = preset.message;
+    }
+  }
 }
 
 window.instagramManagerComponent = new InstagramManagerComponent();
+

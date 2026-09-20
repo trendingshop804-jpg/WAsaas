@@ -27,6 +27,74 @@ export default async function handler(req, res) {
 
   const action = (req.query.action || '').toLowerCase();
 
+  // ── 0. CONNECT MANUAL (Token & ID Direct Integration) ─────────────────────
+  if (action === 'connect_manual' || action === 'connect') {
+    try {
+      const { organizationId, accessToken, instagramBusinessId, username, pageId, pageName } = req.body || {};
+
+      if (!organizationId) {
+        return res.status(400).json({ error: 'organizationId is required' });
+      }
+      if (!accessToken) {
+        return res.status(400).json({ error: 'Meta Permanent Access Token is required' });
+      }
+      if (!instagramBusinessId) {
+        return res.status(400).json({ error: 'Instagram Business / Professional Account ID is required' });
+      }
+
+      const cleanUsername = String(username || '').replace(/^@/, '').trim() || `instagram_${instagramBusinessId}`;
+      const encryptedToken = await encryptToken(accessToken);
+
+      // Verify token with Graph API (test call)
+      let verifiedUsername = cleanUsername;
+      try {
+        const testRes = await fetch(`https://graph.facebook.com/v22.0/${instagramBusinessId}?fields=id,username,name&access_token=${accessToken}`);
+        const testData = await testRes.json();
+        if (testData?.username) {
+          verifiedUsername = testData.username;
+        }
+      } catch (testErr) {
+        console.warn('[Instagram Connect Manual] Graph API verification notice:', testErr.message);
+      }
+
+      // Upsert connection record into Supabase
+      const { data, error } = await supabase
+        .from('instagram_connections')
+        .upsert({
+          organization_id: organizationId,
+          instagram_business_id: String(instagramBusinessId).trim(),
+          username: verifiedUsername,
+          page_id: pageId ? String(pageId).trim() : null,
+          page_name: pageName || null,
+          access_token_encrypted: encryptedToken,
+          is_active: true,
+          connected_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'organization_id' })
+        .select('*');
+
+      if (error) {
+        console.error('[Instagram Connect Manual] Supabase upsert error:', error);
+        return res.status(500).json({ error: error.message });
+      }
+
+      console.log(`[Instagram Connect Manual] Successfully connected Instagram @${verifiedUsername} for org ${organizationId}`);
+      return res.status(200).json({
+        success: true,
+        message: 'Instagram Professional account connected successfully.',
+        account: {
+          instagramBusinessId: String(instagramBusinessId).trim(),
+          username: verifiedUsername,
+          pageId: pageId ? String(pageId).trim() : null,
+          pageName: pageName || null
+        }
+      });
+    } catch (err) {
+      console.error('[Instagram Connect Manual] Error:', err);
+      return res.status(500).json({ error: err.message });
+    }
+  }
+
   // ── 1. DISCONNECT ─────────────────────────────────────────────────────────
   if (req.method === 'DELETE' || action === 'disconnect') {
     try {

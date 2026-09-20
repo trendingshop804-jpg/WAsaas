@@ -14,23 +14,39 @@ const SIGNED_URL_TTL = 60 * 60 * 24; // 24 hours
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, apikey');
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
 
   try {
-    const { data, error } = await supabase
-      .from('messages')
-      // Deliberately fetch both inbound and outbound messages for the thread.
-      .select('id, conversation_id, wa_message_id, sender_number, sender, body, message_body, content, message_type, direction, channel, status, received_at, created_at, media_url, media_mime_type, file_name, media_caption, media_size')
-      .order('received_at', { ascending: false })
-      .limit(50);
+    let query = supabase.from('messages').select('*');
+
+    if (req.query?.conversation_id) {
+      query = query.eq('conversation_id', req.query.conversation_id);
+    }
+    if (req.query?.organization_id) {
+      query = query.eq('organization_id', req.query.organization_id);
+    }
+
+    let { data, error } = await query
+      .order('received_at', { ascending: false, nullsFirst: false })
+      .limit(100);
+
+    if (error) {
+      const fallbackRes = await supabase
+        .from('messages')
+        .select('*')
+        .order('created_at', { ascending: false, nullsFirst: false })
+        .limit(100);
+      data = fallbackRes.data;
+      error = fallbackRes.error;
+    }
 
     if (error) {
       console.error('Supabase query error:', error);
-      return res.status(500).json({ error: error.message });
+      return res.status(500).json({ error: error.message, messages: [] });
     }
 
     // For messages with media, resolve the stored storage path into a fetchable URL.
@@ -67,6 +83,6 @@ export default async function handler(req, res) {
     return res.status(200).json({ count: messages.length, messages });
   } catch (err) {
     console.error('API Error in /api/messages:', err);
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: err.message, messages: [] });
   }
 }

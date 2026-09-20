@@ -111,25 +111,51 @@ async function processInboundMedia(msg, mediaType, customToken) {
 }
 
 async function getWhatsAppOrganizationId(phoneNumberId) {
-  const { data } = await supabase
+  let query = supabase
     .from('whatsapp_connections')
     .select('organization_id')
-    .eq('phone_number_id', phoneNumberId)
-    .eq('is_active', true)
-    .limit(1);
+    .eq('is_active', true);
 
-  return data?.[0]?.organization_id || null;
+  if (phoneNumberId) {
+    query = query.or(`phone_number_id.eq.${phoneNumberId},waba_id.eq.${phoneNumberId}`);
+  }
+
+  const { data } = await query.order('updated_at', { ascending: false }).limit(1);
+  if (data?.[0]?.organization_id) return data[0].organization_id;
+
+  const { data: anyConn } = await supabase
+    .from('whatsapp_connections')
+    .select('organization_id')
+    .eq('is_active', true)
+    .order('updated_at', { ascending: false })
+    .limit(1);
+  if (anyConn?.[0]?.organization_id) return anyConn[0].organization_id;
+
+  const { data: orgs } = await supabase.from('organizations').select('id').limit(1);
+  return orgs?.[0]?.id || null;
 }
 
 async function getWhatsAppConnection(phoneNumberId) {
-  const { data } = await supabase
+  let query = supabase
     .from('whatsapp_connections')
     .select('*')
-    .eq('phone_number_id', phoneNumberId)
+    .eq('is_active', true);
+
+  if (phoneNumberId) {
+    query = query.or(`phone_number_id.eq.${phoneNumberId},waba_id.eq.${phoneNumberId}`);
+  }
+
+  const { data } = await query.order('updated_at', { ascending: false }).limit(1);
+  if (data?.[0]) return data[0];
+
+  const { data: anyConn } = await supabase
+    .from('whatsapp_connections')
+    .select('*')
     .eq('is_active', true)
+    .order('updated_at', { ascending: false })
     .limit(1);
 
-  return data?.[0] || null;
+  return anyConn?.[0] || null;
 }
 
 async function getInstagramConnection(instagramBusinessId) {
@@ -146,7 +172,7 @@ async function getInstagramConnection(instagramBusinessId) {
 async function findOrCreateLead(organizationId, phoneNumber, contactName = '', source = 'WhatsApp') {
   let query = supabase
     .from('leads')
-    .select('id')
+    .select('id, contact_name')
     .eq('organization_id', organizationId);
 
   if (phoneNumber) {
@@ -156,20 +182,29 @@ async function findOrCreateLead(organizationId, phoneNumber, contactName = '', s
   const { data: existing } = await query.limit(1);
 
   if (existing && existing.length > 0) {
+    if (contactName && (!existing[0].contact_name || existing[0].contact_name.includes('WhatsApp Lead'))) {
+      await supabase
+        .from('leads')
+        .update({ contact_name: contactName })
+        .eq('id', existing[0].id);
+    }
     return existing[0].id;
   }
 
-  const defaultName = source === 'Instagram' ? (contactName ? `@${contactName}` : 'Instagram Lead') : 'WhatsApp Lead';
+  const defaultName = source === 'Instagram'
+    ? (contactName ? `@${contactName}` : 'Instagram Lead')
+    : (contactName || `WhatsApp Lead (+${phoneNumber || ''})`);
+
   const { data: newLead, error } = await supabase
     .from('leads')
     .insert({
       organization_id: organizationId,
-      company_name: defaultName,
-      contact_name: contactName || '',
+      company_name: 'Inbound WhatsApp',
+      contact_name: defaultName,
       phone: phoneNumber || null,
       source: source,
-      status: 'NEW',
-      score: 50,
+      status: 'REPLIED',
+      score: 75,
       score_category: 'WARM',
     })
     .select('id')
@@ -822,7 +857,9 @@ export default async function handler(req, res) {
         let chatHistory = [];
 
         try {
-          leadId = await findOrCreateLead(organizationId, sender, '', 'WhatsApp');
+          const contactObj = value?.contacts?.find(c => c.wa_id === sender) || value?.contacts?.[0];
+          const contactName = contactObj?.profile?.name || '';
+          leadId = await findOrCreateLead(organizationId, sender, contactName, 'WhatsApp');
           conversationId = await findOrCreateConversation(organizationId, leadId, 'whatsapp');
 
           if (isOptOut(userText) && leadId) {

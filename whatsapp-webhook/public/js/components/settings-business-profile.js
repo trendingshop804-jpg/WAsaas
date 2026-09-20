@@ -163,6 +163,7 @@ class SettingsBusinessProfileComponent {
     }
 
     try {
+      const orgId = this.currentOrg?.id || window.appState?.get('currentOrgId');
       const result = await window.whatsappService?.updateProfilePicture(
         this.selectedImageBase64,
         this.selectedImageFile?.name || 'profile.jpg'
@@ -170,6 +171,7 @@ class SettingsBusinessProfileComponent {
         action: 'update_profile_picture',
         imageBase64: this.selectedImageBase64,
         fileName: this.selectedImageFile?.name || 'profile.jpg',
+        organizationId: orgId,
       });
 
       if (result && result.success) {
@@ -232,9 +234,11 @@ class SettingsBusinessProfileComponent {
     }
 
     try {
+      const orgId = this.currentOrg?.id || window.appState?.get('currentOrgId');
       const result = await window.whatsappService?.updateAbout(about) || await this.callEdgeFunction({
         action: 'update_about',
         about,
+        organizationId: orgId,
       });
 
       if (result && result.success) {
@@ -297,6 +301,7 @@ class SettingsBusinessProfileComponent {
       }
       return data;
     } catch (err) {
+      // Fallback to local /api/update-whatsapp-profile if edge function URL failed
       if (fnUrl && fnUrl.includes('/functions/v1/')) {
         const localRes = await fetch('/api/update-whatsapp-profile', {
           method: 'POST',

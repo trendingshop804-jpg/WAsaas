@@ -64,7 +64,12 @@ class InboxComponent {
               const conversation = conversations.find(c => c.id === newMsg.conversation_id)
                 || conversations.find(c => window.whatsappService.normalizePhone(c.phone) === window.whatsappService.normalizePhone(phone));
 
-              if (!conversation) return;
+              if (!conversation) {
+                if (window.whatsappService?.syncInboundMessagesFromSupabase) {
+                  await window.whatsappService.syncInboundMessagesFromSupabase();
+                }
+                return;
+              }
 
               let resolvedMediaUrl = newMsg.media_url || undefined;
               if (resolvedMediaUrl && !/^https?:\/\//i.test(resolvedMediaUrl)) {
