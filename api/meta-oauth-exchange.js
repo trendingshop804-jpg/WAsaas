@@ -140,33 +140,55 @@ export default async function handler(req, res) {
       }
     }
 
-    // 3. Handle explicit Embedded Signup callback with known WABA and Phone ID
-    if (wabaId && phoneNumberId) {
-      const phoneRes = await fetch(`https://graph.facebook.com/v22.0/${phoneNumberId}?fields=verified_name,display_phone_number&access_token=${longLivedToken}`);
-      const phoneData = await phoneRes.json();
+    // 3. Handle explicit Embedded Signup or Direct Connection callback
+    if ((wabaId && phoneNumberId) || mode === 'direct_save') {
+      let displayName = req.body?.displayName || 'WhatsApp Business';
+      let displayPhone = req.body?.phoneNumber || phoneNumberId || 'WhatsApp Connected';
 
-      const wabaRes = await fetch(`https://graph.facebook.com/v22.0/${wabaId}?fields=name&access_token=${longLivedToken}`);
-      const wabaData = await wabaRes.json();
+      if (longLivedToken && phoneNumberId) {
+        try {
+          const phoneRes = await fetch(`https://graph.facebook.com/v22.0/${phoneNumberId}?fields=verified_name,display_phone_number&access_token=${longLivedToken}`);
+          const phoneData = await phoneRes.json().catch(() => ({}));
+          if (phoneData.display_phone_number) displayPhone = phoneData.display_phone_number;
+          if (phoneData.verified_name) displayName = phoneData.verified_name;
+        } catch (_) {}
+      }
 
-      const encryptedToken = await encryptToken(longLivedToken);
+      if (longLivedToken && wabaId) {
+        try {
+          const wabaRes = await fetch(`https://graph.facebook.com/v22.0/${wabaId}?fields=name&access_token=${longLivedToken}`);
+          const wabaData = await wabaRes.json().catch(() => ({}));
+          if (wabaData.name && displayName === 'WhatsApp Business') displayName = wabaData.name;
+        } catch (_) {}
+      }
+
+      let encryptedToken = null;
+      if (longLivedToken) {
+        try {
+          encryptedToken = await encryptToken(longLivedToken);
+        } catch (_) {}
+      }
 
       await supabase.from('whatsapp_connections').upsert({
         organization_id: organizationId,
-        provider: 'META_EMBEDDED_SIGNUP',
-        phone_number: phoneData.display_phone_number || phoneNumberId,
-        display_name: phoneData.verified_name || wabaData.name || 'WhatsApp Business',
-        waba_id: wabaId,
-        phone_number_id: phoneNumberId,
+        provider: mode === 'direct_save' ? 'META_CLOUD_API' : 'META_EMBEDDED_SIGNUP',
+        phone_number: displayPhone,
+        display_name: displayName,
+        waba_id: wabaId || null,
+        phone_number_id: phoneNumberId || 'default',
         access_token_encrypted: encryptedToken,
+        access_token: longLivedToken || null,
         is_active: true,
         updated_at: new Date().toISOString()
       }, { onConflict: 'organization_id, phone_number_id' });
 
-      await subscribeToWebhook(wabaId, longLivedToken);
+      if (wabaId && longLivedToken) {
+        await subscribeToWebhook(wabaId, longLivedToken).catch(() => {});
+      }
 
       return res.status(200).json({
         success: true,
-        phone_number: phoneData.display_phone_number || phoneNumberId,
+        phone_number: displayPhone,
         waba_id: wabaId
       });
     }

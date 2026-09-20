@@ -42,32 +42,57 @@ class WhatsAppService {
     phoneId = null,
     wabaId = null
   } = {}) {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        const org = window.appState.getCurrentOrg();
-        org.whatsappConnected = true;
-        org.whatsappNumber = phoneNumber;
-        org.whatsappProvider = provider;
-        if (token) org.whatsappToken = token;
-        if (phoneId) org.phoneId = phoneId;
-        if (wabaId) org.wabaId = wabaId;
-        else if (!org.wabaId) org.wabaId = 'WABA_' + Math.floor(1000000000 + Math.random() * 9000000000);
-        
-        window.appState.saveState();
-        window.appState.addAuditLog(
-          'WhatsApp Meta OAuth Connected',
-          'WABA ID ' + org.wabaId,
-          `Connected number ${phoneNumber} with verified WhatsApp Business permissions via ${provider}.`,
-          'Connected'
-        );
-        window.appState.emit('whatsappConnectionChanged', {
-          status: 'CONNECTED',
-          provider: 'meta_official',
-          number: phoneNumber
-        });
-        resolve({ success: true, number: phoneNumber, wabaId: org.wabaId });
-      }, 1200);
+    const org = window.appState.getCurrentOrg();
+    org.whatsappConnected = true;
+    org.whatsappNumber = phoneNumber;
+    org.whatsappProvider = provider;
+    if (token) org.whatsappToken = token;
+    if (phoneId) org.phoneId = phoneId;
+    if (wabaId) org.wabaId = wabaId;
+    else if (!org.wabaId) org.wabaId = 'WABA_' + Math.floor(1000000000 + Math.random() * 9000000000);
+    
+    window.appState.saveState();
+
+    // Persist connection to backend / Supabase whatsapp_connections table
+    try {
+      const fnUrl = window.supabaseConfig?.isSupabaseConfigured()
+        ? window.supabaseConfig.getEdgeFunctionUrl('meta-oauth-exchange')
+        : '/api/meta-oauth-exchange';
+      const authHeaders = window.supabaseConfig?.isSupabaseConfigured()
+        ? window.supabaseConfig.getAuthHeaders()
+        : { 'Content-Type': 'application/json' };
+
+      const syncPayload = {
+        accessToken: token,
+        phoneNumberId: phoneId || 'default',
+        wabaId: org.wabaId,
+        phoneNumber: phoneNumber,
+        displayName: wabaName,
+        organizationId: org.id || window.appState?.get('currentOrgId') || 'org_default',
+        mode: 'direct_save'
+      };
+
+      fetch(fnUrl, {
+        method: 'POST',
+        headers: authHeaders,
+        body: JSON.stringify(syncPayload)
+      }).catch(err => console.warn('[WhatsAppService] Background sync notice:', err.message));
+    } catch (e) {
+      console.warn('[WhatsAppService] Could not trigger backend connection sync:', e.message);
+    }
+
+    window.appState.addAuditLog(
+      'WhatsApp Meta OAuth Connected',
+      'WABA ID ' + org.wabaId,
+      `Connected number ${phoneNumber} with verified WhatsApp Business permissions via ${provider}.`,
+      'Connected'
+    );
+    window.appState.emit('whatsappConnectionChanged', {
+      status: 'CONNECTED',
+      provider: 'meta_official',
+      number: phoneNumber
     });
+    return { success: true, number: phoneNumber, wabaId: org.wabaId };
   }
 
   // Method B: QR Code Session Lifecycle (Legitimate Authorized Provider)
@@ -144,13 +169,21 @@ class WhatsAppService {
       ? window.supabaseConfig.getAuthHeaders()
       : { 'Content-Type': 'application/json' };
 
-    const orgId = org?.id || window.appState?.get('currentOrgId');
+    const orgId = org?.id || window.appState?.get('currentOrgId') || 'org_default';
+    const payload = {
+      action: 'fetch_profile',
+      organizationId: orgId,
+      accessToken: org.whatsappToken,
+      phoneNumberId: org.phoneId,
+      wabaId: org.wabaId,
+      phoneNumber: org.whatsappNumber
+    };
 
     try {
       const res = await fetch(fnUrl, {
         method: 'POST',
         headers: authHeaders,
-        body: JSON.stringify({ action: 'fetch_profile', organizationId: orgId }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.success && data.profile) {
@@ -164,7 +197,7 @@ class WhatsAppService {
         const localRes = await fetch('/api/update-whatsapp-profile', {
           method: 'POST',
           headers: authHeaders,
-          body: JSON.stringify({ action: 'fetch_profile', organizationId: orgId }),
+          body: JSON.stringify(payload),
         });
         const localData = await localRes.json().catch(() => ({}));
         if (localRes.ok && localData.success && localData.profile) {
@@ -182,7 +215,7 @@ class WhatsAppService {
     const org = window.appState.getCurrentOrg();
     if (!org.whatsappConnected) return { success: false, error: 'No WhatsApp connection active.' };
 
-    const orgId = org?.id || window.appState?.get('currentOrgId');
+    const orgId = org?.id || window.appState?.get('currentOrgId') || 'org_default';
     const fnUrl = window.supabaseConfig?.isSupabaseConfigured()
       ? window.supabaseConfig.getEdgeFunctionUrl('update-whatsapp-profile')
       : '/api/update-whatsapp-profile';
@@ -190,11 +223,22 @@ class WhatsAppService {
       ? window.supabaseConfig.getAuthHeaders()
       : { 'Content-Type': 'application/json' };
 
+    const payload = {
+      action: 'update_profile_picture',
+      imageBase64,
+      fileName,
+      organizationId: orgId,
+      accessToken: org.whatsappToken,
+      phoneNumberId: org.phoneId,
+      wabaId: org.wabaId,
+      phoneNumber: org.whatsappNumber
+    };
+
     try {
       const res = await fetch(fnUrl, {
         method: 'POST',
         headers: authHeaders,
-        body: JSON.stringify({ action: 'update_profile_picture', imageBase64, fileName, organizationId: orgId }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.success) {
@@ -212,7 +256,7 @@ class WhatsAppService {
           const localRes = await fetch('/api/update-whatsapp-profile', {
             method: 'POST',
             headers: authHeaders,
-            body: JSON.stringify({ action: 'update_profile_picture', imageBase64, fileName, organizationId: orgId }),
+            body: JSON.stringify(payload),
           });
           const localData = await localRes.json().catch(() => ({}));
           if (localRes.ok && localData.success) {
@@ -235,7 +279,7 @@ class WhatsAppService {
 
     if (about.length > 139) return { success: false, error: `About text exceeds 139 characters (${about.length}/139).` };
 
-    const orgId = org?.id || window.appState?.get('currentOrgId');
+    const orgId = org?.id || window.appState?.get('currentOrgId') || 'org_default';
     const fnUrl = window.supabaseConfig?.isSupabaseConfigured()
       ? window.supabaseConfig.getEdgeFunctionUrl('update-whatsapp-profile')
       : '/api/update-whatsapp-profile';
@@ -243,11 +287,21 @@ class WhatsAppService {
       ? window.supabaseConfig.getAuthHeaders()
       : { 'Content-Type': 'application/json' };
 
+    const payload = {
+      action: 'update_about',
+      about,
+      organizationId: orgId,
+      accessToken: org.whatsappToken,
+      phoneNumberId: org.phoneId,
+      wabaId: org.wabaId,
+      phoneNumber: org.whatsappNumber
+    };
+
     try {
       const res = await fetch(fnUrl, {
         method: 'POST',
         headers: authHeaders,
-        body: JSON.stringify({ action: 'update_about', about, organizationId: orgId }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.success) {
@@ -263,7 +317,7 @@ class WhatsAppService {
           const localRes = await fetch('/api/update-whatsapp-profile', {
             method: 'POST',
             headers: authHeaders,
-            body: JSON.stringify({ action: 'update_about', about, organizationId: orgId }),
+            body: JSON.stringify(payload),
           });
           const localData = await localRes.json().catch(() => ({}));
           if (localRes.ok && localData.success) {

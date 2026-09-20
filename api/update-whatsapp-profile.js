@@ -154,15 +154,32 @@ export default async function handler(req, res) {
     }
 
     if (!connection) {
-      const { data: anyConns } = await supabase
-        .from('whatsapp_connections')
-        .select('access_token_encrypted, access_token, phone_number_id, waba_id, phone_number, is_active, organization_id')
-        .eq('is_active', true)
-        .order('updated_at', { ascending: false })
-        .limit(1);
-      connection = anyConns?.[0];
-      if (connection) {
-        organizationId = connection.organization_id || organizationId;
+      const fallbackToken = req.body?.accessToken || req.body?.token || process.env.WHATSAPP_ACCESS_TOKEN;
+      const fallbackPhoneId = req.body?.phoneNumberId || req.body?.phone_number_id || process.env.PHONE_NUMBER_ID;
+      const fallbackWabaId = req.body?.wabaId || req.body?.waba_id || process.env.WABA_ID;
+
+      if (fallbackToken || fallbackPhoneId) {
+        connection = {
+          access_token: fallbackToken,
+          phone_number_id: fallbackPhoneId,
+          waba_id: fallbackWabaId,
+          phone_number: req.body?.phoneNumber || req.body?.phone_number || fallbackPhoneId || 'WhatsApp Business',
+          organization_id: organizationId || 'org_default',
+          is_active: true
+        };
+
+        // Asynchronously persist to whatsapp_connections so future lookups succeed
+        try {
+          supabase.from('whatsapp_connections').upsert({
+            organization_id: connection.organization_id,
+            phone_number_id: fallbackPhoneId || 'default',
+            waba_id: fallbackWabaId || null,
+            phone_number: connection.phone_number,
+            access_token: fallbackToken,
+            is_active: true,
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'organization_id, phone_number_id' }).then(() => {}).catch(() => {});
+        } catch (_) {}
       }
     }
 
@@ -188,7 +205,7 @@ export default async function handler(req, res) {
       accessToken = connection.access_token;
     }
     if (!accessToken) {
-      accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
+      accessToken = req.body?.accessToken || req.body?.token || process.env.WHATSAPP_ACCESS_TOKEN;
     }
 
     if (!accessToken) {
@@ -198,7 +215,7 @@ export default async function handler(req, res) {
     }
 
     const { phone_number_id, waba_id } = connection;
-    const targetPhoneId = phone_number_id || waba_id;
+    const targetPhoneId = phone_number_id || req.body?.phoneNumberId || req.body?.phone_number_id || process.env.PHONE_NUMBER_ID || waba_id;
 
     const { action, imageBase64, fileName, about } = req.body || {};
 

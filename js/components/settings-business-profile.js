@@ -288,11 +288,20 @@ class SettingsBusinessProfileComponent {
       fnUrl = '/api/update-whatsapp-profile';
     }
 
+    const payload = {
+      accessToken: this.currentOrg?.whatsappToken,
+      phoneNumberId: this.currentOrg?.phoneId,
+      wabaId: this.currentOrg?.wabaId,
+      phoneNumber: this.currentOrg?.whatsappNumber,
+      organizationId: this.currentOrg?.id || window.appState?.get('currentOrgId') || 'org_default',
+      ...body
+    };
+
     try {
       const res = await fetch(fnUrl, {
         method: 'POST',
         headers: authHeaders,
-        body: JSON.stringify(body),
+        body: JSON.stringify(payload),
       });
 
       const data = await res.json().catch(() => ({}));
@@ -306,7 +315,7 @@ class SettingsBusinessProfileComponent {
         const localRes = await fetch('/api/update-whatsapp-profile', {
           method: 'POST',
           headers: authHeaders,
-          body: JSON.stringify(body),
+          body: JSON.stringify(payload),
         });
         const localData = await localRes.json().catch(() => ({}));
         if (localRes.ok && localData.success) {

@@ -1017,8 +1017,21 @@ class SettingsIntegrationsComponent {
     } catch (_) { /* silently ignore */ }
   }
 
-  /* Obsolete local simulated OAuth modal methods removed. 
-     Now delegates to the global whatsappConnectComponent for connection state. */
+  _handleInstagramEmbeddedSignup() {
+    if (window.instagramManagerComponent?.openManualConnectModal) {
+      window.instagramManagerComponent.openManualConnectModal();
+    } else {
+      const modal = document.getElementById('ig-manual-connect-modal');
+      if (modal) {
+        modal.classList.add('active');
+        modal.style.display = '';
+      } else {
+        if (window.navigationComponent) {
+          window.navigationComponent.switchView('instagram');
+        }
+      }
+    }
+  }
 
   /* ══════════════════════════════════════════════════════════════════════
      TOAST NOTIFICATION SYSTEM

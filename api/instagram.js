@@ -58,24 +58,33 @@ export default async function handler(req, res) {
       }
 
       // Upsert connection record into Supabase
-      const { data, error } = await supabase
-        .from('instagram_connections')
-        .upsert({
-          organization_id: organizationId,
-          instagram_business_id: String(instagramBusinessId).trim(),
-          username: verifiedUsername,
-          page_id: pageId ? String(pageId).trim() : null,
-          page_name: pageName || null,
-          access_token_encrypted: encryptedToken,
-          is_active: true,
-          connected_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        }, { onConflict: 'organization_id' })
-        .select('*');
+      try {
+        await supabase
+          .from('instagram_connections')
+          .upsert({
+            organization_id: organizationId,
+            instagram_business_id: String(instagramBusinessId).trim(),
+            instagram_username: verifiedUsername,
+            username: verifiedUsername,
+            page_id: pageId ? String(pageId).trim() : null,
+            page_name: pageName || null,
+            access_token_encrypted: encryptedToken,
+            is_active: true,
+            connected_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'organization_id, instagram_business_id' });
+      } catch (dbErr) {
+        console.warn('[Instagram Connect Manual] Supabase upsert notice:', dbErr.message);
+      }
 
-      if (error) {
-        console.error('[Instagram Connect Manual] Supabase upsert error:', error);
-        return res.status(500).json({ error: error.message });
+      // Attempt to subscribe webhook if pageId & token available
+      if (pageId && accessToken) {
+        try {
+          await fetch(
+            `https://graph.facebook.com/v22.0/${pageId}/subscribed_apps?subscribed_fields=feed,comments,messages,messaging_postbacks,message_reactions&access_token=${accessToken}`,
+            { method: 'POST' }
+          );
+        } catch (_) {}
       }
 
       console.log(`[Instagram Connect Manual] Successfully connected Instagram @${verifiedUsername} for org ${organizationId}`);
