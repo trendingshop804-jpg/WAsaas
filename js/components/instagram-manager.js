@@ -144,6 +144,31 @@ class InstagramManagerComponent {
       }
     });
 
+    // 2d. Panel Manual Instagram Token Actions
+    document.addEventListener('click', (e) => {
+      if (e.target.closest('#ig-panel-test-btn')) {
+        e.preventDefault();
+        this.testPanelInstagramConnection();
+      }
+      if (e.target.closest('#ig-panel-disconnect-btn')) {
+        e.preventDefault();
+        const discBtn = document.getElementById('ig-btn-disconnect');
+        if (discBtn) discBtn.click();
+        else {
+          const org = window.appState.getCurrentOrg();
+          if (confirm(`Disconnect @${org.instagramUsername || 'Instagram'}?`)) {
+            org.instagramConnected = false;
+            org.instagramUsername = null;
+            org.instagramBusinessId = null;
+            org.instagramPageId = null;
+            window.appState.saveState();
+            window.appState.emit('instagramConnectionChanged', { status: 'DISCONNECTED' });
+            this.render();
+          }
+        }
+      }
+    });
+
     // 7. Modal Form Submit Handlers
     document.addEventListener('submit', (e) => {
       if (e.target.id === 'ig-reply-rule-form') {
@@ -154,6 +179,8 @@ class InstagramManagerComponent {
         this.handleSaveScheduledPost(e);
       } else if (e.target.id === 'ig-manual-connect-form') {
         this.handleSaveManualConnection(e);
+      } else if (e.target.id === 'ig-tab-manual-form') {
+        this.handleSavePanelConnection(e);
       }
     });
 
@@ -186,6 +213,7 @@ class InstagramManagerComponent {
     this.renderReplyRulesList();
     this.renderDmRulesList();
     this.renderScheduledPostsList();
+    this.renderConnectSettingsPanel();
   }
 
   /* -------------------------------------------------------------------------
@@ -770,12 +798,12 @@ class InstagramManagerComponent {
     const businessId = document.getElementById('ig-manual-business-id')?.value.trim();
     const statusEl = document.getElementById('ig-manual-status-msg');
 
-    if (!token || !businessId) {
+    if (!token) {
       if (statusEl) {
         statusEl.style.display = 'block';
         statusEl.style.background = 'rgba(239, 68, 68, 0.12)';
         statusEl.style.color = '#f87171';
-        statusEl.textContent = '⚠️ Please enter both Instagram Business ID and Access Token to test.';
+        statusEl.textContent = '⚠️ Please enter the Meta Permanent Access Token to test.';
       }
       return;
     }
@@ -793,36 +821,58 @@ class InstagramManagerComponent {
     }
 
     try {
-      const testUrl = `https://graph.facebook.com/v22.0/${businessId}?fields=id,username,name,followers_count&access_token=${encodeURIComponent(token)}`;
-      const res = await fetch(testUrl);
-      const data = await res.json();
+      let verifiedData = null;
 
-      if (data?.id) {
-        const username = data.username || data.name || `ID:${businessId}`;
+      // 1. Try server-side test_connection endpoint first (bypasses browser CORS)
+      try {
+        const res = await fetch('/api/instagram?action=test_connection', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ accessToken: token, instagramBusinessId: businessId || null })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data.success) {
+          verifiedData = data.account;
+        } else if (res.status === 400 || res.status === 401) {
+          throw new Error(data.error || 'Invalid Token or Instagram Account');
+        }
+      } catch (serverErr) {
+        // Fallback to direct client-side fetch if server returned unexpected non-validation error
+        if (!verifiedData && businessId) {
+          const testUrl = `https://graph.facebook.com/v22.0/${businessId}?fields=id,username,name,followers_count&access_token=${encodeURIComponent(token)}`;
+          const res = await fetch(testUrl);
+          const data = await res.json();
+          if (data?.id) {
+            verifiedData = {
+              username: data.username || data.name || `ID:${businessId}`,
+              followersCount: data.followers_count
+            };
+          } else {
+            throw new Error(data?.error?.message || serverErr.message || 'Invalid Token or Business ID');
+          }
+        } else {
+          throw serverErr;
+        }
+      }
+
+      if (verifiedData) {
+        const username = verifiedData.username || verifiedData.name || (businessId ? `ID:${businessId}` : 'Meta Account');
         if (statusEl) {
           statusEl.style.background = 'rgba(16, 185, 129, 0.12)';
           statusEl.style.color = '#34d399';
-          statusEl.textContent = `✅ Connection verified! Account: @${username}${data.followers_count ? ` · ${data.followers_count.toLocaleString()} followers` : ''}`;
+          statusEl.textContent = `✅ Connection verified! Account: @${username}${verifiedData.followersCount ? ` · ${verifiedData.followersCount.toLocaleString()} followers` : ''}`;
         }
         // Auto-fill username from verified response
         const usernameEl = document.getElementById('ig-manual-username');
-        if (usernameEl && data.username && !usernameEl.value) {
-          usernameEl.value = data.username;
-        }
-      } else {
-        const errMsg = data?.error?.message || 'Invalid token or Business ID';
-        const errCode = data?.error?.code ? ` [Code ${data.error.code}]` : '';
-        if (statusEl) {
-          statusEl.style.background = 'rgba(239, 68, 68, 0.12)';
-          statusEl.style.color = '#f87171';
-          statusEl.textContent = `❌ Meta API Error${errCode}: ${errMsg}`;
+        if (usernameEl && verifiedData.username && !usernameEl.value) {
+          usernameEl.value = verifiedData.username;
         }
       }
     } catch (err) {
       if (statusEl) {
         statusEl.style.background = 'rgba(239, 68, 68, 0.12)';
         statusEl.style.color = '#f87171';
-        statusEl.textContent = `❌ Network error: ${err.message}`;
+        statusEl.textContent = `❌ Meta API Error: ${err.message}`;
       }
     } finally {
       if (testBtn) {
@@ -865,11 +915,12 @@ class InstagramManagerComponent {
     }
 
     try {
+      const orgId = org.id || 'default_org';
       const res = await fetch('/api/instagram?action=connect_manual', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          organizationId: org.id,
+          organizationId: orgId,
           accessToken: token,
           instagramBusinessId: businessId,
           username,
@@ -901,6 +952,217 @@ class InstagramManagerComponent {
         if (modal) {
           modal.classList.remove('active');
           modal.style.display = 'none';
+        }
+        this.render();
+      } else {
+        const errMsg = data.error || `Server error (HTTP ${res.status})`;
+        if (statusEl) {
+          statusEl.style.background = 'rgba(239, 68, 68, 0.12)';
+          statusEl.style.color = '#f87171';
+          statusEl.textContent = `❌ ${errMsg}`;
+        }
+      }
+    } catch (err) {
+      if (statusEl) {
+        statusEl.style.background = 'rgba(239, 68, 68, 0.12)';
+        statusEl.style.color = '#f87171';
+        statusEl.textContent = `❌ Network error: ${err.message}`;
+      }
+    } finally {
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Save & Activate Instagram →';
+      }
+    }
+  }
+
+  /* -------------------------------------------------------------------------
+     5. Connection & Manual Setup Panel (Tab 5 in Instagram Hub)
+     ------------------------------------------------------------------------- */
+  renderConnectSettingsPanel() {
+    const org = window.appState.getCurrentOrg();
+    const isConnected = Boolean(org.instagramConnected && org.instagramUsername);
+
+    const indicatorEl = document.getElementById('ig-panel-status-indicator');
+    const disconnectBtn = document.getElementById('ig-panel-disconnect-btn');
+    const usernameInp = document.getElementById('ig-panel-username');
+    const bizIdInp = document.getElementById('ig-panel-business-id');
+    const pageIdInp = document.getElementById('ig-panel-page-id');
+    const pageNameInp = document.getElementById('ig-panel-page-name');
+
+    if (indicatorEl) {
+      if (isConnected) {
+        indicatorEl.innerHTML = `<span class="badge" style="background: rgba(16, 185, 129, 0.2); color: #34d399; font-weight: 700;">● Connected &amp; Active (@${org.instagramUsername})</span>`;
+      } else {
+        indicatorEl.innerHTML = `<span class="badge badge-unqualified">Disconnected</span>`;
+      }
+    }
+
+    if (disconnectBtn) {
+      disconnectBtn.style.display = isConnected ? 'inline-flex' : 'none';
+    }
+
+    if (isConnected) {
+      if (usernameInp && !usernameInp.value) usernameInp.value = org.instagramUsername.replace(/^@/, '');
+      if (bizIdInp && !bizIdInp.value) bizIdInp.value = org.instagramBusinessId || '';
+      if (pageIdInp && !pageIdInp.value) pageIdInp.value = org.instagramPageId || '';
+      if (pageNameInp && !pageNameInp.value) pageNameInp.value = org.instagramPageName || '';
+    }
+  }
+
+  async testPanelInstagramConnection() {
+    const token = document.getElementById('ig-panel-token')?.value.trim();
+    const businessId = document.getElementById('ig-panel-business-id')?.value.trim();
+    const statusEl = document.getElementById('ig-panel-status-msg');
+    const testBtn = document.getElementById('ig-panel-test-btn');
+
+    if (!token) {
+      if (statusEl) {
+        statusEl.style.display = 'block';
+        statusEl.style.background = 'rgba(239, 68, 68, 0.12)';
+        statusEl.style.color = '#f87171';
+        statusEl.textContent = '⚠️ Please enter the Meta Permanent Access Token to test.';
+      }
+      return;
+    }
+
+    if (testBtn) {
+      testBtn.disabled = true;
+      testBtn.textContent = '⏳ Testing…';
+    }
+    if (statusEl) {
+      statusEl.style.display = 'block';
+      statusEl.style.background = 'rgba(96, 165, 250, 0.1)';
+      statusEl.style.color = '#93c5fd';
+      statusEl.textContent = 'Testing Meta Graph API connection…';
+    }
+
+    try {
+      let verifiedData = null;
+      try {
+        const res = await fetch('/api/instagram?action=test_connection', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ accessToken: token, instagramBusinessId: businessId || null })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data.success) {
+          verifiedData = data.account;
+        } else if (res.status === 400 || res.status === 401) {
+          throw new Error(data.error || 'Invalid Token or Instagram Account');
+        }
+      } catch (serverErr) {
+        if (!verifiedData && businessId) {
+          const testUrl = `https://graph.facebook.com/v22.0/${businessId}?fields=id,username,name,followers_count&access_token=${encodeURIComponent(token)}`;
+          const res = await fetch(testUrl);
+          const data = await res.json();
+          if (data?.id) {
+            verifiedData = {
+              username: data.username || data.name || `ID:${businessId}`,
+              followersCount: data.followers_count
+            };
+          } else {
+            throw new Error(data?.error?.message || serverErr.message || 'Invalid Token or Business ID');
+          }
+        } else {
+          throw serverErr;
+        }
+      }
+
+      if (verifiedData) {
+        const username = verifiedData.username || verifiedData.name || (businessId ? `ID:${businessId}` : 'Meta Account');
+        if (statusEl) {
+          statusEl.style.background = 'rgba(16, 185, 129, 0.12)';
+          statusEl.style.color = '#34d399';
+          statusEl.textContent = `✅ Connection verified! Account: @${username}${verifiedData.followersCount ? ` · ${verifiedData.followersCount.toLocaleString()} followers` : ''}`;
+        }
+        const usernameEl = document.getElementById('ig-panel-username');
+        if (usernameEl && verifiedData.username && !usernameEl.value) {
+          usernameEl.value = verifiedData.username;
+        }
+      }
+    } catch (err) {
+      if (statusEl) {
+        statusEl.style.background = 'rgba(239, 68, 68, 0.12)';
+        statusEl.style.color = '#f87171';
+        statusEl.textContent = `❌ Meta API Error: ${err.message}`;
+      }
+    } finally {
+      if (testBtn) {
+        testBtn.disabled = false;
+        testBtn.textContent = '🧪 Test Meta Graph API Connection';
+      }
+    }
+  }
+
+  async handleSavePanelConnection(e) {
+    if (e) e.preventDefault();
+    const org = window.appState.getCurrentOrg();
+    const username = document.getElementById('ig-panel-username')?.value.trim().replace(/^@/, '');
+    const businessId = document.getElementById('ig-panel-business-id')?.value.trim();
+    const pageId = document.getElementById('ig-panel-page-id')?.value.trim() || null;
+    const pageName = document.getElementById('ig-panel-page-name')?.value.trim() || null;
+    const token = document.getElementById('ig-panel-token')?.value.trim();
+    const statusEl = document.getElementById('ig-panel-status-msg');
+    const submitBtn = document.getElementById('ig-panel-submit-btn');
+
+    if (!username || !businessId || !token) {
+      if (statusEl) {
+        statusEl.style.display = 'block';
+        statusEl.style.background = 'rgba(239, 68, 68, 0.12)';
+        statusEl.style.color = '#f87171';
+        statusEl.textContent = '⚠️ Username, Business Account ID, and Access Token are required.';
+      }
+      return;
+    }
+
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.textContent = '⏳ Saving…';
+    }
+    if (statusEl) {
+      statusEl.style.display = 'block';
+      statusEl.style.background = 'rgba(96, 165, 250, 0.1)';
+      statusEl.style.color = '#93c5fd';
+      statusEl.textContent = 'Saving Instagram credentials…';
+    }
+
+    try {
+      const orgId = org.id || 'default_org';
+      const res = await fetch('/api/instagram?action=connect_manual', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          organizationId: orgId,
+          accessToken: token,
+          instagramBusinessId: businessId,
+          username,
+          pageId,
+          pageName,
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (res.ok && data.success) {
+        org.instagramConnected = true;
+        org.instagramUsername = data.account?.username || username;
+        org.instagramBusinessId = data.account?.instagramBusinessId || businessId;
+        org.instagramPageId = data.account?.pageId || pageId;
+        org.instagramPageName = data.account?.pageName || pageName;
+        window.appState.saveState();
+        window.appState.emit('instagramConnectionChanged', { status: 'CONNECTED', account: data.account });
+        window.appState.addAuditLog(
+          'Instagram Manual Token Connected',
+          `@${org.instagramUsername}`,
+          `Instagram Business Account ID: ${org.instagramBusinessId} connected via permanent token.`,
+          'Success'
+        );
+
+        if (statusEl) {
+          statusEl.style.background = 'rgba(16, 185, 129, 0.12)';
+          statusEl.style.color = '#34d399';
+          statusEl.textContent = `✅ Instagram @${org.instagramUsername} saved and activated!`;
         }
         this.render();
       } else {

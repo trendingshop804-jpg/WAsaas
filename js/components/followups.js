@@ -51,6 +51,18 @@ class FollowUpsComponent {
       });
     }
 
+    // Auto Followup: Run Now button (panel)
+    document.addEventListener('click', (e) => {
+      if (e.target.closest('#auto-followup-run-btn') || e.target.closest('#followup-run-auto-btn')) {
+        e.preventDefault();
+        this.runDailyFollowup('followup');
+      }
+      if (e.target.closest('#auto-followup-welcome-btn')) {
+        e.preventDefault();
+        this.runDailyFollowup('welcome');
+      }
+    });
+
     // Add Lead Button in view-followups
     const newLeadBtn = document.getElementById('followup-new-lead-btn');
     if (newLeadBtn) {
@@ -924,6 +936,165 @@ class FollowUpsComponent {
       toast.style.transform = 'translateY(10px)';
       setTimeout(() => toast.remove(), 300);
     }, 4000);
+  }
+
+  // -------------------------------------------------------------------------
+  // AI Auto Daily Followup Runner
+  // Calls /api/daily-followup to send WhatsApp messages to all due leads
+  // -------------------------------------------------------------------------
+  async runDailyFollowup(type = 'followup') {
+    const runBtn = document.getElementById('auto-followup-run-btn');
+    const headerBtn = document.getElementById('followup-run-auto-btn');
+    const welcomeBtn = document.getElementById('auto-followup-welcome-btn');
+    const resultEl = document.getElementById('auto-followup-result');
+    const badgeEl = document.getElementById('auto-followup-status-badge');
+
+    const isWelcome = type === 'welcome';
+    const activeBtn = isWelcome ? welcomeBtn : runBtn;
+
+    // UI: Loading state
+    if (activeBtn) {
+      activeBtn.disabled = true;
+      activeBtn.textContent = isWelcome ? '⏳ Sending Welcome Messages…' : '⏳ Processing Due Followups…';
+    }
+    if (headerBtn && !isWelcome) {
+      headerBtn.disabled = true;
+      headerBtn.textContent = '⏳ Processing…';
+    }
+    if (badgeEl) {
+      badgeEl.innerHTML = `<span class="badge" style="background: rgba(245,158,11,0.2); color: #fbbf24; font-weight: 700;">⏳ Running…</span>`;
+    }
+    if (resultEl) {
+      resultEl.style.display = 'block';
+      resultEl.innerHTML = `
+        <div style="background: rgba(96,165,250,0.1); border: 1px solid rgba(96,165,250,0.3); border-radius: 8px; padding: 12px 16px; font-size: 13px; color: #93c5fd; display: flex; align-items: center; gap: 10px;">
+          <span style="font-size: 18px; animation: spin 1s linear infinite; display: inline-block;">⚙️</span>
+          <span>${isWelcome ? 'Sending Welcome WhatsApp messages to new leads via Meta Cloud API…' : 'Finding due follow-up leads and sending WhatsApp messages via Meta Cloud API…'}</span>
+        </div>
+      `;
+    }
+
+    const url = isWelcome ? '/api/daily-followup?action=welcome' : '/api/daily-followup';
+
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (res.ok) {
+        const { processed = 0, sent = 0, failed = 0, paused = 0, completed = 0, status, message } = data;
+
+        // Skipped (not configured)
+        if (status === 'Skipped') {
+          if (resultEl) {
+            resultEl.innerHTML = `
+              <div style="background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.3); border-radius: 8px; padding: 14px 16px; font-size: 13px;">
+                <div style="font-weight: 700; color: #fbbf24; margin-bottom: 6px;">⚠️ WhatsApp Not Configured</div>
+                <div style="color: var(--text-secondary); font-size: 12.5px; line-height: 1.6;">
+                  ${message || 'Add WHATSAPP_ACCESS_TOKEN and WHATSAPP_PHONE_NUMBER_ID to your .env file to enable auto sending.'}
+                </div>
+                <div style="margin-top: 10px; font-size: 12px; color: var(--text-muted);">
+                  📁 Edit <code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px;">.env</code> → add your Meta WhatsApp credentials → restart the server.
+                </div>
+              </div>
+            `;
+          }
+          if (badgeEl) {
+            badgeEl.innerHTML = `<span class="badge" style="background: rgba(245,158,11,0.2); color: #fbbf24; font-weight: 700;">⚠️ Not Configured</span>`;
+          }
+        } else {
+          // Success
+          const isAllSent = sent > 0;
+          const resultColor = isAllSent ? '#34d399' : '#93c5fd';
+
+          if (resultEl) {
+            resultEl.innerHTML = `
+              <div style="background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.3); border-radius: 8px; padding: 14px 16px;">
+                <div style="font-weight: 700; font-size: 14px; color: #34d399; margin-bottom: 10px;">
+                  ✅ ${isWelcome ? 'Welcome Messages' : 'Daily Followup'} Run Complete
+                </div>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; font-size: 12.5px;">
+                  <div style="background: var(--bg-tertiary); border-radius: 6px; padding: 8px 12px; text-align: center;">
+                    <div style="color: var(--text-muted); font-size: 11px;">Processed</div>
+                    <div style="font-size: 20px; font-weight: 800; color: var(--text-primary);">${processed}</div>
+                  </div>
+                  <div style="background: var(--bg-tertiary); border-radius: 6px; padding: 8px 12px; text-align: center;">
+                    <div style="color: var(--text-muted); font-size: 11px;">✅ Sent</div>
+                    <div style="font-size: 20px; font-weight: 800; color: #34d399;">${sent}</div>
+                  </div>
+                  ${!isWelcome ? `
+                  <div style="background: var(--bg-tertiary); border-radius: 6px; padding: 8px 12px; text-align: center;">
+                    <div style="color: var(--text-muted); font-size: 11px;">⏸ Paused</div>
+                    <div style="font-size: 20px; font-weight: 800; color: #fbbf24;">${paused}</div>
+                  </div>
+                  <div style="background: var(--bg-tertiary); border-radius: 6px; padding: 8px 12px; text-align: center;">
+                    <div style="color: var(--text-muted); font-size: 11px;">🏁 Completed</div>
+                    <div style="font-size: 20px; font-weight: 800; color: #60a5fa;">${completed}</div>
+                  </div>
+                  ` : ''}
+                  <div style="background: var(--bg-tertiary); border-radius: 6px; padding: 8px 12px; text-align: center;">
+                    <div style="color: var(--text-muted); font-size: 11px;">❌ Failed</div>
+                    <div style="font-size: 20px; font-weight: 800; color: #f87171;">${failed}</div>
+                  </div>
+                </div>
+                ${processed === 0 ? `<div style="margin-top: 10px; font-size: 12.5px; color: var(--text-secondary);">ℹ️ No due leads found — all followups are up to date or paused.</div>` : ''}
+                <div style="margin-top: 8px; font-size: 11.5px; color: var(--text-muted);">Last run: ${new Date().toLocaleString()}</div>
+              </div>
+            `;
+          }
+          if (badgeEl) {
+            badgeEl.innerHTML = `<span class="badge" style="background: rgba(16,185,129,0.2); color: #34d399; font-weight: 700;">✅ Last run: ${sent} sent</span>`;
+          }
+
+          this.showToast(
+            isWelcome ? '📩 Welcome Messages Sent' : '🤖 Auto Followup Complete',
+            `Processed: ${processed} | Sent: ${sent} | Failed: ${failed}`,
+            sent > 0 ? 'success' : 'info'
+          );
+
+          // Refresh the lead queue display
+          this.render();
+        }
+      } else {
+        const errMsg = data.error || `Server returned HTTP ${res.status}`;
+        if (resultEl) {
+          resultEl.innerHTML = `
+            <div style="background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); border-radius: 8px; padding: 12px 16px; font-size: 13px; color: #f87171;">
+              <strong>❌ Followup Run Failed:</strong> ${this.escapeHtml(errMsg)}
+            </div>
+          `;
+        }
+        if (badgeEl) {
+          badgeEl.innerHTML = `<span class="badge badge-unqualified">❌ Run Failed</span>`;
+        }
+        this.showToast('Auto Followup Failed', errMsg, 'warning');
+      }
+    } catch (err) {
+      const errMsg = err.message || 'Network error';
+      if (resultEl) {
+        resultEl.innerHTML = `
+          <div style="background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); border-radius: 8px; padding: 12px 16px; font-size: 13px; color: #f87171;">
+            <strong>❌ Network Error:</strong> ${this.escapeHtml(errMsg)}<br>
+            <span style="font-size: 12px; color: var(--text-muted); margin-top: 4px; display: block;">Make sure the dev server is running at localhost:3000.</span>
+          </div>
+        `;
+      }
+      if (badgeEl) {
+        badgeEl.innerHTML = `<span class="badge badge-unqualified">❌ Connection Error</span>`;
+      }
+      this.showToast('Connection Error', 'Could not reach /api/daily-followup. Is the server running?', 'warning');
+    } finally {
+      if (activeBtn) {
+        activeBtn.disabled = false;
+        activeBtn.textContent = isWelcome ? '📩 Send Welcome to New Leads' : '▶ Run Now (Send Due Followups)';
+      }
+      if (headerBtn && !isWelcome) {
+        headerBtn.disabled = false;
+        headerBtn.textContent = '🤖 Run AI Auto Followup';
+      }
+    }
   }
 
   escapeHtml(str) {

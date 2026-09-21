@@ -20,11 +20,12 @@ class WhatsAppConnectComponent {
     this.render();
 
     window.appState.on('whatsappConnectionChanged', () => this.render());
+    window.appState.on('instagramConnectionChanged', () => this.render());
     window.appState.on('orgChanged', () => this.render());
   }
 
   bindEvents() {
-    // Method selector tabs (Meta vs QR)
+    // Method selector tabs (Meta vs QR vs Instagram Manual)
     document.querySelectorAll('.wa-method-tab').forEach(tab => {
       tab.addEventListener('click', () => {
         document.querySelectorAll('.wa-method-tab').forEach(t => t.classList.remove('active'));
@@ -91,6 +92,30 @@ class WhatsAppConnectComponent {
       simulateScanBtn.addEventListener('click', () => this.handleSimulateQRScan());
     }
 
+    // Method C: Test Instagram manual connection
+    document.addEventListener('click', (e) => {
+      if (e.target.closest('#wa-ig-manual-test-btn')) {
+        e.preventDefault();
+        this.testInstagramConnection();
+      }
+    });
+
+    // Method C: Save Instagram manual connection form
+    document.addEventListener('submit', (e) => {
+      if (e.target.id === 'wa-ig-manual-form') {
+        e.preventDefault();
+        this.handleSaveInstagramConnection(e);
+      }
+    });
+
+    // Method C: Disconnect Instagram
+    document.addEventListener('click', (e) => {
+      if (e.target.closest('#wa-ig-manual-disconnect-btn')) {
+        e.preventDefault();
+        this.disconnectInstagram();
+      }
+    });
+
     // Disconnect buttons
     document.querySelectorAll('.wa-disconnect-btn').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -104,12 +129,40 @@ class WhatsAppConnectComponent {
   render() {
     const org = window.appState.getCurrentOrg();
     const isConnected = org.whatsappConnected;
+    const isIgConnected = Boolean(org.instagramConnected && org.instagramUsername);
 
     const metaView = document.getElementById('wa-method-meta-view');
     const qrView = document.getElementById('wa-method-qr-view');
+    const igManualView = document.getElementById('wa-method-ig-manual-view');
 
     if (metaView) metaView.style.display = this.currentMethod === 'meta' ? 'block' : 'none';
     if (qrView) qrView.style.display = this.currentMethod === 'qr' ? 'block' : 'none';
+    if (igManualView) igManualView.style.display = this.currentMethod === 'ig-manual' ? 'block' : 'none';
+
+    // Render Instagram Manual Section State
+    const igBadge = document.getElementById('wa-ig-status-badge');
+    const igDisconnectBtn = document.getElementById('wa-ig-manual-disconnect-btn');
+    const igUsernameInp = document.getElementById('wa-ig-manual-username');
+    const igBizIdInp = document.getElementById('wa-ig-manual-business-id');
+    const igPageIdInp = document.getElementById('wa-ig-manual-page-id');
+    const igPageNameInp = document.getElementById('wa-ig-manual-page-name');
+
+    if (igBadge) {
+      if (isIgConnected) {
+        igBadge.innerHTML = `<span class="badge" style="background: rgba(16, 185, 129, 0.2); color: #34d399; font-weight: 700;">● Connected (@${org.instagramUsername})</span>`;
+      } else {
+        igBadge.innerHTML = `<span class="badge badge-unqualified">Disconnected</span>`;
+      }
+    }
+    if (igDisconnectBtn) {
+      igDisconnectBtn.style.display = isIgConnected ? 'inline-flex' : 'none';
+    }
+    if (isIgConnected) {
+      if (igUsernameInp && !igUsernameInp.value) igUsernameInp.value = org.instagramUsername.replace(/^@/, '');
+      if (igBizIdInp && !igBizIdInp.value) igBizIdInp.value = org.instagramBusinessId || '';
+      if (igPageIdInp && !igPageIdInp.value) igPageIdInp.value = org.instagramPageId || '';
+      if (igPageNameInp && !igPageNameInp.value) igPageNameInp.value = org.instagramPageName || '';
+    }
 
     // Status Banner
     const statusBanner = document.getElementById('wa-global-status-banner');
@@ -947,6 +1000,218 @@ class WhatsAppConnectComponent {
     const phoneNumber = document.getElementById('qr-phone-input')?.value || '+91 94471 88990';
     window.whatsappService.simulateQRScanSuccess(phoneNumber);
     alert(`QR Code successfully scanned by device (${phoneNumber})!`);
+  }
+
+  /* ══════════════════════════════════════════════════════════════════════
+     METHOD C: INSTAGRAM MANUAL TOKEN CONNECTION
+     ══════════════════════════════════════════════════════════════════════ */
+  async testInstagramConnection() {
+    const token = document.getElementById('wa-ig-manual-token')?.value.trim();
+    const businessId = document.getElementById('wa-ig-manual-business-id')?.value.trim();
+    const statusEl = document.getElementById('wa-ig-manual-status-msg');
+    const testBtn = document.getElementById('wa-ig-manual-test-btn');
+
+    if (!token) {
+      if (statusEl) {
+        statusEl.style.display = 'block';
+        statusEl.style.background = 'rgba(239, 68, 68, 0.12)';
+        statusEl.style.color = '#f87171';
+        statusEl.textContent = '⚠️ Please enter your Meta Permanent Access Token to test.';
+      }
+      return;
+    }
+
+    if (testBtn) {
+      testBtn.disabled = true;
+      testBtn.textContent = '⏳ Testing…';
+    }
+    if (statusEl) {
+      statusEl.style.display = 'block';
+      statusEl.style.background = 'rgba(96, 165, 250, 0.1)';
+      statusEl.style.color = '#93c5fd';
+      statusEl.textContent = 'Testing Meta Graph API connection…';
+    }
+
+    try {
+      let verifiedData = null;
+      try {
+        const res = await fetch('/api/instagram?action=test_connection', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ accessToken: token, instagramBusinessId: businessId || null })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data.success) {
+          verifiedData = data.account;
+        } else if (res.status === 400 || res.status === 401) {
+          throw new Error(data.error || 'Invalid Token or Instagram Account');
+        }
+      } catch (serverErr) {
+        if (!verifiedData && businessId) {
+          const testUrl = `https://graph.facebook.com/v22.0/${businessId}?fields=id,username,name,followers_count&access_token=${encodeURIComponent(token)}`;
+          const res = await fetch(testUrl);
+          const data = await res.json();
+          if (data?.id) {
+            verifiedData = {
+              username: data.username || data.name || `ID:${businessId}`,
+              followersCount: data.followers_count
+            };
+          } else {
+            throw new Error(data?.error?.message || serverErr.message || 'Invalid Token or Business ID');
+          }
+        } else {
+          throw serverErr;
+        }
+      }
+
+      if (verifiedData) {
+        const username = verifiedData.username || verifiedData.name || (businessId ? `ID:${businessId}` : 'Meta Account');
+        if (statusEl) {
+          statusEl.style.background = 'rgba(16, 185, 129, 0.12)';
+          statusEl.style.color = '#34d399';
+          statusEl.textContent = `✅ Connection verified! Account: @${username}${verifiedData.followersCount ? ` · ${verifiedData.followersCount.toLocaleString()} followers` : ''}`;
+        }
+        const usernameEl = document.getElementById('wa-ig-manual-username');
+        if (usernameEl && verifiedData.username && !usernameEl.value) {
+          usernameEl.value = verifiedData.username;
+        }
+      }
+    } catch (err) {
+      if (statusEl) {
+        statusEl.style.background = 'rgba(239, 68, 68, 0.12)';
+        statusEl.style.color = '#f87171';
+        statusEl.textContent = `❌ Meta API Error: ${err.message}`;
+      }
+    } finally {
+      if (testBtn) {
+        testBtn.disabled = false;
+        testBtn.textContent = '🧪 Test Meta Graph API Connection';
+      }
+    }
+  }
+
+  async handleSaveInstagramConnection(e) {
+    if (e) e.preventDefault();
+    const org = window.appState.getCurrentOrg();
+    const username = document.getElementById('wa-ig-manual-username')?.value.trim().replace(/^@/, '');
+    const businessId = document.getElementById('wa-ig-manual-business-id')?.value.trim();
+    const pageId = document.getElementById('wa-ig-manual-page-id')?.value.trim() || null;
+    const pageName = document.getElementById('wa-ig-manual-page-name')?.value.trim() || null;
+    const token = document.getElementById('wa-ig-manual-token')?.value.trim();
+    const statusEl = document.getElementById('wa-ig-manual-status-msg');
+    const submitBtn = document.getElementById('wa-ig-manual-submit-btn');
+
+    if (!username || !businessId || !token) {
+      if (statusEl) {
+        statusEl.style.display = 'block';
+        statusEl.style.background = 'rgba(239, 68, 68, 0.12)';
+        statusEl.style.color = '#f87171';
+        statusEl.textContent = '⚠️ Username, Business Account ID, and Access Token are required.';
+      }
+      return;
+    }
+
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.textContent = '⏳ Saving…';
+    }
+    if (statusEl) {
+      statusEl.style.display = 'block';
+      statusEl.style.background = 'rgba(96, 165, 250, 0.1)';
+      statusEl.style.color = '#93c5fd';
+      statusEl.textContent = 'Saving Instagram credentials…';
+    }
+
+    try {
+      const orgId = org.id || 'default_org';
+      const res = await fetch('/api/instagram?action=connect_manual', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          organizationId: orgId,
+          accessToken: token,
+          instagramBusinessId: businessId,
+          username,
+          pageId,
+          pageName,
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (res.ok && data.success) {
+        org.instagramConnected = true;
+        org.instagramUsername = data.account?.username || username;
+        org.instagramBusinessId = data.account?.instagramBusinessId || businessId;
+        org.instagramPageId = data.account?.pageId || pageId;
+        org.instagramPageName = data.account?.pageName || pageName;
+        window.appState.saveState();
+        window.appState.emit('instagramConnectionChanged', { status: 'CONNECTED', account: data.account });
+        window.appState.addAuditLog(
+          'Instagram Manual Token Connected',
+          `@${org.instagramUsername}`,
+          `Instagram Business Account ID: ${org.instagramBusinessId} connected via permanent token.`,
+          'Success'
+        );
+
+        if (statusEl) {
+          statusEl.style.background = 'rgba(16, 185, 129, 0.12)';
+          statusEl.style.color = '#34d399';
+          statusEl.textContent = `✅ Instagram @${org.instagramUsername} connected successfully!`;
+        }
+        this.render();
+      } else {
+        const errMsg = data.error || `Server error (HTTP ${res.status})`;
+        if (statusEl) {
+          statusEl.style.background = 'rgba(239, 68, 68, 0.12)';
+          statusEl.style.color = '#f87171';
+          statusEl.textContent = `❌ ${errMsg}`;
+        }
+      }
+    } catch (err) {
+      if (statusEl) {
+        statusEl.style.background = 'rgba(239, 68, 68, 0.12)';
+        statusEl.style.color = '#f87171';
+        statusEl.textContent = `❌ Network error: ${err.message}`;
+      }
+    } finally {
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Save & Activate Instagram →';
+      }
+    }
+  }
+
+  disconnectInstagram() {
+    if (!confirm('Disconnect Instagram account from this workspace?')) return;
+    const org = window.appState.getCurrentOrg();
+    if (org.id) {
+      fetch('/api/instagram?action=disconnect', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          organizationId: org.id,
+          instagramBusinessId: org.instagramBusinessId
+        })
+      }).catch(err => console.warn('[IG Disconnect] Notice:', err.message));
+    }
+
+    org.instagramConnected = false;
+    org.instagramUsername = null;
+    org.instagramBusinessId = null;
+    org.instagramPageId = null;
+    window.appState.saveState();
+    window.appState.emit('instagramConnectionChanged', { status: 'DISCONNECTED' });
+    window.appState.addAuditLog('Instagram Disconnected', 'Instagram Account', 'Instagram disconnected by admin.', 'Success');
+    
+    const statusEl = document.getElementById('wa-ig-manual-status-msg');
+    if (statusEl) {
+      statusEl.style.display = 'block';
+      statusEl.style.background = 'rgba(239, 68, 68, 0.12)';
+      statusEl.style.color = '#f87171';
+      statusEl.textContent = 'Instagram account has been disconnected.';
+    }
+    this.render();
   }
 }
 

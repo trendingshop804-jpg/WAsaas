@@ -21,10 +21,22 @@ globalThis.fetch = async (input, init = {}) => {
   const json = (body, status = 200) =>
     new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 
-  // Instagram Graph API send
-  if (url.includes('graph.facebook.com') && url.includes('/messages')) {
-    state.graphPost.push({ url, body: JSON.parse(init.body || '{}'), headers });
-    return json({ recipient_id: 'ig_user_1', message_id: 'mid.ig_test_123' });
+  // Instagram Graph API send / verification
+  if (url.includes('graph.facebook.com')) {
+    if (url.includes('/messages')) {
+      state.graphPost.push({ url, body: JSON.parse(init.body || '{}'), headers });
+      return json({ recipient_id: 'ig_user_1', message_id: 'mid.ig_test_123' });
+    }
+    if (url.includes('subscribed_apps')) {
+      return json({ success: true });
+    }
+    // Account details
+    return json({
+      id: 'ig_biz_456',
+      username: 'test_brand',
+      name: 'Test Brand Name',
+      followers_count: 1250
+    });
   }
 
   // Instagram Media Download
@@ -181,6 +193,47 @@ await test('Instagram DM webhook processes photo attachment and uploads to stora
   assert.equal(insertedMsg.data.channel, 'instagram');
   assert.equal(insertedMsg.data.message_type, 'image');
   assert.ok(insertedMsg.data.media_url, 'Media url stored');
+});
+
+const { default: instagramApi } = await import('../api/instagram.js');
+
+await test('Instagram test_connection validates Meta token and returns account info', async () => {
+  const res = mockRes();
+  const req = {
+    method: 'POST',
+    query: { action: 'test_connection' },
+    body: {
+      accessToken: 'EAAG_test_token',
+      instagramBusinessId: 'ig_biz_456'
+    }
+  };
+
+  await instagramApi(req, res);
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.payload.success, true);
+  assert.equal(res.payload.verified, true);
+  assert.equal(res.payload.account.username, 'test_brand');
+});
+
+await test('Instagram connect_manual saves token and links Instagram account', async () => {
+  const res = mockRes();
+  const req = {
+    method: 'POST',
+    query: { action: 'connect_manual' },
+    body: {
+      organizationId: 'org_1',
+      accessToken: 'EAAG_permanent_token_123',
+      instagramBusinessId: 'ig_biz_456',
+      username: 'test_brand',
+      pageId: 'page_123'
+    }
+  };
+
+  await instagramApi(req, res);
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.payload.success, true);
+  assert.equal(res.payload.account.username, 'test_brand');
+  assert.equal(res.payload.account.instagramBusinessId, 'ig_biz_456');
 });
 
 globalThis.fetch = realFetch;

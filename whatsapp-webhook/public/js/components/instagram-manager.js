@@ -770,12 +770,12 @@ class InstagramManagerComponent {
     const businessId = document.getElementById('ig-manual-business-id')?.value.trim();
     const statusEl = document.getElementById('ig-manual-status-msg');
 
-    if (!token || !businessId) {
+    if (!token) {
       if (statusEl) {
         statusEl.style.display = 'block';
         statusEl.style.background = 'rgba(239, 68, 68, 0.12)';
         statusEl.style.color = '#f87171';
-        statusEl.textContent = '⚠️ Please enter both Instagram Business ID and Access Token to test.';
+        statusEl.textContent = '⚠️ Please enter the Meta Permanent Access Token to test.';
       }
       return;
     }
@@ -793,36 +793,58 @@ class InstagramManagerComponent {
     }
 
     try {
-      const testUrl = `https://graph.facebook.com/v22.0/${businessId}?fields=id,username,name,followers_count&access_token=${encodeURIComponent(token)}`;
-      const res = await fetch(testUrl);
-      const data = await res.json();
+      let verifiedData = null;
 
-      if (data?.id) {
-        const username = data.username || data.name || `ID:${businessId}`;
+      // 1. Try server-side test_connection endpoint first (bypasses browser CORS)
+      try {
+        const res = await fetch('/api/instagram?action=test_connection', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ accessToken: token, instagramBusinessId: businessId || null })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data.success) {
+          verifiedData = data.account;
+        } else if (res.status === 400 || res.status === 401) {
+          throw new Error(data.error || 'Invalid Token or Instagram Account');
+        }
+      } catch (serverErr) {
+        // Fallback to direct client-side fetch if server returned unexpected non-validation error
+        if (!verifiedData && businessId) {
+          const testUrl = `https://graph.facebook.com/v22.0/${businessId}?fields=id,username,name,followers_count&access_token=${encodeURIComponent(token)}`;
+          const res = await fetch(testUrl);
+          const data = await res.json();
+          if (data?.id) {
+            verifiedData = {
+              username: data.username || data.name || `ID:${businessId}`,
+              followersCount: data.followers_count
+            };
+          } else {
+            throw new Error(data?.error?.message || serverErr.message || 'Invalid Token or Business ID');
+          }
+        } else {
+          throw serverErr;
+        }
+      }
+
+      if (verifiedData) {
+        const username = verifiedData.username || verifiedData.name || (businessId ? `ID:${businessId}` : 'Meta Account');
         if (statusEl) {
           statusEl.style.background = 'rgba(16, 185, 129, 0.12)';
           statusEl.style.color = '#34d399';
-          statusEl.textContent = `✅ Connection verified! Account: @${username}${data.followers_count ? ` · ${data.followers_count.toLocaleString()} followers` : ''}`;
+          statusEl.textContent = `✅ Connection verified! Account: @${username}${verifiedData.followersCount ? ` · ${verifiedData.followersCount.toLocaleString()} followers` : ''}`;
         }
         // Auto-fill username from verified response
         const usernameEl = document.getElementById('ig-manual-username');
-        if (usernameEl && data.username && !usernameEl.value) {
-          usernameEl.value = data.username;
-        }
-      } else {
-        const errMsg = data?.error?.message || 'Invalid token or Business ID';
-        const errCode = data?.error?.code ? ` [Code ${data.error.code}]` : '';
-        if (statusEl) {
-          statusEl.style.background = 'rgba(239, 68, 68, 0.12)';
-          statusEl.style.color = '#f87171';
-          statusEl.textContent = `❌ Meta API Error${errCode}: ${errMsg}`;
+        if (usernameEl && verifiedData.username && !usernameEl.value) {
+          usernameEl.value = verifiedData.username;
         }
       }
     } catch (err) {
       if (statusEl) {
         statusEl.style.background = 'rgba(239, 68, 68, 0.12)';
         statusEl.style.color = '#f87171';
-        statusEl.textContent = `❌ Network error: ${err.message}`;
+        statusEl.textContent = `❌ Meta API Error: ${err.message}`;
       }
     } finally {
       if (testBtn) {
@@ -865,11 +887,12 @@ class InstagramManagerComponent {
     }
 
     try {
+      const orgId = org.id || 'default_org';
       const res = await fetch('/api/instagram?action=connect_manual', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          organizationId: org.id,
+          organizationId: orgId,
           accessToken: token,
           instagramBusinessId: businessId,
           username,
