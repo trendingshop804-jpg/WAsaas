@@ -26,13 +26,14 @@ class WhatsAppConnectComponent {
 
   bindEvents() {
     // Method selector tabs (Meta vs QR vs Instagram Manual)
-    document.querySelectorAll('.wa-method-tab').forEach(tab => {
-      tab.addEventListener('click', () => {
+    document.addEventListener('click', (e) => {
+      const tab = e.target.closest('.wa-method-tab');
+      if (tab) {
         document.querySelectorAll('.wa-method-tab').forEach(t => t.classList.remove('active'));
         tab.classList.add('active');
         this.currentMethod = tab.getAttribute('data-method');
         this.render();
-      });
+      }
     });
 
     // Method A: Open Meta OAuth Modal

@@ -980,6 +980,7 @@ class FollowUpsComponent {
       const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ leads: window.appState?.state?.leads || [] })
       });
       const data = await res.json().catch(() => ({}));
 

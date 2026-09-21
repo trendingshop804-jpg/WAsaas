@@ -2937,6 +2937,64 @@
   </div>
 
   <!-- Scripts -->
+  <!-- Instagram Manual Token Integration Modal -->
+  <div id="ig-manual-connect-modal" class="modal-backdrop" style="display: none;">
+    <div class="modal-content card" style="max-width: 580px; width: 92%; padding: 24px; border-color: rgba(225, 48, 108, 0.4); background: var(--bg-card);">
+      <div class="flex items-center justify-between" style="margin-bottom: 20px;">
+        <div class="flex items-center gap-3">
+          <div style="width: 40px; height: 40px; border-radius: 10px; background: linear-gradient(45deg, #f09433, #dc2743, #bc1888); color: white; display: flex; align-items: center; justify-content: center;">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line></svg>
+          </div>
+          <div>
+            <h3 style="margin: 0; font-size: 16px;">Instagram Professional Manual Token Connection</h3>
+            <p style="margin: 0; font-size: 12.5px; color: var(--text-secondary);">Direct API connection using Meta Permanent Access Token</p>
+          </div>
+        </div>
+        <button type="button" class="modal-close-btn" data-close-modal style="background: none; border: none; color: var(--text-muted); font-size: 20px; cursor: pointer;">&times;</button>
+      </div>
+
+      <form id="ig-manual-connect-form" class="space-y-4">
+        <div class="form-group">
+          <label class="form-label">Instagram Username *</label>
+          <div style="position: relative;">
+            <span style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-weight: 700;">@</span>
+            <input type="text" id="ig-manual-username" class="form-input" style="padding-left: 28px;" placeholder="e.g. yourbusiness_official" required>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label">Instagram Professional Account ID *</label>
+            <input type="text" id="ig-manual-business-id" class="form-input font-mono" placeholder="e.g. 17841400012345678" required>
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label">Linked Facebook Page ID</label>
+            <input type="text" id="ig-manual-page-id" class="form-input font-mono" placeholder="e.g. 109283746519283">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Linked Facebook Page Name (Optional)</label>
+          <input type="text" id="ig-manual-page-name" class="form-input" placeholder="e.g. Main Brand Page">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Meta Permanent System User Access Token *</label>
+          <input type="password" id="ig-manual-token" class="form-input font-mono" placeholder="EAAG..." required autocomplete="off">
+          <span class="input-hint">Generate in Meta Business Settings → System Users with instagram_basic, instagram_manage_comments & instagram_manage_messages.</span>
+        </div>
+
+        <div id="ig-manual-status-msg" style="font-size: 12.5px; display: none; padding: 10px 14px; border-radius: 6px; line-height: 1.5; font-weight: 500;"></div>
+
+        <div class="flex items-center justify-end gap-2" style="margin-top: 20px;">
+          <button type="button" class="btn btn-secondary" data-close-modal>Cancel</button>
+          <button type="button" id="ig-manual-test-btn" class="btn btn-secondary">🧪 Test Token</button>
+          <button type="submit" id="ig-manual-submit-btn" class="btn btn-primary" style="background: linear-gradient(45deg, #f09433, #dc2743, #bc1888); border: none;">Save &amp; Activate →</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <script src="js/demo-data.js"></script>
   <script src="js/state.js"></script>
   <script src="js/services/supabase-config.js"></script>

@@ -1114,7 +1114,11 @@
                 </button>
               </div>
             </div>
+
+            <!-- Progress / Result Area -->
             <div id="auto-followup-result" style="margin-top: 14px; display: none;"></div>
+
+            <!-- Sequence Stage Guide -->
             <div style="margin-top: 14px; display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px;">
               <div style="background: var(--bg-tertiary); border-radius: 8px; padding: 10px 14px; border: 1px solid var(--border-subtle); text-align: center;">
                 <div style="font-size: 11px; color: var(--text-muted); font-weight: 700; text-transform: uppercase; margin-bottom: 4px;">Day 0</div>
@@ -1492,6 +1496,12 @@
               <p style="color: var(--text-secondary); font-size: 13.5px;">Automate public comment responses, paced comment-to-DM triggers, and cross-format post scheduling.</p>
             </div>
             <div class="flex items-center gap-2">
+              <button type="button" class="btn btn-secondary btn-sm" onclick="window.instagramManagerComponent.openRuleModal('reply')">
+                💬 + Auto-Reply Rule
+              </button>
+              <button type="button" class="btn btn-secondary btn-sm" onclick="window.instagramManagerComponent.openRuleModal('dm')">
+                ✉️ + Comment-to-DM Rule
+              </button>
               <button id="ig-btn-schedule-post-modal" class="btn btn-primary btn-sm">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                 Schedule New Post / Reel
@@ -2544,18 +2554,39 @@
           </div>
         </form>
       </div>
+    </div>
+
     <!-- New Instagram Public Reply Rule Modal -->
     <div id="ig-reply-rule-modal" class="modal-backdrop">
-      <div class="modal-dialog" style="max-width: 520px;">
+      <div class="modal-dialog" style="max-width: 560px;">
         <div class="modal-header">
           <h3>Create Auto-Reply Rule (Public Comment)</h3>
           <button class="btn btn-secondary btn-icon btn-sm" data-close-modal>✕</button>
         </div>
         <form id="ig-reply-rule-form">
           <div class="modal-body">
+            <!-- Preset Quick Auto-Fill Options -->
+            <div style="margin-bottom: 14px; padding: 10px; background: var(--bg-tertiary); border-radius: 8px;">
+              <label class="form-label" style="font-size: 11.5px; margin-bottom: 6px; color: var(--text-secondary);">⚡ Quick Preset Templates:</label>
+              <div class="flex flex-wrap gap-2">
+                <button type="button" class="btn btn-outline btn-sm" style="font-size: 11px; padding: 3px 8px;" onclick="window.instagramManagerComponent.applyPreset('reply', 'pricing')">💰 Price / Cost</button>
+                <button type="button" class="btn btn-outline btn-sm" style="font-size: 11px; padding: 3px 8px;" onclick="window.instagramManagerComponent.applyPreset('reply', 'demo')">🚀 Free Demo Link</button>
+                <button type="button" class="btn btn-outline btn-sm" style="font-size: 11px; padding: 3px 8px;" onclick="window.instagramManagerComponent.applyPreset('reply', 'contact')">📞 Support / Contact</button>
+              </div>
+            </div>
+
             <div class="form-group">
               <label class="form-label">Rule Name</label>
               <input type="text" id="ig-reply-rule-name" class="form-input" placeholder="e.g. Pricing Inquiries Reply" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Trigger Match Type</label>
+              <select id="ig-reply-rule-match-type" class="form-select">
+                <option value="contains" selected>Contains Any Keyword (Flexible Match)</option>
+                <option value="exact">Exact Phrase Match</option>
+                <option value="starts_with">Starts With Keyword</option>
+                <option value="all">Any Comment (Catch-all Reply)</option>
+              </select>
             </div>
             <div class="form-group">
               <label class="form-label">Trigger Keywords (Comma-separated)</label>
@@ -2581,16 +2612,35 @@
 
     <!-- New Instagram Auto-DM Rule Modal -->
     <div id="ig-dm-rule-modal" class="modal-backdrop">
-      <div class="modal-dialog" style="max-width: 520px;">
+      <div class="modal-dialog" style="max-width: 560px;">
         <div class="modal-header">
           <h3>Create Comment-to-DM Private Reply Rule</h3>
           <button class="btn btn-secondary btn-icon btn-sm" data-close-modal>✕</button>
         </div>
         <form id="ig-dm-rule-form">
           <div class="modal-body">
+            <!-- Preset Quick Auto-Fill Options -->
+            <div style="margin-bottom: 14px; padding: 10px; background: var(--bg-tertiary); border-radius: 8px;">
+              <label class="form-label" style="font-size: 11.5px; margin-bottom: 6px; color: var(--text-secondary);">⚡ Quick Preset Templates:</label>
+              <div class="flex flex-wrap gap-2">
+                <button type="button" class="btn btn-outline btn-sm" style="font-size: 11px; padding: 3px 8px;" onclick="window.instagramManagerComponent.applyPreset('dm', 'pricing')">📄 Send Pricing Brochure</button>
+                <button type="button" class="btn btn-outline btn-sm" style="font-size: 11px; padding: 3px 8px;" onclick="window.instagramManagerComponent.applyPreset('dm', 'demo')">🔑 Send Instant Demo Link</button>
+                <button type="button" class="btn btn-outline btn-sm" style="font-size: 11px; padding: 3px 8px;" onclick="window.instagramManagerComponent.applyPreset('dm', 'whatsapp')">💬 Connect via WhatsApp</button>
+              </div>
+            </div>
+
             <div class="form-group">
               <label class="form-label">Rule Name</label>
               <input type="text" id="ig-dm-rule-name" class="form-input" placeholder="e.g. Demo Link to DM" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Trigger Match Type</label>
+              <select id="ig-dm-rule-match-type" class="form-select">
+                <option value="contains" selected>Contains Any Keyword (Flexible Match)</option>
+                <option value="exact">Exact Phrase Match</option>
+                <option value="starts_with">Starts With Keyword</option>
+                <option value="all">Any Comment (Catch-all Private DM)</option>
+              </select>
             </div>
             <div class="form-group">
               <label class="form-label">Trigger Keywords (Comma-separated)</label>
@@ -2665,102 +2715,102 @@
             <button type="button" class="btn btn-secondary" data-close-modal>Cancel</button>
             <button type="submit" class="btn btn-primary">Schedule Post →</button>
           </div>
+    </div>
+
+    <!-- Instagram Manual Token Integration Modal -->
+    <div id="ig-manual-connect-modal" class="modal-backdrop">
+      <div class="modal-dialog" style="max-width: 600px;">
+        <div class="modal-header">
+          <div class="flex items-center gap-2">
+            <div style="width: 32px; height: 32px; border-radius: 8px; background: linear-gradient(45deg, #f09433, #dc2743, #bc1888); display: flex; align-items: center; justify-content: center; color: white;">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line></svg>
+            </div>
+            <div>
+              <h3 style="margin: 0; font-size: 16px;">Instagram Manual Token Integration</h3>
+              <div style="font-size: 11.5px; color: var(--text-secondary);">Direct API Configuration using Meta Permanent System User Token</div>
+            </div>
+          </div>
+          <button class="btn btn-secondary btn-icon btn-sm" data-close-modal>✕</button>
+        </div>
+        <form id="ig-manual-connect-form">
+          <div class="modal-body space-y-4">
+            <!-- Instruction Notice -->
+            <div style="padding: 12px 14px; background: rgba(139, 92, 246, 0.08); border: 1px solid rgba(139, 92, 246, 0.25); border-radius: var(--radius-md); font-size: 12px; color: var(--text-secondary); line-height: 1.5;">
+              💡 <strong>Recommended for Direct API Control</strong>: Connect without browser popup or domain redirect restrictions. Obtain your System User token with permissions: <code>instagram_basic</code>, <code>instagram_manage_comments</code>, <code>instagram_manage_messages</code>, <code>pages_show_list</code>, <code>pages_read_engagement</code>.
+              <a href="https://business.facebook.com/settings/system-users" target="_blank" rel="noopener" style="color: #a78bfa; font-weight: 600; display: inline-block; margin-top: 4px;">Open Meta Business Manager →</a>
+            </div>
+
+            <!-- Inputs Grid -->
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;">
+              <div class="form-group" style="margin-bottom: 0;">
+                <label class="form-label">Instagram Username *</label>
+                <div style="position: relative;">
+                  <span style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-weight: 600;">@</span>
+                  <input type="text" id="ig-manual-username" class="form-input" style="padding-left: 26px;" placeholder="e.g. yourbusiness_official" required>
+                </div>
+              </div>
+              <div class="form-group" style="margin-bottom: 0;">
+                <label class="form-label">Instagram Business Account ID *</label>
+                <input type="text" id="ig-manual-business-id" class="form-input font-mono" placeholder="e.g. 17841400012345678" required>
+              </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;">
+              <div class="form-group" style="margin-bottom: 0;">
+                <label class="form-label">Linked Facebook Page ID</label>
+                <input type="text" id="ig-manual-page-id" class="form-input font-mono" placeholder="e.g. 109283746519283">
+              </div>
+              <div class="form-group" style="margin-bottom: 0;">
+                <label class="form-label">Linked Page Name (Optional)</label>
+                <input type="text" id="ig-manual-page-name" class="form-input" placeholder="e.g. Main Brand Page">
+              </div>
+            </div>
+
+            <!-- Meta Permanent Access Token -->
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="form-label">Meta Permanent / System User Access Token *</label>
+              <input type="password" id="ig-manual-token" class="form-input font-mono" placeholder="EAAG..." required autocomplete="off">
+              <span class="input-hint">Will be encrypted with AES-256 before database storage.</span>
+            </div>
+
+            <!-- Webhook Configuration Guide Card -->
+            <div class="card" style="padding: 12px; background: var(--bg-tertiary); border: 1px solid var(--border-medium); border-radius: var(--radius-md);">
+              <div class="flex items-center justify-between" style="margin-bottom: 6px;">
+                <span style="font-size: 11.5px; font-weight: 700; color: var(--text-primary);">Meta Webhook Setup (App Dashboard → Instagram / Webhooks):</span>
+              </div>
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 11.5px;">
+                <div style="background: var(--bg-card); padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border-subtle);">
+                  <div style="color: var(--text-muted); font-size: 10.5px;">Callback URL:</div>
+                  <code class="font-mono" style="color: #60a5fa; word-break: break-all;">/api/meta-webhook</code>
+                </div>
+                <div style="background: var(--bg-card); padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border-subtle);">
+                  <div style="color: var(--text-muted); font-size: 10.5px;">Verify Token:</div>
+                  <code class="font-mono" style="color: #34d399;">nexuslead_meta_verify_2026</code>
+                </div>
+              </div>
+              <div style="font-size: 11px; color: var(--text-muted); margin-top: 6px;">
+                Subscribed fields: <code>messages</code>, <code>messaging_postbacks</code>, <code>comments</code>, <code>feed</code>
+              </div>
+            </div>
+
+            <!-- Status Msg Container -->
+            <div id="ig-manual-status-msg" style="display: none; font-size: 12.5px; padding: 8px 12px; border-radius: 6px; font-weight: 600;"></div>
+          </div>
+
+          <div class="modal-footer flex items-center justify-between">
+            <button type="button" class="btn btn-secondary btn-sm" data-close-modal>Cancel</button>
+            <div class="flex items-center gap-2">
+              <button type="button" id="ig-manual-test-btn" class="btn btn-secondary btn-sm" style="border-color: rgba(139, 92, 246, 0.4); color: #c4b5fd;">
+                🧪 Test Meta Connection
+              </button>
+              <button type="submit" id="ig-manual-submit-btn" class="btn btn-primary btn-sm" style="background: linear-gradient(45deg, #f09433, #dc2743, #bc1888); border: none;">
+                Save & Activate Instagram →
+              </button>
+            </div>
+          </div>
         </form>
       </div>
     </div>
-  </div>
-
-  <!-- Instagram Manual Token Integration Modal -->
-  <div id="ig-manual-connect-modal" class="modal-backdrop">
-    <div class="modal-dialog" style="max-width: 600px;">
-      <div class="modal-header">
-        <div class="flex items-center gap-2">
-          <div style="width: 32px; height: 32px; border-radius: 8px; background: linear-gradient(45deg, #f09433, #dc2743, #bc1888); display: flex; align-items: center; justify-content: center; color: white;">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line></svg>
-          </div>
-          <div>
-            <h3 style="margin: 0; font-size: 16px;">Instagram Manual Token Integration</h3>
-            <div style="font-size: 11.5px; color: var(--text-secondary);">Direct API Configuration using Meta Permanent System User Token</div>
-          </div>
-        </div>
-        <button class="btn btn-secondary btn-icon btn-sm" data-close-modal>✕</button>
-      </div>
-      <form id="ig-manual-connect-form">
-        <div class="modal-body space-y-4">
-          <!-- Instruction Notice -->
-          <div style="padding: 12px 14px; background: rgba(139, 92, 246, 0.08); border: 1px solid rgba(139, 92, 246, 0.25); border-radius: var(--radius-md); font-size: 12px; color: var(--text-secondary); line-height: 1.5;">
-            💡 <strong>Recommended for Direct API Control</strong>: Connect without browser popup or domain redirect restrictions. Obtain your System User token with permissions: <code>instagram_basic</code>, <code>instagram_manage_comments</code>, <code>instagram_manage_messages</code>, <code>pages_show_list</code>, <code>pages_read_engagement</code>.
-            <a href="https://business.facebook.com/settings/system-users" target="_blank" rel="noopener" style="color: #a78bfa; font-weight: 600; display: inline-block; margin-top: 4px;">Open Meta Business Manager →</a>
-          </div>
-
-          <!-- Inputs Grid -->
-          <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;">
-            <div class="form-group" style="margin-bottom: 0;">
-              <label class="form-label">Instagram Username *</label>
-              <div style="position: relative;">
-                <span style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-weight: 600;">@</span>
-                <input type="text" id="ig-manual-username" class="form-input" style="padding-left: 26px;" placeholder="e.g. yourbusiness_official" required>
-              </div>
-            </div>
-            <div class="form-group" style="margin-bottom: 0;">
-              <label class="form-label">Instagram Business Account ID *</label>
-              <input type="text" id="ig-manual-business-id" class="form-input font-mono" placeholder="e.g. 17841400012345678" required>
-            </div>
-          </div>
-
-          <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;">
-            <div class="form-group" style="margin-bottom: 0;">
-              <label class="form-label">Linked Facebook Page ID</label>
-              <input type="text" id="ig-manual-page-id" class="form-input font-mono" placeholder="e.g. 109283746519283">
-            </div>
-            <div class="form-group" style="margin-bottom: 0;">
-              <label class="form-label">Linked Page Name (Optional)</label>
-              <input type="text" id="ig-manual-page-name" class="form-input" placeholder="e.g. Main Brand Page">
-            </div>
-          </div>
-
-          <!-- Meta Permanent Access Token -->
-          <div class="form-group" style="margin-bottom: 0;">
-            <label class="form-label">Meta Permanent / System User Access Token *</label>
-            <input type="password" id="ig-manual-token" class="form-input font-mono" placeholder="EAAG..." required autocomplete="off">
-            <span class="input-hint">Will be encrypted with AES-256 before database storage.</span>
-          </div>
-
-          <!-- Webhook Configuration Guide Card -->
-          <div class="card" style="padding: 12px; background: var(--bg-tertiary); border: 1px solid var(--border-medium); border-radius: var(--radius-md);">
-            <div class="flex items-center justify-between" style="margin-bottom: 6px;">
-              <span style="font-size: 11.5px; font-weight: 700; color: var(--text-primary);">Meta Webhook Setup (App Dashboard → Instagram / Webhooks):</span>
-            </div>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 11.5px;">
-              <div style="background: var(--bg-card); padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border-subtle);">
-                <div style="color: var(--text-muted); font-size: 10.5px;">Callback URL:</div>
-                <code class="font-mono" style="color: #60a5fa; word-break: break-all;">/api/meta-webhook</code>
-              </div>
-              <div style="background: var(--bg-card); padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border-subtle);">
-                <div style="color: var(--text-muted); font-size: 10.5px;">Verify Token:</div>
-                <code class="font-mono" style="color: #34d399;">nexuslead_meta_verify_2026</code>
-              </div>
-            </div>
-            <div style="font-size: 11px; color: var(--text-muted); margin-top: 6px;">
-              Subscribed fields: <code>messages</code>, <code>messaging_postbacks</code>, <code>comments</code>, <code>feed</code>
-            </div>
-          </div>
-
-          <!-- Status Msg Container -->
-          <div id="ig-manual-status-msg" style="font-size: 12px; color: var(--text-muted); text-align: center; margin-top: 6px; font-weight: 600; display: none; padding: 8px; border-radius: 6px;"></div>
-        </div>
-        <div class="modal-footer" style="display: flex; justify-content: space-between;">
-          <button type="button" id="ig-manual-test-btn" class="btn btn-secondary btn-sm">
-            🧪 Test Connection
-          </button>
-          <div class="flex items-center gap-2">
-            <button type="button" class="btn btn-secondary" data-close-modal>Cancel</button>
-            <button type="submit" id="ig-manual-submit-btn" class="btn btn-primary">Save &amp; Activate Instagram →</button>
-          </div>
-        </div>
-      </form>
-    </div>
-  </div>
 
   <!-- Follow-up: Mark Contacted / Schedule Modal -->
   <div id="followup-contact-modal" class="modal-backdrop">
@@ -2887,6 +2937,64 @@
   </div>
 
   <!-- Scripts -->
+  <!-- Instagram Manual Token Integration Modal -->
+  <div id="ig-manual-connect-modal" class="modal-backdrop" style="display: none;">
+    <div class="modal-content card" style="max-width: 580px; width: 92%; padding: 24px; border-color: rgba(225, 48, 108, 0.4); background: var(--bg-card);">
+      <div class="flex items-center justify-between" style="margin-bottom: 20px;">
+        <div class="flex items-center gap-3">
+          <div style="width: 40px; height: 40px; border-radius: 10px; background: linear-gradient(45deg, #f09433, #dc2743, #bc1888); color: white; display: flex; align-items: center; justify-content: center;">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line></svg>
+          </div>
+          <div>
+            <h3 style="margin: 0; font-size: 16px;">Instagram Professional Manual Token Connection</h3>
+            <p style="margin: 0; font-size: 12.5px; color: var(--text-secondary);">Direct API connection using Meta Permanent Access Token</p>
+          </div>
+        </div>
+        <button type="button" class="modal-close-btn" data-close-modal style="background: none; border: none; color: var(--text-muted); font-size: 20px; cursor: pointer;">&times;</button>
+      </div>
+
+      <form id="ig-manual-connect-form" class="space-y-4">
+        <div class="form-group">
+          <label class="form-label">Instagram Username *</label>
+          <div style="position: relative;">
+            <span style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-weight: 700;">@</span>
+            <input type="text" id="ig-manual-username" class="form-input" style="padding-left: 28px;" placeholder="e.g. yourbusiness_official" required>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label">Instagram Professional Account ID *</label>
+            <input type="text" id="ig-manual-business-id" class="form-input font-mono" placeholder="e.g. 17841400012345678" required>
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label">Linked Facebook Page ID</label>
+            <input type="text" id="ig-manual-page-id" class="form-input font-mono" placeholder="e.g. 109283746519283">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Linked Facebook Page Name (Optional)</label>
+          <input type="text" id="ig-manual-page-name" class="form-input" placeholder="e.g. Main Brand Page">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Meta Permanent System User Access Token *</label>
+          <input type="password" id="ig-manual-token" class="form-input font-mono" placeholder="EAAG..." required autocomplete="off">
+          <span class="input-hint">Generate in Meta Business Settings → System Users with instagram_basic, instagram_manage_comments & instagram_manage_messages.</span>
+        </div>
+
+        <div id="ig-manual-status-msg" style="font-size: 12.5px; display: none; padding: 10px 14px; border-radius: 6px; line-height: 1.5; font-weight: 500;"></div>
+
+        <div class="flex items-center justify-end gap-2" style="margin-top: 20px;">
+          <button type="button" class="btn btn-secondary" data-close-modal>Cancel</button>
+          <button type="button" id="ig-manual-test-btn" class="btn btn-secondary">🧪 Test Token</button>
+          <button type="submit" id="ig-manual-submit-btn" class="btn btn-primary" style="background: linear-gradient(45deg, #f09433, #dc2743, #bc1888); border: none;">Save &amp; Activate →</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <script src="js/demo-data.js"></script>
   <script src="js/state.js"></script>
   <script src="js/services/supabase-config.js"></script>

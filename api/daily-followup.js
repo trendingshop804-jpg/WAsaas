@@ -83,20 +83,35 @@ export default async function handler(req, res) {
     //   - next_followup_at is in the past (or now)
     const nowIso = new Date().toISOString();
 
-    const { data: leads, error: queryError } = await supabase
-      .from('leads')
-      .select('*')
-      .eq('follow_up_enabled', true)
-      .not('follow_up_status', 'in', '("Paused","Completed")')
-      .not('status', 'in', '("REPLIED","replied","Replied","Won","Lost")')
-      .eq('opted_out', false)
-      .lte('next_followup_at', nowIso)
-      .order('next_followup_at', { ascending: true })
-      .limit(50); // Process max 50 leads per run to avoid timeout
+    let leads = [];
+    if (supabase) {
+      const { data: dbLeads, error: queryError } = await supabase
+        .from('leads')
+        .select('*')
+        .eq('follow_up_enabled', true)
+        .not('follow_up_status', 'in', '("Paused","Completed")')
+        .not('status', 'in', '("REPLIED","replied","Replied","Won","Lost")')
+        .eq('opted_out', false)
+        .lte('next_followup_at', nowIso)
+        .order('next_followup_at', { ascending: true })
+        .limit(50);
 
-    if (queryError) {
-      await logAutomationEvent(runId, 'query_failed', null, `DB query error: ${queryError.message}`);
-      throw new Error(`Database query failed: ${queryError.message}`);
+      if (queryError) {
+        await logAutomationEvent(runId, 'query_failed', null, `DB query warning: ${queryError.message}`);
+      } else if (dbLeads?.length) {
+        leads = dbLeads;
+      }
+    }
+
+    if (leads.length === 0 && Array.isArray(req.body?.leads)) {
+      leads = req.body.leads.filter(l => {
+        if (!l || l.opted_out || l.follow_up_enabled === false) return false;
+        if (['Paused', 'Completed'].includes(l.follow_up_status)) return false;
+        if (['REPLIED', 'replied', 'Replied', 'Won', 'Lost'].includes(l.status)) return false;
+        if (!l.next_followup_at || !l.nextFollowupDate) return true;
+        const due = l.next_followup_at || l.nextFollowupDate;
+        return new Date(due) <= new Date();
+      }).slice(0, 50);
     }
 
     const leadCount = (leads || []).length;
