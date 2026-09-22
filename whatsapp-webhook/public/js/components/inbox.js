@@ -745,7 +745,7 @@ class InboxComponent {
     container.innerHTML = convs.map(conv => {
       const isActive = conv.id === this.selectedConvId;
       const isInstagram = conv.channel === 'instagram';
-      const displayName = conv.contactName || conv.leadName || conv.name || (conv.phone ? (conv.phone.startsWith('+') || conv.phone.startsWith('91') || conv.phone.length >= 10 ? `WhatsApp Contact (${conv.phone})` : conv.phone) : (isInstagram ? 'Instagram Lead' : 'WhatsApp Contact'));
+      const displayName = this.formatContactDisplayName(conv.contactName || conv.leadName || conv.name, conv.phone, isInstagram);
       const initials = isInstagram ? 'IG' : (displayName ? displayName.split(' ').map(n=>n[0]).filter(Boolean).join('').substring(0,2).toUpperCase() : 'WC');
       const statusClass = conv.mode === 'AI' ? 'status-ai-active' : 'status-human-active';
 
@@ -825,6 +825,30 @@ class InboxComponent {
     return true;
   }
 
+  formatContactDisplayName(rawName, rawPhone, isInstagram = false) {
+    const nameStr = String(rawName || '').trim();
+    if (nameStr && !nameStr.includes('sent a unknown message') && !nameStr.includes('sent an unknown message') && !nameStr.includes('unknown message')) {
+      if (!nameStr.startsWith('WhatsApp Lead') && !nameStr.startsWith('WhatsApp Contact')) {
+        return nameStr;
+      }
+    }
+    if (rawPhone) {
+      const digits = String(rawPhone).replace(/\D/g, '');
+      let clean = digits;
+      if (digits.length === 10) {
+        clean = `+91 ${digits.slice(0, 5)} ${digits.slice(5)}`;
+      } else if (digits.startsWith('91') && digits.length === 12) {
+        clean = `+91 ${digits.slice(2, 7)} ${digits.slice(7)}`;
+      } else if (digits.length >= 7 && digits.length <= 15) {
+        clean = `+${digits}`;
+      } else {
+        clean = String(rawPhone);
+      }
+      return `WhatsApp Contact (${clean})`;
+    }
+    return isInstagram ? 'Instagram Lead' : 'WhatsApp Contact';
+  }
+
   /* ── 2. Center Panel: Active Chat Window ────────────────────────────── */
   renderActiveChat() {
     const convs = window.appState.get('conversations') || [];
@@ -846,7 +870,7 @@ class InboxComponent {
       ? `<span style="background: linear-gradient(45deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888); color: #fff; font-size: 10.5px; font-weight: 700; padding: 2px 7px; border-radius: 4px; display: inline-flex; align-items: center; gap: 4px;">📸 Instagram</span>`
       : `<span style="background: #25d366; color: #fff; font-size: 10.5px; font-weight: 700; padding: 2px 7px; border-radius: 4px; display: inline-flex; align-items: center; gap: 4px;">💬 WhatsApp</span>`;
 
-    const displayName = conv.contactName || conv.leadName || conv.name || (conv.phone ? (conv.phone.startsWith('+') || conv.phone.startsWith('91') || conv.phone.length >= 10 ? `WhatsApp Contact (${conv.phone})` : conv.phone) : (isInstagram ? 'Instagram Lead' : 'WhatsApp Contact'));
+    const displayName = this.formatContactDisplayName(conv.contactName || conv.leadName || conv.name, conv.phone, isInstagram);
     const accountInfo = isInstagram
       ? (conv.phone?.startsWith('@') ? conv.phone : `@${conv.phone || conv.contactName || 'user'}`)
       : (conv.phone || '');
@@ -968,10 +992,16 @@ class InboxComponent {
       }
 
       if (isSystem) {
+        let sysText = String(msg.text || msg.body || msg.content || '').trim();
+        if (sysText.includes('sent a unknown message') || sysText.includes('sent an unknown message') || sysText.includes('unknown message')) {
+          const digits = sysText.replace(/\D/g, '');
+          const cleanPhone = digits.length >= 7 && digits.length <= 15 ? `+${digits}` : '';
+          sysText = cleanPhone ? `Received inbound message from ${cleanPhone}` : 'Received inbound WhatsApp message';
+        }
         messagesHtml += `
           <div class="msg-row justify-center flex" style="display: flex; justify-content: center; margin: 12px 0;">
             <div class="msg-bubble system-bubble" style="background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.1); color: var(--text-secondary); font-size: 11.5px; padding: 5px 16px; border-radius: 20px; text-align: center;">
-              ${msg.text || msg.body || ''}
+              ${this.escapeHtml(sysText)}
             </div>
           </div>
         `;
@@ -988,13 +1018,18 @@ class InboxComponent {
 
       const timestamp = this.formatTimestamp(msg.timestamp || msg.received_at);
 
+      let rawContentText = String(msg.text || msg.body || msg.content || '').trim();
+      if (rawContentText.includes('sent a unknown message') || rawContentText.includes('sent an unknown message')) {
+        rawContentText = '📩 Inbound WhatsApp message';
+      }
+
       let contentHtml = '';
       if (isUnsupported) {
         contentHtml = this.renderUnsupportedBubble();
       } else if (isMedia) {
         contentHtml = this.renderMediaBubble(msg, msgType, isOutbound);
       } else {
-        contentHtml = `<div class="msg-body">${this.escapeHtml(msg.text || msg.body || '')}</div>`;
+        contentHtml = `<div class="msg-body">${this.escapeHtml(rawContentText || '📩 Inbound message')}</div>`;
       }
 
       const aiTag = isOutbound ? `<span class="ai-tag-pill" style="background: rgba(139, 92, 246, 0.3); color: #c4b5fd; padding: 1px 6px; border-radius: 3px; font-weight: 700; text-transform: uppercase;">${msg.sentByHuman ? 'HUMAN' : 'AI AGENT'}</span>` : '';

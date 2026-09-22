@@ -19,7 +19,7 @@ const supabase = (SUPABASE_URL && SUPABASE_SERVICE_KEY)
 const DM_QUEUE_BATCH_SIZE = 25;
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Origin', ['https://yourdomain.com', 'https://app.yourdomain.com', 'http://localhost:3000']);
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
@@ -147,7 +147,7 @@ export default async function handler(req, res) {
             `https://graph.facebook.com/v22.0/${pageId}/subscribed_apps?subscribed_fields=feed,comments,messages,messaging_postbacks,message_reactions&access_token=${accessToken}`,
             { method: 'POST' }
           );
-        } catch (_) {}
+        } catch (_) { }
       }
 
       console.log(`[Instagram Connect Manual] Successfully connected Instagram @${verifiedUsername} for org ${organizationId}`);

@@ -297,6 +297,66 @@ Requirements:
     };
   }
 
+  // 1c. AI Sales & Knowledge Base FAQ Generator
+  async generateFAQs({
+    businessName = 'NexusLead AI',
+    industry = 'Software & Automation',
+    pricingRules = '',
+    tone = 'Professional & Consultative'
+  } = {}) {
+    const prompt = `Generate 4 realistic, high-converting Sales & Support FAQs (Questions & Verified Answers) for an AI Sales Agent knowledge base.
+Business Name: ${businessName}
+Industry: ${industry}
+Pricing / Offer Rules: ${pricingRules || 'Standard scalable pricing plans'}
+Tone: ${tone}
+
+Return ONLY a valid JSON array of objects with keys "q" and "a". No markdown code blocks, no trailing comments, no extra text.
+Example format:
+[
+  {"q": "What features does ${businessName} offer?", "a": "We provide end-to-end sales automation..."},
+  {"q": "How does pricing work?", "a": "Our pricing is transparent and flexible..."}
+]`;
+
+    const openRouterText = await this.callOpenRouter(prompt, null, 'openai/gpt-4o-mini');
+    if (openRouterText) {
+      try {
+        const cleaned = openRouterText.replace(/```json/gi, '').replace(/```/g, '').trim();
+        const parsed = JSON.parse(cleaned);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map(item => ({
+            q: item.q || item.question || '',
+            a: item.a || item.answer || ''
+          })).filter(item => item.q && item.a);
+        }
+      } catch (e) {
+        console.warn('[AIService] Failed to parse JSON from OpenRouter FAQ response, using fallback:', e);
+      }
+    }
+
+    // Dynamic Fallback FAQs tailored to inputs
+    const biz = businessName || 'our business';
+    const ind = industry || 'sales & customer management';
+    const pricing = pricingRules ? pricingRules : 'We offer flexible pricing packages tailored to your requirements.';
+
+    return [
+      {
+        q: `What core services or products does ${biz} provide?`,
+        a: `${biz} specializes in ${ind}, helping client teams streamline operations, boost conversions, and save hours of manual effort.`
+      },
+      {
+        q: `What is the pricing structure for ${biz}?`,
+        a: `${pricing}`
+      },
+      {
+        q: `How long does it take to onboard with ${biz}?`,
+        a: `Onboarding is quick and seamless—typically completed within 24 hours with dedicated step-by-step assistance.`
+      },
+      {
+        q: `Do you provide 24/7 customer support and live handoff?`,
+        a: `Yes! Our AI handles immediate customer questions 24/7 and smoothly escalates complex requests to your live support team.`
+      }
+    ];
+  }
 
 
   // 2. AI Lead Scoring Engine (0 - 100)

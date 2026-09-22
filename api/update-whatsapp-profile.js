@@ -82,7 +82,7 @@ function mapMetaError(data) {
 
 export default async function handler(req, res) {
   if (req.method === 'OPTIONS') {
-    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Origin', ['https://yourdomain.com', 'https://app.yourdomain.com', 'http://localhost:3000']);
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, apikey');
     return res.status(204).end();
@@ -178,8 +178,8 @@ export default async function handler(req, res) {
             access_token: fallbackToken,
             is_active: true,
             updated_at: new Date().toISOString()
-          }, { onConflict: 'organization_id, phone_number_id' }).then(() => {}).catch(() => {});
-        } catch (_) {}
+          }, { onConflict: 'organization_id, phone_number_id' }).then(() => { }).catch(() => { });
+        } catch (_) { }
       }
     }
 

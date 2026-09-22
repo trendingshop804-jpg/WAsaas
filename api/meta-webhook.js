@@ -850,7 +850,26 @@ export default async function handler(req, res) {
         }
 
         const caption = msg[msgType]?.caption || msg.caption || '';
-        const userText = isMedia ? caption : (msg.text?.body || '');
+        let userText = '';
+        if (msgType === 'text') {
+          userText = msg.text?.body || '';
+        } else if (msgType === 'interactive') {
+          userText = msg.interactive?.button_reply?.title || msg.interactive?.list_reply?.title || msg.interactive?.button_reply?.id || 'Interactive Reply';
+        } else if (msgType === 'button') {
+          userText = msg.button?.text || msg.button?.payload || 'Button Reply';
+        } else if (msgType === 'location') {
+          const loc = msg.location;
+          userText = loc ? `📍 Location: ${loc.name || loc.address || (loc.latitude + ', ' + loc.longitude)}` : '📍 Location';
+        } else if (msgType === 'contacts') {
+          const c = msg.contacts?.[0];
+          userText = c ? `👤 Contact: ${c.name?.formatted_name || c.phones?.[0]?.phone || 'Shared Contact'}` : '👤 Shared Contact';
+        } else if (msgType === 'reaction') {
+          userText = msg.reaction?.emoji ? `Reaction: ${msg.reaction.emoji}` : 'Reaction';
+        } else if (isMedia) {
+          userText = caption || (msgType === 'audio' || msgType === 'voice' ? '🎤 Voice message' : msgType === 'sticker' ? '🩷 Sticker' : `📎 ${msgType} message`);
+        } else {
+          userText = msg.text?.body || '📩 Inbound message';
+        }
 
         let leadId = null;
         let conversationId = null;
@@ -858,7 +877,11 @@ export default async function handler(req, res) {
 
         try {
           const contactObj = value?.contacts?.find(c => c.wa_id === sender) || value?.contacts?.[0];
-          const contactName = contactObj?.profile?.name || '';
+          const rawContactName = contactObj?.profile?.name || '';
+          const formattedSender = sender && sender.length >= 10
+            ? (sender.startsWith('91') && sender.length === 12 ? `+${sender.slice(0, 2)} ${sender.slice(2, 7)} ${sender.slice(7)}` : `+${sender}`)
+            : sender;
+          const contactName = rawContactName || (formattedSender ? `WhatsApp Contact (${formattedSender})` : 'WhatsApp Contact');
           leadId = await findOrCreateLead(organizationId, sender, contactName, 'WhatsApp');
           conversationId = await findOrCreateConversation(organizationId, leadId, 'whatsapp');
 
@@ -901,7 +924,7 @@ export default async function handler(req, res) {
           conversation_id: conversationId,
           wa_message_id: msg.id,
           sender_number: sender,
-          content: userText || (isMedia ? (msgType === 'audio' ? 'Voice message' : `${msgType} message`) : ''),
+          content: userText || '📩 Inbound message',
           message_type: msgType,
           direction: 'inbound',
           channel: 'whatsapp',

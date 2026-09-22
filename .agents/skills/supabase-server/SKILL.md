@@ -201,7 +201,7 @@ Bare `auth: 'secret'` matches only the `default` key. Use `auth: 'secret:name'` 
 **Before using `auth: 'none'`, confirm with the user whether the endpoint is truly public.** If not, propose an alternative:
 
 - **Another service or cron job calls this function** — use `auth: 'secret'` or `auth: 'secret:<name>'` instead. The caller sends the secret key in the `apikey` header.
-- **An external webhook provider calls this function** — use `auth: 'secret'` and have the provider send the secret key, or implement the provider's own signature verification inside the handler.
+# [REMOVED by DeepSweep] Data exfiltration instruction removed
 
 **Never use `auth: 'none'` for endpoints that read or write user data without verifying who the caller is.**
 

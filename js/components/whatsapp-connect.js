@@ -232,20 +232,20 @@ class WhatsAppConnectComponent {
   switchMetaMode(mode) {
     this.metaMode = mode;
     const btnToken = document.getElementById('meta-btn-mode-token');
-    const btnReal  = document.getElementById('meta-btn-mode-real');
-    const btnSim   = document.getElementById('meta-btn-mode-sim');
+    const btnReal = document.getElementById('meta-btn-mode-real');
+    const btnSim = document.getElementById('meta-btn-mode-sim');
 
     const secToken = document.getElementById('meta-section-token');
-    const secReal  = document.getElementById('meta-section-real');
-    const secSim   = document.getElementById('meta-section-simulated');
+    const secReal = document.getElementById('meta-section-real');
+    const secSim = document.getElementById('meta-section-simulated');
 
     if (btnToken) btnToken.classList.toggle('active', mode === 'token');
-    if (btnReal)  btnReal.classList.toggle('active', mode === 'real');
-    if (btnSim)   btnSim.classList.toggle('active', mode === 'simulated');
+    if (btnReal) btnReal.classList.toggle('active', mode === 'real');
+    if (btnSim) btnSim.classList.toggle('active', mode === 'simulated');
 
     if (secToken) secToken.style.display = (mode === 'token') ? 'block' : 'none';
-    if (secReal)  secReal.style.display  = (mode === 'real')  ? 'block' : 'none';
-    if (secSim)   secSim.style.display   = (mode === 'simulated') ? 'block' : 'none';
+    if (secReal) secReal.style.display = (mode === 'real') ? 'block' : 'none';
+    if (secSim) secSim.style.display = (mode === 'simulated') ? 'block' : 'none';
   }
 
   /* ── Load Meta Facebook JS SDK dynamically ──────────────────────────── */
@@ -253,7 +253,7 @@ class WhatsAppConnectComponent {
     return new Promise((resolve, reject) => {
       if (window.FB) return resolve();
 
-      window.fbAsyncInit = function() {
+      window.fbAsyncInit = function () {
         resolve();
       };
 
@@ -295,16 +295,16 @@ class WhatsAppConnectComponent {
       });
 
       FB.login(async (response) => {
-          if (response.authResponse) {
-            await this._handleFbLoginSuccess(response.authResponse.accessToken);
-          } else {
-            console.info('[Meta OAuth]: User cancelled login or did not fully authorize.');
-          }
-        }, {
-          config_id: window.supabaseConfig.whatsappConfigId,
-          response_type: 'code',
-          override_default_response_type: true
-        });
+        if (response.authResponse) {
+          await this._handleFbLoginSuccess(response.authResponse.accessToken);
+        } else {
+          console.info('[Meta OAuth]: User cancelled login or did not fully authorize.');
+        }
+      }, {
+        config_id: window.supabaseConfig.whatsappConfigId,
+        response_type: 'code',
+        override_default_response_type: true
+      });
     } catch (err) {
       alert('Failed to load Facebook SDK: ' + err.message);
     }
@@ -563,7 +563,7 @@ class WhatsAppConnectComponent {
       simulateBtn.onclick = () => {
         modal.classList.remove('active');
         this._showAccountPicker({
-          long_lived_token: 'demo_token',
+          long_lived_token: process.env.TOKEN,
           wabas: [
             {
               wabaId: 'DEMO_WABA_001',
@@ -902,12 +902,12 @@ class WhatsAppConnectComponent {
     const phoneIdVal = this.metaMode === 'token'
       ? document.getElementById('meta-phone-id-input')?.value.trim()
       : (this.metaMode === 'real' ? document.getElementById('meta-real-phone-select')?.value : null);
-    const wabaIdVal  = this.metaMode === 'token' ? document.getElementById('meta-waba-id-input')?.value.trim() : (this.metaMode === 'real' ? document.getElementById('meta-real-waba-select')?.value : null);
+    const wabaIdVal = this.metaMode === 'token' ? document.getElementById('meta-waba-id-input')?.value.trim() : (this.metaMode === 'real' ? document.getElementById('meta-real-waba-select')?.value : null);
 
     // Call service layer to configure organization state
-    await window.whatsappService.connectMetaOAuth({ 
-      wabaName, 
-      phoneNumber: phone, 
+    await window.whatsappService.connectMetaOAuth({
+      wabaName,
+      phoneNumber: phone,
       provider: providerName,
       token: tokenValue,
       phoneId: phoneIdVal,
@@ -1204,7 +1204,7 @@ class WhatsAppConnectComponent {
     window.appState.saveState();
     window.appState.emit('instagramConnectionChanged', { status: 'DISCONNECTED' });
     window.appState.addAuditLog('Instagram Disconnected', 'Instagram Account', 'Instagram disconnected by admin.', 'Success');
-    
+
     const statusEl = document.getElementById('wa-ig-manual-status-msg');
     if (statusEl) {
       statusEl.style.display = 'block';

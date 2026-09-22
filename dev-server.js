@@ -34,18 +34,23 @@ const MIME = {
   '.woff2': 'font/woff2', '.woff': 'font/woff', '.ttf': 'font/ttf',
 };
 function buildReq(nodeReq, body, parsedUrl) {
-  return { method: nodeReq.method, url: nodeReq.url,
+  return {
+    method: nodeReq.method, url: nodeReq.url,
     query: Object.fromEntries(parsedUrl.searchParams.entries()),
-    headers: nodeReq.headers, body };
+    headers: nodeReq.headers, body
+  };
 }
 function buildRes(nodeRes) {
-  const res = { _statusCode: 200, _headers: {},
+  const res = {
+    _statusCode: 200, _headers: {},
     status(code) { this._statusCode = code; return this; },
     setHeader(k, v) { this._headers[k] = v; },
     json(obj) {
       const body = JSON.stringify(obj);
-      nodeRes.writeHead(this._statusCode, { 'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*', ...this._headers });
+      nodeRes.writeHead(this._statusCode, {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': ['https://yourdomain.com', 'https://app.yourdomain.com', 'http://localhost:3000'], ...this._headers
+      });
       nodeRes.end(body);
     },
     send(text) {
@@ -72,9 +77,11 @@ const server = http.createServer(async (nodeReq, nodeRes) => {
   const parsedUrl = new URL(nodeReq.url, `http://localhost:${PORT}`);
   const pathname = parsedUrl.pathname;
   if (nodeReq.method === 'OPTIONS') {
-    nodeRes.writeHead(204, { 'Access-Control-Allow-Origin': '*',
+    nodeRes.writeHead(204, {
+      'Access-Control-Allow-Origin': ['https://yourdomain.com', 'https://app.yourdomain.com', 'http://localhost:3000'],
       'Access-Control-Allow-Methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization' });
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+    });
     return nodeRes.end();
   }
   if (pathname.startsWith('/api/')) {

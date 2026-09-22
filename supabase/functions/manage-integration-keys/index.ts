@@ -16,9 +16,9 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const SUPABASE_URL      = Deno.env.get("SUPABASE_URL")!;
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
-const ENCRYPT_SECRET    = Deno.env.get("INTEGRATION_ENCRYPT_SECRET") ?? "change-me-to-32-char-secret!!!!!";
+const ENCRYPT_SECRET = Deno.env.get("INTEGRATION_ENCRYPT_SECRET") ?? "change-me-to-32-char-secret!!!!!";
 
 // ---------------------------------------------------------------------------
 // Helper: mask a raw key value — only last 4 chars visible
@@ -27,7 +27,7 @@ function maskKeyValue(raw: string): string {
   if (!raw || raw.length < 5) return "••••";
   const prefix = raw.slice(0, 6);
   const suffix = raw.slice(-4);
-  const stars  = "••••••••";
+  const stars = "••••••••";
   return `${prefix}${stars}${suffix}`;
 }
 
@@ -35,9 +35,9 @@ function maskKeyValue(raw: string): string {
 // Helper: encrypt a plaintext value using SubtleCrypto (AES-GCM)
 // ---------------------------------------------------------------------------
 async function encryptValue(plaintext: string): Promise<string> {
-  const enc     = new TextEncoder();
+  const enc = new TextEncoder();
   const keyData = enc.encode(ENCRYPT_SECRET.padEnd(32, "0").slice(0, 32));
-  const iv      = crypto.getRandomValues(new Uint8Array(12));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
 
   const cryptoKey = await crypto.subtle.importKey(
     "raw", keyData, { name: "AES-GCM" }, false, ["encrypt"]
@@ -58,12 +58,12 @@ async function encryptValue(plaintext: string): Promise<string> {
 // Helper: decrypt an encrypted value
 // ---------------------------------------------------------------------------
 async function decryptValue(encoded: string): Promise<string> {
-  const enc     = new TextEncoder();
-  const dec     = new TextDecoder();
+  const enc = new TextEncoder();
+  const dec = new TextDecoder();
   const keyData = enc.encode(ENCRYPT_SECRET.padEnd(32, "0").slice(0, 32));
 
-  const combined  = Uint8Array.from(atob(encoded), c => c.charCodeAt(0));
-  const iv        = combined.slice(0, 12);
+  const combined = Uint8Array.from(atob(encoded), c => c.charCodeAt(0));
+  const iv = combined.slice(0, 12);
   const cipherBuf = combined.slice(12);
 
   const cryptoKey = await crypto.subtle.importKey(
@@ -87,24 +87,24 @@ async function verifyKey(keyName: string, rawKey: string): Promise<{ ok: boolean
         const res = await fetch("https://api.openai.com/v1/models", {
           headers: { Authorization: `Bearer ${rawKey}` },
         });
-        if (res.ok) return { ok: true,  message: "OpenAI key valid — gpt-4o accessible" };
-        return               { ok: false, message: `OpenAI error: ${res.status} ${res.statusText}` };
+        if (res.ok) return { ok: true, message: "OpenAI key valid — gpt-4o accessible" };
+        return { ok: false, message: `OpenAI error: ${res.status} ${res.statusText}` };
       }
 
       case "stripe_api_key": {
         const res = await fetch("https://api.stripe.com/v1/balance", {
           headers: { Authorization: `Bearer ${rawKey}` },
         });
-        if (res.ok) return { ok: true,  message: "Stripe key valid — account balance retrieved" };
-        return               { ok: false, message: `Stripe error: ${res.status}` };
+        if (res.ok) return { ok: true, message: "Stripe key valid — account balance retrieved" };
+        return { ok: false, message: `Stripe error: ${res.status}` };
       }
 
       case "hubspot_api_key": {
         const res = await fetch("https://api.hubapi.com/crm/v3/objects/contacts?limit=1", {
           headers: { Authorization: `Bearer ${rawKey}` },
         });
-        if (res.ok) return { ok: true,  message: "HubSpot token valid — CRM scope confirmed" };
-        return               { ok: false, message: `HubSpot error: ${res.status}` };
+        if (res.ok) return { ok: true, message: "HubSpot token valid — CRM scope confirmed" };
+        return { ok: false, message: `HubSpot error: ${res.status}` };
       }
 
       case "whatsapp_business": {
@@ -113,8 +113,8 @@ async function verifyKey(keyName: string, rawKey: string): Promise<{ ok: boolean
           `https://graph.facebook.com/v18.0/me?access_token=${rawKey}`
         );
         const json = await res.json();
-        if (json?.id) return { ok: true,  message: `WABA token valid — Account ID: ${json.id}` };
-        return                 { ok: false, message: "Invalid WABA token or account suspended" };
+        if (json?.id) return { ok: true, message: `WABA token valid — Account ID: ${json.id}` };
+        return { ok: false, message: "Invalid WABA token or account suspended" };
       }
 
       default:
@@ -129,7 +129,7 @@ async function verifyKey(keyName: string, rawKey: string): Promise<{ ok: boolean
 // CORS headers
 // ---------------------------------------------------------------------------
 const corsHeaders = {
-  "Access-Control-Allow-Origin":  "*",
+  "Access-Control-Allow-Origin": ["https://yourdomain.com", "https://app.yourdomain.com", "http://localhost:3000"],
   "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
 };
@@ -160,8 +160,8 @@ serve(async (req: Request) => {
   const { data: { user }, error: userErr } = await supabase.auth.getUser();
   if (userErr || !user) return jsonResponse({ error: "Unauthenticated" }, 401);
 
-  const url     = new URL(req.url);
-  const isTest  = url.pathname.endsWith("/test");
+  const url = new URL(req.url);
+  const isTest = url.pathname.endsWith("/test");
 
   // ── GET: list masked keys for current user ─────────────────────────────
   if (req.method === "GET") {
@@ -202,7 +202,7 @@ serve(async (req: Request) => {
     }
 
     const encryptedValue = await encryptValue(value);
-    const maskedValue    = maskKeyValue(value);
+    const maskedValue = maskKeyValue(value);
 
     if (update_id) {
       // Update existing key
@@ -220,10 +220,10 @@ serve(async (req: Request) => {
         .from("user_integration_keys")
         .upsert(
           {
-            user_id:         user.id,
+            user_id: user.id,
             key_name,
             encrypted_value: encryptedValue,
-            masked_value:    maskedValue,
+            masked_value: maskedValue,
           },
           { onConflict: "user_id,key_name" }
         )

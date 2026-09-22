@@ -507,8 +507,7 @@ async function handler(request: Request): Promise<Response> {
 
       for (const msg of messages) {
         const sender  = msg.from ?? "";
-        const type    = msg.type ?? "";
-        const content = msg.text?.body ?? "";
+        const type    = msg.type ?? "text";
         const isMedia = MEDIA_TYPES.includes(type);
 
         // Idempotency: skip duplicate webhook deliveries
@@ -526,12 +525,32 @@ async function handler(request: Request): Promise<Response> {
 
         let mediaInfo    = null;
         let caption      = "";
-        let displayContent = content;
+        let displayContent = "";
 
-        if (isMedia) {
+        if (type === "text") {
+          displayContent = msg.text?.body ?? "";
+        } else if (type === "interactive") {
+          displayContent = msg.interactive?.button_reply?.title || msg.interactive?.list_reply?.title || msg.interactive?.button_reply?.id || "Interactive Reply";
+        } else if (type === "button") {
+          displayContent = msg.button?.text || msg.button?.payload || "Button Reply";
+        } else if (type === "location") {
+          const loc = msg.location;
+          displayContent = loc ? `📍 Location: ${loc.name || loc.address || (loc.latitude + ', ' + loc.longitude)}` : "📍 Shared Location";
+        } else if (type === "contacts") {
+          const c = msg.contacts?.[0];
+          displayContent = c ? `👤 Contact: ${c.name?.formatted_name || c.phones?.[0]?.phone || 'Shared Contact'}` : "👤 Shared Contact";
+        } else if (type === "reaction") {
+          displayContent = msg.reaction?.emoji ? `Reaction: ${msg.reaction.emoji}` : "Reaction";
+        } else if (isMedia) {
           mediaInfo      = await processInboundMedia(msg, type, supabaseAdmin);
           caption        = msg[type]?.caption || "";
-          displayContent = caption || (type === "audio" ? "🎤 Voice message" : `📎 ${type} message`);
+          displayContent = caption || (type === "audio" || type === "voice" ? "🎤 Voice message" : type === "sticker" ? "🩷 Sticker" : `📎 ${type} message`);
+        } else {
+          displayContent = msg.text?.body || "📩 Inbound message";
+        }
+
+        if (!displayContent) {
+          displayContent = "📩 Inbound message";
         }
 
         let leadId: string | null = null;
@@ -542,7 +561,7 @@ async function handler(request: Request): Promise<Response> {
           leadId         = await findOrCreateLead(supabaseAdmin, organizationId, sender);
           conversationId = await findOrCreateConversation(supabaseAdmin, organizationId, leadId);
 
-          if (type === "text" && content.trim()) {
+          if (type === "text" && displayContent.trim()) {
             chatHistory = await fetchChatHistory(supabaseAdmin, conversationId);
           }
         } catch (err) {

@@ -356,7 +356,7 @@ class MetaOnboardingComponent {
 
   _showDemoConnect(container) {
     this.discovery = {
-      long_lived_token: 'demo_token',
+      long_lived_token: process.env.TOKEN,
       wabas: [{
         wabaId: 'DEMO_WABA',
         wabaName: 'Demo Business',

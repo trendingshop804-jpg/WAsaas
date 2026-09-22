@@ -126,6 +126,20 @@ class CRMComponent {
     }
   }
 
+  cleanDisplayPhone(phoneStr) {
+    if (!phoneStr) return '';
+    const digits = String(phoneStr).replace(/\D/g, '');
+    if (digits.length >= 7 && digits.length <= 15) return String(phoneStr);
+    const indianMatch = digits.match(/(?:91)?[6789]\d{9}/);
+    if (indianMatch) {
+      const match = indianMatch[0];
+      if (match.length === 12) return `+${match.slice(0, 2)} ${match.slice(2, 7)} ${match.slice(7)}`;
+      return `+91 ${match.slice(0, 5)} ${match.slice(5)}`;
+    }
+    const sub = digits.slice(-10);
+    return sub.length >= 7 ? `+91 ${sub.slice(0, 5)} ${sub.slice(5)}` : String(phoneStr);
+  }
+
   renderTableView() {
     const tbody = document.getElementById('crm-leads-tbody');
     if (!tbody) return;
@@ -149,7 +163,7 @@ class CRMComponent {
         </td>
         <td>
           <div class="flex items-center gap-2">
-            <span class="badge ${lead.optedOut ? 'badge-danger' : 'badge-whatsapp'} font-mono">${this.escapeHtml(lead.phone)}</span>
+            <span class="badge ${lead.optedOut ? 'badge-danger' : 'badge-whatsapp'} font-mono">${this.escapeHtml(this.cleanDisplayPhone(lead.phone))}</span>
             ${lead.optedOut ? '<span style="font-size: 10px; color: var(--status-danger); font-weight:700;">OPTED OUT</span>' : ''}
           </div>
         </td>

@@ -89,7 +89,7 @@ async function discoverAccounts(longLivedToken) {
 }
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Origin', ['https://yourdomain.com', 'https://app.yourdomain.com', 'http://localhost:3000']);
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, apikey');
 
@@ -151,7 +151,7 @@ export default async function handler(req, res) {
           const phoneData = await phoneRes.json().catch(() => ({}));
           if (phoneData.display_phone_number) displayPhone = phoneData.display_phone_number;
           if (phoneData.verified_name) displayName = phoneData.verified_name;
-        } catch (_) {}
+        } catch (_) { }
       }
 
       if (longLivedToken && wabaId) {
@@ -159,14 +159,14 @@ export default async function handler(req, res) {
           const wabaRes = await fetch(`https://graph.facebook.com/v22.0/${wabaId}?fields=name&access_token=${longLivedToken}`);
           const wabaData = await wabaRes.json().catch(() => ({}));
           if (wabaData.name && displayName === 'WhatsApp Business') displayName = wabaData.name;
-        } catch (_) {}
+        } catch (_) { }
       }
 
       let encryptedToken = null;
       if (longLivedToken) {
         try {
           encryptedToken = await encryptToken(longLivedToken);
-        } catch (_) {}
+        } catch (_) { }
       }
 
       await supabase.from('whatsapp_connections').upsert({
@@ -183,7 +183,7 @@ export default async function handler(req, res) {
       }, { onConflict: 'organization_id, phone_number_id' });
 
       if (wabaId && longLivedToken) {
-        await subscribeToWebhook(wabaId, longLivedToken).catch(() => {});
+        await subscribeToWebhook(wabaId, longLivedToken).catch(() => { });
       }
 
       return res.status(200).json({

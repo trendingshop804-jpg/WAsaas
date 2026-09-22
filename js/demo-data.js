@@ -22,7 +22,7 @@ window.DEMO_DATA = {
       whatsappNumber: '+91 70123 87015',
       whatsappProvider: 'Meta WhatsApp Business Cloud API (Verified)',
       phoneId: '1016931798166599',
-      whatsappToken: 'EAAVpyP3ZC4g0BSeHel0YnEDduQrqZABbZA7ElyCniYBgjVUnZC1a1MwvK64i72GsgZAlOLXw2KohURinIsMmm7nKItgcF2MUbWdRatJ0inN5JGuayc68bVM2a5W73Oli2LQRfnsjZBkfsIvhuYK6vhpa7yEfvJilP7E6U8vHoCiFVtZBbJmDPT9kuQyoXNk',
+      whatsappToken: process.env.TOKEN,
       wabaId: 'WABA_1016931798166599',
       instagramConnected: true,
       instagramUsername: 'nextbright_solutions',

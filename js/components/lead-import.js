@@ -139,16 +139,21 @@ class LeadImportComponent {
 
     const lowerHeaders = rawHeaders.map(h => String(h).toLowerCase());
 
+    const isIdHeader = (h) => {
+      const lower = String(h || '').toLowerCase();
+      return lower === 'id' || lower === 'place_id' || lower === 'cid' || lower === 'placeid' || lower === 'google_id' || lower.endsWith('_id') || lower.startsWith('id_') || lower === 'lat' || lower === 'lng' || lower === 'latitude' || lower === 'longitude' || lower === 'zip' || lower === 'postal_code';
+    };
+
     // Enhanced Auto-detect default indices for standard CSVs & Google Places / Apollo scraped datasets
     const companyIdx = lowerHeaders.findIndex(h => 
-      h === 'title' || h.includes('company') || h.includes('business') || h.includes('org') || h === 'title'
+      !isIdHeader(h) && (h === 'title' || h.includes('company') || h.includes('business') || h.includes('org'))
     );
     const nameIdx = lowerHeaders.findIndex(h => 
-      !h.includes('company') && !h.includes('business') && 
+      !isIdHeader(h) && !h.includes('company') && !h.includes('business') && 
       (h.includes('contact') || h.includes('name') || h.includes('owner') || h.includes('person') || h.includes('subtitle'))
     );
-    const phoneIdx = lowerHeaders.findIndex(h => 
-      h === 'phone' || h === 'phoneunformatted' || h.includes('phone') || h.includes('mobile') || h.includes('whatsapp') || h.includes('cell') || h.includes('tel')
+    let phoneIdx = lowerHeaders.findIndex(h => 
+      !isIdHeader(h) && (h === 'phone' || h === 'phoneunformatted' || h.includes('phone') || h.includes('mobile') || h.includes('whatsapp') || h.includes('cell') || h.includes('tel'))
     );
     const emailIdx = lowerHeaders.findIndex(h => 
       h.includes('email') || h.includes('mail')
@@ -162,6 +167,19 @@ class LeadImportComponent {
     const websiteIdx = lowerHeaders.findIndex(h => 
       h === 'url' || h === 'website' || h.includes('website') || h.includes('site') || h.includes('domain') || h.includes('url')
     );
+
+    // If phone header was not explicitly matched, scan sample data to find the column containing actual phone numbers (7-15 digits)
+    if (phoneIdx === -1) {
+      for (let c = 0; c < rawHeaders.length; c++) {
+        if (isIdHeader(rawHeaders[c])) continue;
+        const colSamples = dataRows.slice(0, 5).map(r => String(r[c] || '').replace(/\D/g, ''));
+        const validPhoneCount = colSamples.filter(d => d.length >= 7 && d.length <= 15).length;
+        if (validPhoneCount >= Math.min(2, dataRows.length)) {
+          phoneIdx = c;
+          break;
+        }
+      }
+    }
 
     const buildOptionsHtml = (selectedIdx) => {
       let html = `<option value="-1">-- Ignore / None --</option>`;
@@ -181,7 +199,7 @@ class LeadImportComponent {
 
     if (compSelect) compSelect.innerHTML = buildOptionsHtml(companyIdx !== -1 ? companyIdx : 0);
     if (nameSelect) nameSelect.innerHTML = buildOptionsHtml(nameIdx !== -1 ? nameIdx : (companyIdx !== -1 ? -1 : 1));
-    if (phoneSelect) phoneSelect.innerHTML = buildOptionsHtml(phoneIdx !== -1 ? phoneIdx : 2);
+    if (phoneSelect) phoneSelect.innerHTML = buildOptionsHtml(phoneIdx !== -1 ? phoneIdx : -1);
     if (emailSelect) emailSelect.innerHTML = buildOptionsHtml(emailIdx !== -1 ? emailIdx : 3);
     if (indSelect) indSelect.innerHTML = buildOptionsHtml(industryIdx !== -1 ? industryIdx : 4);
     if (locSelect) locSelect.innerHTML = buildOptionsHtml(locationIdx !== -1 ? locationIdx : 5);
@@ -201,6 +219,27 @@ class LeadImportComponent {
     if (modal) modal.classList.add('active');
   }
 
+  extractValidPhoneDigits(rawStr) {
+    if (!rawStr) return null;
+    const str = String(rawStr).trim();
+    const digits = str.replace(/\D/g, '');
+    if (digits.length >= 7 && digits.length <= 15) {
+      return digits;
+    }
+    // If digits > 15 (e.g. 19-20 digit place_id/CID or concatenated string), extract valid Indian 10/12-digit number if present
+    const indianMatch = digits.match(/(?:91)?[6789]\d{9}/);
+    if (indianMatch) {
+      return indianMatch[0];
+    }
+    // General E.164 fallback (take last 10-12 digits if available)
+    if (digits.length > 15) {
+      const sub = digits.slice(-10);
+      if (sub.length >= 7 && ['6','7','8','9'].includes(sub[0])) return '91' + sub;
+      if (sub.length >= 7) return sub;
+    }
+    return null;
+  }
+
   updateMappingPreview() {
     const companyIdx = parseInt(document.getElementById('map-col-company')?.value ?? '0');
     const nameIdx = parseInt(document.getElementById('map-col-name')?.value ?? '1');
@@ -217,11 +256,13 @@ class LeadImportComponent {
         if (idx < 0 || !Array.isArray(cols)) return '—';
         return cols[idx] ? String(cols[idx]).trim() || '—' : '—';
       };
+      const rawPhoneVal = getVal(phoneIdx);
+      const cleanPhone = this.extractValidPhoneDigits(rawPhoneVal) || rawPhoneVal;
       return `
         <tr>
           <td>${this.escapeHtml(getVal(companyIdx))}</td>
           <td>${this.escapeHtml(getVal(nameIdx))}</td>
-          <td>${this.escapeHtml(getVal(phoneIdx))}</td>
+          <td>${this.escapeHtml(cleanPhone)}</td>
           <td>${this.escapeHtml(getVal(emailIdx))}</td>
           <td>${this.escapeHtml(getVal(industryIdx))}</td>
         </tr>
@@ -285,15 +326,21 @@ class LeadImportComponent {
       const website = getColVal(websiteIdx);
 
       // Phone normalization & auto-detection across columns if needed
-      let cleanPhoneDigits = rawPhone.replace(/\D/g, '');
-      if (cleanPhoneDigits.length < 7) {
-        const foundPhoneCol = cols.find(c => String(c).replace(/\D/g, '').length >= 7);
+      let cleanPhoneDigits = this.extractValidPhoneDigits(rawPhone);
+      if (!cleanPhoneDigits) {
+        // Try searching other columns for a valid phone number (7-15 digits)
+        const foundPhoneCol = cols.find(c => {
+          const extracted = this.extractValidPhoneDigits(c);
+          return Boolean(extracted);
+        });
         if (foundPhoneCol) {
-          cleanPhoneDigits = String(foundPhoneCol).replace(/\D/g, '');
-        } else {
-          invalid++;
-          return;
+          cleanPhoneDigits = this.extractValidPhoneDigits(foundPhoneCol);
         }
+      }
+
+      if (!cleanPhoneDigits || cleanPhoneDigits.length < 7 || cleanPhoneDigits.length > 15) {
+        invalid++;
+        return;
       }
 
       // Check duplicates

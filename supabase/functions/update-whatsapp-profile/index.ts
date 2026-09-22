@@ -16,13 +16,13 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const SUPABASE_URL         = Deno.env.get("SUPABASE_URL")!;
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const ENCRYPT_SECRET       = Deno.env.get("INTEGRATION_ENCRYPT_SECRET");
-const GRAPH_API_VERSION    = "v21.0";
+const ENCRYPT_SECRET = Deno.env.get("INTEGRATION_ENCRYPT_SECRET");
+const GRAPH_API_VERSION = "v21.0";
 
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Origin": ["https://yourdomain.com", "https://app.yourdomain.com", "http://localhost:3000"],
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization, apikey",
 };
@@ -173,400 +173,400 @@ serve(async (req: Request) => {
     return jsonResponse({ error: "Method not allowed" }, 405);
   }
 
-    // 1. Parse request body
-    const body = await req.json().catch(() => ({}));
-    const { action, imageBase64, fileName, about, organizationId: bodyOrgId } = body || {};
+  // 1. Parse request body
+  const body = await req.json().catch(() => ({}));
+  const { action, imageBase64, fileName, about, organizationId: bodyOrgId } = body || {};
 
-    if (!action) {
-      return jsonResponse({ error: "Missing required 'action' field" }, 400);
-    }
+  if (!action) {
+    return jsonResponse({ error: "Missing required 'action' field" }, 400);
+  }
 
-    const authHeader = req.headers.get("Authorization");
-    const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
-      auth: { persistSession: false },
-    });
+  const authHeader = req.headers.get("Authorization");
+  const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
+    auth: { persistSession: false },
+  });
 
-    let organizationId: string | null = bodyOrgId || null;
+  let organizationId: string | null = bodyOrgId || null;
 
-    if (authHeader) {
-      try {
-        const supabaseUser = createClient(SUPABASE_URL, Deno.env.get("SUPABASE_ANON_KEY") || SUPABASE_SERVICE_KEY, {
-          global: { headers: { Authorization: authHeader } },
-          auth: { persistSession: false },
-        });
-        const { data: { user }, error: userErr } = await supabaseUser.auth.getUser();
-        if (!userErr && user) {
-          const { data: profile } = await supabaseAdmin
-            .from("users")
-            .select("organization_id, role")
-            .eq("id", user.id)
-            .maybeSingle();
+  if (authHeader) {
+    try {
+      const supabaseUser = createClient(SUPABASE_URL, Deno.env.get("SUPABASE_ANON_KEY") || SUPABASE_SERVICE_KEY, {
+        global: { headers: { Authorization: authHeader } },
+        auth: { persistSession: false },
+      });
+      const { data: { user }, error: userErr } = await supabaseUser.auth.getUser();
+      if (!userErr && user) {
+        const { data: profile } = await supabaseAdmin
+          .from("users")
+          .select("organization_id, role")
+          .eq("id", user.id)
+          .maybeSingle();
 
-          if (profile?.organization_id) {
-            organizationId = profile.organization_id;
-          }
-        }
-      } catch (_authEx) {
-        // Continue to fallback
-      }
-    }
-
-    // 2. Get the WhatsApp connection (by organization_id or latest active)
-    let connection: any = null;
-    if (organizationId) {
-      const { data: connections } = await supabaseAdmin
-        .from("whatsapp_connections")
-        .select("access_token_encrypted, access_token, phone_number_id, waba_id, phone_number, is_active, organization_id")
-        .eq("organization_id", organizationId)
-        .eq("is_active", true)
-        .order("updated_at", { ascending: false })
-        .limit(1);
-      connection = connections?.[0];
-    }
-
-    if (!connection) {
-      const { data: anyConns } = await supabaseAdmin
-        .from("whatsapp_connections")
-        .select("access_token_encrypted, access_token, phone_number_id, waba_id, phone_number, is_active, organization_id")
-        .eq("is_active", true)
-        .order("updated_at", { ascending: false })
-        .limit(1);
-      connection = anyConns?.[0];
-      if (connection) {
-        organizationId = connection.organization_id || organizationId;
-      }
-    }
-
-    if (!connection) {
-      return jsonResponse({
-        error: "No active WhatsApp connection found. Please connect WhatsApp Business first.",
-      }, 400);
-    }
-
-    if (!organizationId) {
-      organizationId = connection.organization_id || "org_default";
-    }
-
-    // 3. Resolve the access token
-    let accessToken: string | null = null;
-    if (connection.access_token_encrypted) {
-      try {
-        accessToken = await decryptToken(connection.access_token_encrypted);
-      } catch (e: any) {
-        console.warn("Could not decrypt token, falling back to plaintext:", e.message);
-      }
-    }
-    if (!accessToken && connection.access_token) {
-      accessToken = connection.access_token;
-    }
-    if (!accessToken) {
-      accessToken = Deno.env.get("WHATSAPP_ACCESS_TOKEN") || null;
-    }
-
-    if (!accessToken) {
-      return jsonResponse({
-        error: "No WhatsApp access token available. Please reconnect your WhatsApp Business account.",
-      }, 400);
-    }
-
-    const { phone_number_id, waba_id } = connection;
-    const targetPhoneId = phone_number_id || waba_id;
-
-    if (!targetPhoneId) {
-      return jsonResponse({ error: "Missing phone_number_id and waba_id in connection record." }, 400);
-    }
-
-    // ─── Action: update_profile_picture ─────────────────────────────────
-    if (action === "update_profile_picture") {
-      if (!imageBase64 || typeof imageBase64 !== "string") {
-        return jsonResponse({ error: "Missing imageBase64 data" }, 400);
-      }
-
-      // Parse data URL prefix if present
-      let base64Data = imageBase64;
-      let mimeType = "image/jpeg";
-      let fileExt = "jpg";
-
-      if (imageBase64.startsWith("data:")) {
-        const match = imageBase64.match(/^data:(image\/[a-zA-Z]+);base64,(.+)$/);
-        if (match) {
-          mimeType = match[1].toLowerCase();
-          base64Data = match[2];
-          fileExt = mimeType.split("/")[1].replace("jpeg", "jpg");
+        if (profile?.organization_id) {
+          organizationId = profile.organization_id;
         }
       }
+    } catch (_authEx) {
+      // Continue to fallback
+    }
+  }
 
-      let byteChars: string;
-      try {
-        byteChars = atob(base64Data);
-      } catch {
-        return jsonResponse({ error: "Invalid base64 encoded image data." }, 400);
+  // 2. Get the WhatsApp connection (by organization_id or latest active)
+  let connection: any = null;
+  if (organizationId) {
+    const { data: connections } = await supabaseAdmin
+      .from("whatsapp_connections")
+      .select("access_token_encrypted, access_token, phone_number_id, waba_id, phone_number, is_active, organization_id")
+      .eq("organization_id", organizationId)
+      .eq("is_active", true)
+      .order("updated_at", { ascending: false })
+      .limit(1);
+    connection = connections?.[0];
+  }
+
+  if (!connection) {
+    const { data: anyConns } = await supabaseAdmin
+      .from("whatsapp_connections")
+      .select("access_token_encrypted, access_token, phone_number_id, waba_id, phone_number, is_active, organization_id")
+      .eq("is_active", true)
+      .order("updated_at", { ascending: false })
+      .limit(1);
+    connection = anyConns?.[0];
+    if (connection) {
+      organizationId = connection.organization_id || organizationId;
+    }
+  }
+
+  if (!connection) {
+    return jsonResponse({
+      error: "No active WhatsApp connection found. Please connect WhatsApp Business first.",
+    }, 400);
+  }
+
+  if (!organizationId) {
+    organizationId = connection.organization_id || "org_default";
+  }
+
+  // 3. Resolve the access token
+  let accessToken: string | null = null;
+  if (connection.access_token_encrypted) {
+    try {
+      accessToken = await decryptToken(connection.access_token_encrypted);
+    } catch (e: any) {
+      console.warn("Could not decrypt token, falling back to plaintext:", e.message);
+    }
+  }
+  if (!accessToken && connection.access_token) {
+    accessToken = connection.access_token;
+  }
+  if (!accessToken) {
+    accessToken = Deno.env.get("WHATSAPP_ACCESS_TOKEN") || null;
+  }
+
+  if (!accessToken) {
+    return jsonResponse({
+      error: "No WhatsApp access token available. Please reconnect your WhatsApp Business account.",
+    }, 400);
+  }
+
+  const { phone_number_id, waba_id } = connection;
+  const targetPhoneId = phone_number_id || waba_id;
+
+  if (!targetPhoneId) {
+    return jsonResponse({ error: "Missing phone_number_id and waba_id in connection record." }, 400);
+  }
+
+  // ─── Action: update_profile_picture ─────────────────────────────────
+  if (action === "update_profile_picture") {
+    if (!imageBase64 || typeof imageBase64 !== "string") {
+      return jsonResponse({ error: "Missing imageBase64 data" }, 400);
+    }
+
+    // Parse data URL prefix if present
+    let base64Data = imageBase64;
+    let mimeType = "image/jpeg";
+    let fileExt = "jpg";
+
+    if (imageBase64.startsWith("data:")) {
+      const match = imageBase64.match(/^data:(image\/[a-zA-Z]+);base64,(.+)$/);
+      if (match) {
+        mimeType = match[1].toLowerCase();
+        base64Data = match[2];
+        fileExt = mimeType.split("/")[1].replace("jpeg", "jpg");
       }
+    }
 
-      const byteSize = byteChars.length;
-      const validation = validateImage(fileExt, mimeType, byteSize);
-      if (!validation.valid) {
-        return jsonResponse({ error: validation.error }, 400);
-      }
+    let byteChars: string;
+    try {
+      byteChars = atob(base64Data);
+    } catch {
+      return jsonResponse({ error: "Invalid base64 encoded image data." }, 400);
+    }
 
-      const binaryData = new Uint8Array(byteSize);
-      for (let i = 0; i < byteSize; i++) {
-        binaryData[i] = byteChars.charCodeAt(i);
-      }
+    const byteSize = byteChars.length;
+    const validation = validateImage(fileExt, mimeType, byteSize);
+    if (!validation.valid) {
+      return jsonResponse({ error: validation.error }, 400);
+    }
 
-      // Upload temporary file to profile-photos-public for Meta lookaside fetch if needed
-      const safeFileName = fileName || `profile_${Date.now()}.${fileExt}`;
-      const uploadName = `profile-${user.id}-${Date.now()}.${fileExt}`;
-      const uploadPath = `${user.id}/${uploadName}`;
+    const binaryData = new Uint8Array(byteSize);
+    for (let i = 0; i < byteSize; i++) {
+      binaryData[i] = byteChars.charCodeAt(i);
+    }
 
-      const { error: uploadError } = await supabaseAdmin.storage
-        .from("profile-photos-public")
-        .upload(uploadPath, binaryData, {
-          contentType: mimeType,
-          upsert: true,
-        });
+    // Upload temporary file to profile-photos-public for Meta lookaside fetch if needed
+    const safeFileName = fileName || `profile_${Date.now()}.${fileExt}`;
+    const uploadName = `profile-${user.id}-${Date.now()}.${fileExt}`;
+    const uploadPath = `${user.id}/${uploadName}`;
 
-      if (uploadError) {
-        console.warn("Storage temporary upload error:", uploadError.message);
-      }
-
-      const { data: publicUrlData } = supabaseAdmin.storage
-        .from("profile-photos-public")
-        .getPublicUrl(uploadPath);
-      const publicUrl = publicUrlData?.publicUrl || "";
-
-      // ── Step 1: Upload Image to Meta Media API ──
-      const targetPhoneId = phone_number_id || waba_id;
-      const formData = new FormData();
-      formData.append("messaging_product", "whatsapp");
-      formData.append("file", new Blob([binaryData], { type: mimeType }), safeFileName);
-      formData.append("type", mimeType);
-
-      let mediaRes = await metaApi(`${targetPhoneId}/media`, accessToken, {
-        method: "POST",
-        body: formData,
+    const { error: uploadError } = await supabaseAdmin.storage
+      .from("profile-photos-public")
+      .upload(uploadPath, binaryData, {
+        contentType: mimeType,
+        upsert: true,
       });
 
-      // If direct binary multipart failed and publicUrl is available, try image_url parameter
-      if ((!mediaRes.ok || !mediaRes.data?.id) && publicUrl) {
-        mediaRes = await metaApi(`${targetPhoneId}/media`, accessToken, {
-          method: "POST",
-          params: {
-            messaging_product: "whatsapp",
-            image_url: publicUrl,
-          },
-        });
+    if (uploadError) {
+      console.warn("Storage temporary upload error:", uploadError.message);
+    }
+
+    const { data: publicUrlData } = supabaseAdmin.storage
+      .from("profile-photos-public")
+      .getPublicUrl(uploadPath);
+    const publicUrl = publicUrlData?.publicUrl || "";
+
+    // ── Step 1: Upload Image to Meta Media API ──
+    const targetPhoneId = phone_number_id || waba_id;
+    const formData = new FormData();
+    formData.append("messaging_product", "whatsapp");
+    formData.append("file", new Blob([binaryData], { type: mimeType }), safeFileName);
+    formData.append("type", mimeType);
+
+    let mediaRes = await metaApi(`${targetPhoneId}/media`, accessToken, {
+      method: "POST",
+      body: formData,
+    });
+
+    // If direct binary multipart failed and publicUrl is available, try image_url parameter
+    if ((!mediaRes.ok || !mediaRes.data?.id) && publicUrl) {
+      mediaRes = await metaApi(`${targetPhoneId}/media`, accessToken, {
+        method: "POST",
+        params: {
+          messaging_product: "whatsapp",
+          image_url: publicUrl,
+        },
+      });
+    }
+
+    if (!mediaRes.ok || !mediaRes.data?.id) {
+      // Cleanup temp storage image
+      if (uploadPath) {
+        await supabaseAdmin.storage.from("profile-photos-public").remove([uploadPath]);
       }
+      return jsonResponse({
+        error: mapMetaError(mediaRes.data) || "Meta Media API did not accept the uploaded image.",
+        meta_response: mediaRes.data,
+      }, 400);
+    }
 
-      if (!mediaRes.ok || !mediaRes.data?.id) {
-        // Cleanup temp storage image
-        if (uploadPath) {
-          await supabaseAdmin.storage.from("profile-photos-public").remove([uploadPath]);
-        }
-        return jsonResponse({
-          error: mapMetaError(mediaRes.data) || "Meta Media API did not accept the uploaded image.",
-          meta_response: mediaRes.data,
-        }, 400);
-      }
+    const mediaId = mediaRes.data.id;
 
-      const mediaId = mediaRes.data.id;
+    // ── Step 2: Set profile picture handle via WhatsApp Business Profile API ──
+    let profileRes = await metaApi(`${targetPhoneId}/whatsapp_business_profile`, accessToken, {
+      method: "POST",
+      body: {
+        messaging_product: "whatsapp",
+        profile_picture_handle: mediaId,
+      },
+    });
 
-      // ── Step 2: Set profile picture handle via WhatsApp Business Profile API ──
-      let profileRes = await metaApi(`${targetPhoneId}/whatsapp_business_profile`, accessToken, {
+    // Fallback to WABA ID if phone_number_id endpoint returned 404/not supported
+    if (!profileRes.ok && waba_id && waba_id !== targetPhoneId) {
+      profileRes = await metaApi(`${waba_id}/whatsapp_business_profile`, accessToken, {
         method: "POST",
         body: {
           messaging_product: "whatsapp",
           profile_picture_handle: mediaId,
         },
       });
-
-      // Fallback to WABA ID if phone_number_id endpoint returned 404/not supported
-      if (!profileRes.ok && waba_id && waba_id !== targetPhoneId) {
-        profileRes = await metaApi(`${waba_id}/whatsapp_business_profile`, accessToken, {
-          method: "POST",
-          body: {
-            messaging_product: "whatsapp",
-            profile_picture_handle: mediaId,
-          },
-        });
-      }
-
-      // Cleanup: Delete temporary file from storage bucket
-      if (uploadPath) {
-        await supabaseAdmin.storage.from("profile-photos-public").remove([uploadPath]);
-      }
-
-      // Check Meta confirmation
-      if (!profileRes.ok || (profileRes.data?.success !== true && !profileRes.data?.id)) {
-        return jsonResponse({
-          error: mapMetaError(profileRes.data),
-          meta_response: profileRes.data,
-        }, 400);
-      }
-
-      // ── Step 3: Fetch confirmed profile picture from Meta to cache CDN URL ──
-      let confirmedPictureUrl = "";
-      const fetchProfileRes = await metaApi(`${targetPhoneId}/whatsapp_business_profile`, accessToken, {
-        method: "GET",
-        params: { fields: "profile_picture_url,about" },
-      });
-
-      if (fetchProfileRes.ok && fetchProfileRes.data) {
-        const item = Array.isArray(fetchProfileRes.data.data) ? fetchProfileRes.data.data[0] : fetchProfileRes.data;
-        confirmedPictureUrl = item?.profile_picture_url || "";
-      }
-
-      // Update whatsapp_connections table with confirmed profile picture
-      if (confirmedPictureUrl) {
-        await supabaseAdmin
-          .from("whatsapp_connections")
-          .update({
-            profile_picture_url: confirmedPictureUrl,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("organization_id", profile.organization_id);
-      }
-
-      // Insert audit log only on confirmed success
-      try {
-        await supabaseAdmin.from("audit_logs").insert({
-          organization_id: profile.organization_id,
-          action: "WhatsApp Profile Picture Updated",
-          entity: connection.phone_number || phone_number_id || waba_id,
-          actor: user.email || "Admin",
-          details: `Profile picture updated via Meta Business Profile API. Media ID: ${mediaId}`,
-          status: "Success",
-        });
-      } catch (auditErr) {
-        console.warn("Audit log insert error (non-fatal):", auditErr);
-      }
-
-      return jsonResponse({
-        success: true,
-        message: "Profile picture updated successfully on WhatsApp Business.",
-        media_id: mediaId,
-        profile_picture_url: confirmedPictureUrl || null,
-      });
     }
 
-    // ─── Action: update_about ─────────────────────────────────────────────
-    if (action === "update_about") {
-      if (!about || typeof about !== "string") {
-        return jsonResponse({ error: "Missing 'about' field" }, 400);
-      }
+    // Cleanup: Delete temporary file from storage bucket
+    if (uploadPath) {
+      await supabaseAdmin.storage.from("profile-photos-public").remove([uploadPath]);
+    }
 
-      const trimmed = about.trim();
-      if (trimmed.length > 139) {
-        return jsonResponse({
-          error: `About text exceeds 139 character limit (${trimmed.length}/139).`,
-        }, 400);
-      }
+    // Check Meta confirmation
+    if (!profileRes.ok || (profileRes.data?.success !== true && !profileRes.data?.id)) {
+      return jsonResponse({
+        error: mapMetaError(profileRes.data),
+        meta_response: profileRes.data,
+      }, 400);
+    }
 
-      const targetPhoneId = phone_number_id || waba_id;
-      let res = await metaApi(`${targetPhoneId}/whatsapp_business_profile`, accessToken, {
+    // ── Step 3: Fetch confirmed profile picture from Meta to cache CDN URL ──
+    let confirmedPictureUrl = "";
+    const fetchProfileRes = await metaApi(`${targetPhoneId}/whatsapp_business_profile`, accessToken, {
+      method: "GET",
+      params: { fields: "profile_picture_url,about" },
+    });
+
+    if (fetchProfileRes.ok && fetchProfileRes.data) {
+      const item = Array.isArray(fetchProfileRes.data.data) ? fetchProfileRes.data.data[0] : fetchProfileRes.data;
+      confirmedPictureUrl = item?.profile_picture_url || "";
+    }
+
+    // Update whatsapp_connections table with confirmed profile picture
+    if (confirmedPictureUrl) {
+      await supabaseAdmin
+        .from("whatsapp_connections")
+        .update({
+          profile_picture_url: confirmedPictureUrl,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("organization_id", profile.organization_id);
+    }
+
+    // Insert audit log only on confirmed success
+    try {
+      await supabaseAdmin.from("audit_logs").insert({
+        organization_id: profile.organization_id,
+        action: "WhatsApp Profile Picture Updated",
+        entity: connection.phone_number || phone_number_id || waba_id,
+        actor: user.email || "Admin",
+        details: `Profile picture updated via Meta Business Profile API. Media ID: ${mediaId}`,
+        status: "Success",
+      });
+    } catch (auditErr) {
+      console.warn("Audit log insert error (non-fatal):", auditErr);
+    }
+
+    return jsonResponse({
+      success: true,
+      message: "Profile picture updated successfully on WhatsApp Business.",
+      media_id: mediaId,
+      profile_picture_url: confirmedPictureUrl || null,
+    });
+  }
+
+  // ─── Action: update_about ─────────────────────────────────────────────
+  if (action === "update_about") {
+    if (!about || typeof about !== "string") {
+      return jsonResponse({ error: "Missing 'about' field" }, 400);
+    }
+
+    const trimmed = about.trim();
+    if (trimmed.length > 139) {
+      return jsonResponse({
+        error: `About text exceeds 139 character limit (${trimmed.length}/139).`,
+      }, 400);
+    }
+
+    const targetPhoneId = phone_number_id || waba_id;
+    let res = await metaApi(`${targetPhoneId}/whatsapp_business_profile`, accessToken, {
+      method: "POST",
+      body: {
+        messaging_product: "whatsapp",
+        about: trimmed,
+      },
+    });
+
+    if (!res.ok && waba_id && waba_id !== targetPhoneId) {
+      res = await metaApi(`${waba_id}/whatsapp_business_profile`, accessToken, {
         method: "POST",
         body: {
           messaging_product: "whatsapp",
           about: trimmed,
         },
       });
-
-      if (!res.ok && waba_id && waba_id !== targetPhoneId) {
-        res = await metaApi(`${waba_id}/whatsapp_business_profile`, accessToken, {
-          method: "POST",
-          body: {
-            messaging_product: "whatsapp",
-            about: trimmed,
-          },
-        });
-      }
-
-      if (!res.ok || (res.data?.success !== true && !res.data?.id)) {
-        return jsonResponse({
-          error: mapMetaError(res.data),
-          meta_response: res.data,
-        }, 400);
-      }
-
-      // Cache in whatsapp_connections
-      await supabaseAdmin
-        .from("whatsapp_connections")
-        .update({
-          about: trimmed,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("organization_id", profile.organization_id);
-
-      // Audit log
-      try {
-        await supabaseAdmin.from("audit_logs").insert({
-          organization_id: profile.organization_id,
-          action: "WhatsApp About Text Updated",
-          entity: connection.phone_number || phone_number_id || waba_id,
-          actor: user.email || "Admin",
-          details: `About text set to: "${trimmed}"`,
-          status: "Success",
-        });
-      } catch (auditErr) {
-        console.warn("Audit log insert error (non-fatal):", auditErr);
-      }
-
-      return jsonResponse({
-        success: true,
-        message: "About text updated successfully on WhatsApp Business.",
-        about: trimmed,
-      });
     }
 
-    // ─── Action: fetch_profile ───────────────────────────────────────────
-    if (action === "fetch_profile") {
-      const targetPhoneId = phone_number_id || waba_id;
-      let res = await metaApi(`${targetPhoneId}/whatsapp_business_profile`, accessToken, {
+    if (!res.ok || (res.data?.success !== true && !res.data?.id)) {
+      return jsonResponse({
+        error: mapMetaError(res.data),
+        meta_response: res.data,
+      }, 400);
+    }
+
+    // Cache in whatsapp_connections
+    await supabaseAdmin
+      .from("whatsapp_connections")
+      .update({
+        about: trimmed,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("organization_id", profile.organization_id);
+
+    // Audit log
+    try {
+      await supabaseAdmin.from("audit_logs").insert({
+        organization_id: profile.organization_id,
+        action: "WhatsApp About Text Updated",
+        entity: connection.phone_number || phone_number_id || waba_id,
+        actor: user.email || "Admin",
+        details: `About text set to: "${trimmed}"`,
+        status: "Success",
+      });
+    } catch (auditErr) {
+      console.warn("Audit log insert error (non-fatal):", auditErr);
+    }
+
+    return jsonResponse({
+      success: true,
+      message: "About text updated successfully on WhatsApp Business.",
+      about: trimmed,
+    });
+  }
+
+  // ─── Action: fetch_profile ───────────────────────────────────────────
+  if (action === "fetch_profile") {
+    const targetPhoneId = phone_number_id || waba_id;
+    let res = await metaApi(`${targetPhoneId}/whatsapp_business_profile`, accessToken, {
+      method: "GET",
+      params: {
+        fields: "profile_picture_url,about,address,description,name,websites,vertical",
+      },
+    });
+
+    if (!res.ok && waba_id && waba_id !== targetPhoneId) {
+      res = await metaApi(`${waba_id}/whatsapp_business_profile`, accessToken, {
         method: "GET",
         params: {
           fields: "profile_picture_url,about,address,description,name,websites,vertical",
         },
       });
-
-      if (!res.ok && waba_id && waba_id !== targetPhoneId) {
-        res = await metaApi(`${waba_id}/whatsapp_business_profile`, accessToken, {
-          method: "GET",
-          params: {
-            fields: "profile_picture_url,about,address,description,name,websites,vertical",
-          },
-        });
-      }
-
-      if (!res.ok) {
-        return jsonResponse({
-          error: mapMetaError(res.data),
-          meta_response: res.data,
-        }, 400);
-      }
-
-      const profileData = Array.isArray(res.data?.data) ? res.data.data[0] : res.data;
-
-      // Also update local cache if profile_picture_url is present
-      if (profileData?.profile_picture_url || profileData?.about) {
-        const updateFields: Record<string, any> = { updated_at: new Date().toISOString() };
-        if (profileData.profile_picture_url) updateFields.profile_picture_url = profileData.profile_picture_url;
-        if (profileData.about) updateFields.about = profileData.about;
-
-        await supabaseAdmin
-          .from("whatsapp_connections")
-          .update(updateFields)
-          .eq("organization_id", profile.organization_id);
-      }
-
-      return jsonResponse({
-        success: true,
-        profile: profileData,
-      });
     }
 
-    return jsonResponse({ error: `Unknown action: ${action}` }, 400);
-  } catch (err) {
-    console.error("update-whatsapp-profile Error:", err);
-    return jsonResponse({ error: (err as Error).message || "Internal server error" }, 500);
+    if (!res.ok) {
+      return jsonResponse({
+        error: mapMetaError(res.data),
+        meta_response: res.data,
+      }, 400);
+    }
+
+    const profileData = Array.isArray(res.data?.data) ? res.data.data[0] : res.data;
+
+    // Also update local cache if profile_picture_url is present
+    if (profileData?.profile_picture_url || profileData?.about) {
+      const updateFields: Record<string, any> = { updated_at: new Date().toISOString() };
+      if (profileData.profile_picture_url) updateFields.profile_picture_url = profileData.profile_picture_url;
+      if (profileData.about) updateFields.about = profileData.about;
+
+      await supabaseAdmin
+        .from("whatsapp_connections")
+        .update(updateFields)
+        .eq("organization_id", profile.organization_id);
+    }
+
+    return jsonResponse({
+      success: true,
+      profile: profileData,
+    });
   }
+
+  return jsonResponse({ error: `Unknown action: ${action}` }, 400);
+} catch (err) {
+  console.error("update-whatsapp-profile Error:", err);
+  return jsonResponse({ error: (err as Error).message || "Internal server error" }, 500);
+}
 });
