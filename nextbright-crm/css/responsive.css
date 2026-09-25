@@ -1,0 +1,112 @@
+/* ============================================================
+   RESPONSIVE CSS — NextBright CRM
+   ============================================================ */
+
+/* Large Desktop — ≤ 1360px */
+@media (max-width: 1360px) {
+  .kpi-grid { grid-template-columns: repeat(3, 1fr); }
+}
+
+/* Tablet — ≤ 1180px */
+@media (max-width: 1180px) {
+  .kpi-grid { grid-template-columns: repeat(3, 1fr); }
+  .dash-content-grid { grid-template-columns: 1fr; }
+  .dash-right-panel { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 18px; }
+  .dash-right-panel .card:first-child { margin-top: 0; }
+  .dash-right-panel .card:last-child  { margin-top: 0; }
+}
+
+/* Medium — ≤ 960px */
+@media (max-width: 960px) {
+  .messages-layout { grid-template-columns: 240px 1fr; }
+  .conv-info-panel { display: none; }
+  .deals-pipeline, .kanban-board {
+    display: flex;
+    gap: 14px;
+    overflow-x: auto;
+    padding-bottom: 16px;
+    -webkit-overflow-scrolling: touch;
+  }
+  .pipeline-col, .kanban-col {
+    min-width: 270px;
+    max-width: 300px;
+    flex-shrink: 0;
+  }
+  .appt-layout { grid-template-columns: 1fr; }
+  .settings-layout { grid-template-columns: 1fr; }
+  .settings-nav { flex-direction: row; flex-wrap: wrap; gap: 6px; }
+  .settings-nav-item { padding: 8px 12px; }
+}
+
+/* Mobile/Tablet — ≤ 768px */
+@media (max-width: 768px) {
+  .sidebar {
+    position: fixed;
+    left: -100%;
+    top: 0;
+    z-index: 250;
+    height: 100vh;
+    transition: left 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: var(--shadow-xl);
+  }
+  .sidebar.mobile-open { left: 0; }
+  .sidebar-mobile-toggle { display: flex !important; }
+  .main-area { width: 100%; margin-left: 0 !important; }
+  .content-area { padding: 16px 12px; }
+  .page-hero { flex-direction: column; align-items: flex-start; gap: 12px; }
+  .page-hero-actions { flex-wrap: wrap; width: 100%; justify-content: flex-start; }
+  .kpi-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  .reports-grid { grid-template-columns: 1fr; }
+  .topbar-workspace-sel { display: none; }
+  .search-kbd { display: none; }
+  
+  /* Messages layout mobile view */
+  .messages-layout { grid-template-columns: 1fr; height: calc(100vh - 120px); }
+  .messages-layout.mobile-chat-active .conv-list-panel { display: none; }
+  .messages-layout:not(.mobile-chat-active) .conv-chat-panel { display: none; }
+  .btn-back-conv { display: inline-flex !important; }
+  
+  /* Table wrappers horizontal scroll */
+  .table-wrap {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .data-table {
+    min-width: 650px;
+  }
+}
+
+/* Small Mobile — ≤ 480px */
+@media (max-width: 480px) {
+  .topbar { padding: 0 12px; gap: 8px; }
+  .topbar-left { gap: 8px; }
+  .topbar-right { gap: 6px; }
+  .search-input { width: 140px; font-size: 0.75rem; }
+  .search-input:focus { width: 180px; }
+  .kpi-grid { grid-template-columns: 1fr; }
+  .dash-right-panel { grid-template-columns: 1fr; }
+  .filter-bar { flex-direction: column; align-items: stretch; gap: 8px; }
+  .page-hero-actions .btn { font-size: 0.75rem; padding: 6px 10px; }
+  .data-table th, .data-table td { font-size: 0.75rem; padding: 8px 6px; }
+  
+  /* Modal centering on mobile */
+  .modal-container {
+    width: 95vw !important;
+    max-height: 90vh !important;
+    overflow-y: auto !important;
+    padding: 16px !important;
+    margin: 10px;
+  }
+}
+
+/* Mobile backdrop overlay for sidebar */
+.sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(2px);
+  z-index: 240;
+}
+.sidebar-overlay.active { display: block; }

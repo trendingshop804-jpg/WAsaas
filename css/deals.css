@@ -1,0 +1,70 @@
+/* ============================================================
+   DEALS — Pipeline
+   ============================================================ */
+.deals-pipeline {
+  display: flex;
+  gap: 14px;
+  overflow-x: auto;
+  padding-bottom: 16px;
+  align-items: flex-start;
+}
+.pipeline-col {
+  min-width: 240px;
+  max-width: 260px;
+  flex-shrink: 0;
+  background: var(--navy-50);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.pipeline-col-header {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border-light);
+  background: #fff;
+}
+.pipeline-col-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+.pipeline-col-total {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+.pipeline-cards { padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+.deal-card {
+  background: #fff;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  padding: 14px;
+  cursor: grab;
+  transition: box-shadow var(--transition), transform var(--transition);
+  box-shadow: var(--shadow-sm);
+}
+.deal-card:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); }
+.deal-card-name { font-size: 0.875rem; font-weight: 700; margin-bottom: 3px; }
+.deal-card-customer { font-size: 0.75rem; color: var(--text-muted); }
+.deal-card-body { margin-top: 10px; display: flex; flex-direction: column; gap: 5px; }
+.deal-card-amount { font-size: 1.0625rem; font-weight: 800; color: var(--text-primary); }
+.deal-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+}
+.deal-prob {
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 1px 8px;
+  border-radius: var(--radius-full);
+}
+.prob-high   { background: #F0FDF4; color: #16A34A; }
+.prob-medium { background: #FFFBEB; color: #D97706; }
+.prob-low    { background: #FEF2F2; color: #DC2626; }
+
+/* Won/Lost column accent */
+.pipeline-col.won .pipeline-col-header { border-top: 3px solid var(--status-success); }
+.pipeline-col.lost .pipeline-col-header { border-top: 3px solid var(--status-danger); }

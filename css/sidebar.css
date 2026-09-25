@@ -1,0 +1,276 @@
+/* ============================================================
+   SIDEBAR
+   ============================================================ */
+.sidebar {
+  width: var(--sidebar-width);
+  min-width: var(--sidebar-width);
+  height: 100vh;
+  background: var(--bg-sidebar);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: width 0.25s ease, min-width 0.25s ease;
+  position: relative;
+  z-index: 100;
+}
+
+/* ---- Logo ---- */
+.sidebar-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 18px 16px 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  position: relative;
+}
+.logo-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, var(--brand-primary), var(--brand-accent));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  flex-shrink: 0;
+}
+.logo-icon svg, .logo-icon i { width: 16px; height: 16px; }
+.logo-text {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  white-space: nowrap;
+  transition: opacity 0.2s, width 0.2s;
+}
+.logo-name {
+  font-size: 0.9375rem;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: -0.01em;
+}
+.logo-sub {
+  font-size: 0.625rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--brand-primary);
+  margin-top: -1px;
+}
+.sidebar-collapse-btn {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  transition: all var(--transition);
+  opacity: 0;
+}
+.sidebar:hover .sidebar-collapse-btn { opacity: 1; }
+.sidebar-collapse-btn:hover { background: rgba(255,255,255,0.1); color: #fff; }
+.sidebar-collapse-btn svg, .sidebar-collapse-btn i { width: 14px; height: 14px; }
+
+/* ---- Workspace ---- */
+.sidebar-workspace {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  margin: 8px 10px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background var(--transition);
+  overflow: hidden;
+}
+.sidebar-workspace:hover { background: rgba(255,255,255,0.06); }
+.workspace-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  background: linear-gradient(135deg, #2563EB, #7C3AED);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.workspace-info {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  white-space: nowrap;
+  flex: 1;
+}
+.workspace-name {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: #fff;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.workspace-plan {
+  font-size: 0.6875rem;
+  color: var(--navy-400);
+}
+.sidebar-workspace svg, .sidebar-workspace i { width: 12px; height: 12px; color: var(--navy-500); flex-shrink: 0; }
+
+/* ---- Navigation ---- */
+.sidebar-nav {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px 10px 10px;
+}
+.sidebar-nav::-webkit-scrollbar { width: 3px; }
+.sidebar-nav::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
+
+.nav-label {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--navy-600);
+  padding: 12px 8px 4px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-sidebar);
+  transition: all var(--transition);
+  cursor: pointer;
+  white-space: nowrap;
+  margin-bottom: 1px;
+  position: relative;
+}
+.nav-item i, .nav-item svg, .nav-item span, .nav-item .nav-badge {
+  width: 17px;
+  height: 17px;
+  flex-shrink: 0;
+  pointer-events: none;
+}
+.nav-item span:first-of-type { flex: 1; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
+.nav-item:hover { background: rgba(255,255,255,0.08); color: #fff; }
+.nav-item:focus { outline: 2px solid var(--brand-primary); outline-offset: -2px; }
+.nav-item.active {
+  background: rgba(37,99,235,0.2);
+  color: var(--text-sidebar-active);
+  font-weight: 700;
+}
+.nav-item.active::before {
+  content: '';
+  position: absolute;
+  left: -10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 60%;
+  background: var(--brand-primary);
+  border-radius: 0 2px 2px 0;
+}
+
+.nav-badge {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: var(--radius-full);
+  background: rgba(255,255,255,0.1);
+  color: var(--navy-300);
+}
+.nav-badge-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #10B981;
+  padding: 0;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+/* ---- Sidebar Footer / User ---- */
+.sidebar-footer {
+  padding: 10px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+.sidebar-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background var(--transition);
+}
+.sidebar-user:hover { background: rgba(255,255,255,0.06); }
+.user-ava {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-full);
+  background: linear-gradient(135deg, var(--brand-primary), var(--brand-accent));
+  color: #fff;
+  font-size: 0.6875rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.user-info {
+  flex: 1;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.user-name {
+  display: block;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: #fff;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.user-role {
+  display: block;
+  font-size: 0.6875rem;
+  color: var(--navy-500);
+}
+.sidebar-user .icon-btn {
+  width: 26px;
+  height: 26px;
+  color: var(--navy-500);
+}
+.sidebar-user .icon-btn:hover { background: rgba(255,255,255,0.1); color: #fff; }
+.sidebar-user .icon-btn i, .sidebar-user .icon-btn svg { width: 14px; height: 14px; }
+
+/* ---- Collapsed State ---- */
+.sidebar-collapse-btn { opacity: 0.8 !important; }
+.sidebar.collapsed {
+  width: var(--sidebar-collapsed-width);
+  min-width: var(--sidebar-collapsed-width);
+}
+.sidebar.collapsed .logo-text,
+.sidebar.collapsed .workspace-info,
+.sidebar.collapsed .nav-label,
+.sidebar.collapsed .nav-item span,
+.sidebar.collapsed .nav-badge,
+.sidebar.collapsed .user-info { display: none; }
+.sidebar.collapsed .sidebar-collapse-btn {
+  transform: translateY(-50%) rotate(180deg);
+  right: 18px;
+}
+.sidebar.collapsed .sidebar-workspace { justify-content: center; padding: 10px; }
+.sidebar.collapsed .nav-item { justify-content: center; padding: 10px; }
+.sidebar.collapsed .sidebar-user { justify-content: center; padding: 10px; }
+.sidebar.collapsed .nav-item.active::before { display: none; }

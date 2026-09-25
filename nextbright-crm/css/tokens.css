@@ -1,0 +1,79 @@
+/* ============================================================
+   DESIGN TOKENS — NextBright CRM
+   ============================================================ */
+:root {
+  /* Brand Colors */
+  --brand-primary:        #2563EB;
+  --brand-primary-dark:   #1D4ED8;
+  --brand-primary-light:  #EFF6FF;
+  --brand-primary-40:     rgba(37,99,235,0.4);
+  --brand-accent:         #7C3AED;
+  --brand-accent-light:   #F5F3FF;
+
+  /* Neutral Palette */
+  --navy-900:  #0F172A;
+  --navy-800:  #1E293B;
+  --navy-700:  #334155;
+  --navy-600:  #475569;
+  --navy-500:  #64748B;
+  --navy-400:  #94A3B8;
+  --navy-300:  #CBD5E1;
+  --navy-200:  #E2E8F0;
+  --navy-100:  #F1F5F9;
+  --navy-50:   #F8FAFC;
+
+  /* Semantic */
+  --bg-main:    #F8FAFC;
+  --bg-card:    #FFFFFF;
+  --bg-sidebar: #0F172A;
+
+  --text-primary:   #0F172A;
+  --text-secondary: #475569;
+  --text-muted:     #94A3B8;
+  --text-inverse:   #FFFFFF;
+  --text-sidebar:   #CBD5E1;
+  --text-sidebar-active: #FFFFFF;
+
+  --border-light:  #E2E8F0;
+  --border-medium: #CBD5E1;
+
+  --shadow-sm:  0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md:  0 4px 12px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.04);
+  --shadow-lg:  0 12px 32px rgba(0,0,0,0.12), 0 4px 8px rgba(0,0,0,0.06);
+
+  /* Status Colors */
+  --status-success: #10B981;
+  --status-warning: #F59E0B;
+  --status-danger:  #EF4444;
+  --status-info:    #3B82F6;
+
+  /* KPI Icon Colors */
+  --kpi-blue:   #2563EB;
+  --kpi-green:  #10B981;
+  --kpi-purple: #7C3AED;
+  --kpi-orange: #F59E0B;
+  --kpi-teal:   #0EA5E9;
+
+  /* Spacing */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-10: 40px;
+
+  /* Border Radius */
+  --radius-sm:  6px;
+  --radius-md:  10px;
+  --radius-lg:  14px;
+  --radius-xl:  20px;
+  --radius-full: 9999px;
+
+  /* Layout */
+  --sidebar-width: 240px;
+  --sidebar-collapsed-width: 64px;
+  --topbar-height: 60px;
+  --transition: 0.2s ease;
+}

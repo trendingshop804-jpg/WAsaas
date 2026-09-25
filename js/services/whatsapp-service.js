@@ -629,7 +629,9 @@ class WhatsAppService {
     try {
       let rawMessages = [];
       try {
-        const res = await fetch('/api/messages');
+        const organizationId = window.appState?.get('currentOrgId');
+        if (!organizationId) return;
+        const res = await fetch('/api/messages?organization_id=' + encodeURIComponent(organizationId));
         if (res.ok) {
           const data = await res.json();
           if (data.messages && Array.isArray(data.messages)) {

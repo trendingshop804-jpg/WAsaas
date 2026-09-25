@@ -1,0 +1,721 @@
+- generic [ref=f1e27]:
+  - complementary [ref=f1e28]:
+    - generic [ref=f1e29]:
+      - link "NexusLead" [ref=f1e30] [cursor=pointer]:
+        - /url: "#"
+      - generic [ref=f1e35]: SaaS
+    - generic "Switch Workspace / Organization" [ref=f1e36] [cursor=pointer]:
+      - generic [ref=f1e37]:
+        - generic [ref=f1e38]: "N"
+        - generic [ref=f1e39]:
+          - generic [ref=f1e40]: NextBright Solutions
+          - generic [ref=f1e41]: Scale Plan
+    - navigation [ref=f1e44]:
+      - generic [ref=f1e45]: Core Operating System
+      - link "Dashboard" [ref=f1e46] [cursor=pointer]:
+        - /url: "#dashboard"
+      - link "Lead Discovery AI Search" [ref=f1e53] [cursor=pointer]:
+        - /url: "#discovery"
+        - generic [ref=f1e57]: Lead Discovery
+        - generic [ref=f1e58]: AI Search
+      - link "Import Leads" [ref=f1e59] [cursor=pointer]:
+        - /url: "#import"
+      - link "Lead CRM & Pipeline" [ref=f1e64] [cursor=pointer]:
+        - /url: "#crm"
+      - generic [ref=f1e71]: WhatsApp Automation
+      - link "Campaigns" [ref=f1e72] [cursor=pointer]:
+        - /url: "#campaigns"
+      - link "Live Inbox Active" [ref=f1e77] [cursor=pointer]:
+        - /url: "#inbox"
+        - generic [ref=f1e80]: Live Inbox
+        - generic [ref=f1e81]: Active
+      - link "AI Message Composer" [ref=f1e82] [cursor=pointer]:
+        - /url: "#ai-generator"
+      - link "Follow-Up Sequences" [ref=f1e86] [cursor=pointer]:
+        - /url: "#followups"
+      - link "AI Sales Agent" [ref=f1e91] [cursor=pointer]:
+        - /url: "#ai-agent"
+      - link "Workflow Builder Visual" [ref=f1e95] [cursor=pointer]:
+        - /url: "#workflows"
+        - generic [ref=f1e98]: Workflow Builder
+        - generic [ref=f1e99]: Visual
+      - link "WhatsApp Connect" [ref=f1e100] [cursor=pointer]:
+        - /url: "#whatsapp-connect"
+      - generic [ref=f1e105]: Instagram Automation
+      - link "Instagram Hub New" [ref=f1e106] [cursor=pointer]:
+        - /url: "#instagram"
+        - generic [ref=f1e110]: Instagram Hub
+        - generic [ref=f1e111]: New
+      - link "Templates" [ref=f1e112] [cursor=pointer]:
+        - /url: "#templates"
+      - generic [ref=f1e117]: Organization & Management
+      - link "Analytics & ROI" [ref=f1e118] [cursor=pointer]:
+        - /url: "#analytics"
+      - link "Team & RBAC" [ref=f1e121] [cursor=pointer]:
+        - /url: "#team"
+      - link "Billing & Usage" [ref=f1e128] [cursor=pointer]:
+        - /url: "#billing"
+      - link "Settings & Audit" [ref=f1e132] [cursor=pointer]:
+        - /url: "#settings"
+    - generic [ref=f1e138] [cursor=pointer]:
+      - generic [ref=f1e139]:
+        - generic [ref=f1e140]: NL
+        - generic [ref=f1e141]:
+          - generic [ref=f1e142]: complaint.dropzone
+          - generic [ref=f1e143]: Owner & Admin
+      - button "Sign Out" [ref=f1e144]
+  - generic [ref=f1e148]:
+    - banner [ref=f1e149]:
+      - textbox "Search leads, companies, phone, campaigns (Press Enter)..." [ref=f1e152]: complaint.dropzone@gmail.com
+      - generic [ref=f1e153]:
+        - button "PAUSE ALL AUTOMATIONS" [ref=f1e154] [cursor=pointer]
+        - button "All Follow-ups Caught Up" [ref=f1e158] [cursor=pointer]
+        - button "🚀 Guided Setup" [ref=f1e162] [cursor=pointer]
+        - button "Toggle Theme" [ref=f1e163] [cursor=pointer]
+    - main [ref=f1e171]:
+      - text: 1 0 0 0 0
+      - generic [ref=f1e172]:
+        - generic [ref=f1e173]:
+          - generic [ref=f1e174]:
+            - generic [ref=f1e175]:
+              - heading "Instagram Growth & Automation Hub" [level=2] [ref=f1e176]
+              - generic [ref=f1e177]: Meta Graph API
+            - paragraph [ref=f1e178]: Automate public comment responses, paced comment-to-DM triggers, and cross-format post scheduling.
+          - generic [ref=f1e179]:
+            - button "💬 + Auto-Reply Rule" [ref=f1e180] [cursor=pointer]
+            - button "✉️ + Comment-to-DM Rule" [ref=f1e181] [cursor=pointer]
+            - button "Schedule New Post / Reel" [active] [ref=f1e182] [cursor=pointer]
+        - generic [ref=f1e186]:
+          - generic [ref=f1e192]:
+            - generic [ref=f1e193]:
+              - generic [ref=f1e194]: "@nextbright_solutions"
+              - generic [ref=f1e195]: ● Connected & Verified
+            - generic [ref=f1e196]:
+              - text: "Instagram Professional Account ID:"
+              - code [ref=f1e197]: "17841405728287316"
+              - text: "· Page ID:"
+              - code [ref=f1e198]: "102938475612345"
+          - generic [ref=f1e199]:
+            - button "Switch Account" [ref=f1e200] [cursor=pointer]
+            - button "Disconnect" [ref=f1e201] [cursor=pointer]
+        - generic [ref=f1e202]:
+          - button "Overview & Feed" [ref=f1e203] [cursor=pointer]
+          - button "Auto-Reply Rules" [ref=f1e204] [cursor=pointer]
+          - button "Comment-to-DM Rules" [ref=f1e205] [cursor=pointer]
+          - button "Post Scheduler" [ref=f1e206] [cursor=pointer]
+        - generic [ref=f1e207]:
+          - generic [ref=f1e208]:
+            - generic [ref=f1e209]:
+              - generic [ref=f1e210]: Active Auto-Reply Rules
+              - generic [ref=f1e211]: 2 Active
+            - generic [ref=f1e212]:
+              - generic [ref=f1e213]: Comment-to-DMs Sent
+              - generic [ref=f1e214]: 96 Sent
+            - generic [ref=f1e215]:
+              - generic [ref=f1e216]: Scheduled Posts
+              - generic [ref=f1e217]: 2 Posts
+            - generic [ref=f1e218]:
+              - generic [ref=f1e219]: API Rate Limit Budget
+              - generic [ref=f1e220]: 100% Safe (Paced)
+          - generic [ref=f1e221]:
+            - generic [ref=f1e222]: Instagram Automation Rules Summary
+            - paragraph [ref=f1e224]:
+              - text: Your Instagram Business Account uses rule-based keyword listeners for incoming comments. Whenever a user comments with targeted keywords (e.g.
+              - code [ref=f1e225]: price
+              - text: ","
+              - code [ref=f1e226]: demo
+              - text: ","
+              - code [ref=f1e227]: link
+              - text: ), the system immediately replies publicly and enqueues a private direct message reply following Meta's 24-hour customer-interaction guidelines.
+        - generic [ref=f1e229]:
+          - generic [ref=f1e230]:
+            - generic [ref=f1e231]:
+              - generic [ref=f1e232]: Keyword Auto-Reply Rules (Public Comments)
+              - generic [ref=f1e233]: Automatically post a public reply comment when users comment specific keywords
+            - button "+ New Reply Rule" [ref=f1e234] [cursor=pointer]
+          - table [ref=f1e236]:
+            - rowgroup [ref=f1e237]:
+              - row [ref=f1e238]:
+                - columnheader "Rule Name" [ref=f1e239]
+                - columnheader "Trigger Keywords" [ref=f1e240]
+                - columnheader "Public Reply Message" [ref=f1e241]
+                - columnheader "Total Replies" [ref=f1e242]
+                - columnheader "Active" [ref=f1e243]
+                - columnheader "Actions" [ref=f1e244]
+            - rowgroup [ref=f1e245]:
+              - row [ref=f1e246]:
+                - cell "Pricing Inquiries Applies to all posts" [ref=f1e247]:
+                  - generic [ref=f1e248]: Pricing Inquiries
+                  - generic [ref=f1e249]: Applies to all posts
+                - cell "price cost pricing how much rate" [ref=f1e250]:
+                  - generic [ref=f1e251]:
+                    - generic [ref=f1e252]: price
+                    - generic [ref=f1e253]: cost
+                    - generic [ref=f1e254]: pricing
+                    - generic [ref=f1e255]: how much
+                    - generic [ref=f1e256]: rate
+                - cell "💬 Hey there! Sent you the full pricing breakdown in your DMs 🚀 Check your message requests!" [ref=f1e257]:
+                  - generic "Hey there! Sent you the full pricing breakdown in your DMs 🚀 Check your message requests!" [ref=f1e258]: 💬 Hey there! Sent you the full pricing breakdown in your DMs 🚀 Check your message requests!
+                - cell "42 replies" [ref=f1e259]
+                - cell [ref=f1e261]:
+                  - checkbox [checked] [ref=f1e263]
+                - cell [ref=f1e264]:
+                  - button "🗑️" [ref=f1e265] [cursor=pointer]
+              - row [ref=f1e266]:
+                - cell "Demo Keyword Trigger Applies to all posts" [ref=f1e267]:
+                  - generic [ref=f1e268]: Demo Keyword Trigger
+                  - generic [ref=f1e269]: Applies to all posts
+                - cell "demo link access try" [ref=f1e270]:
+                  - generic [ref=f1e271]:
+                    - generic [ref=f1e272]: demo
+                    - generic [ref=f1e273]: link
+                    - generic [ref=f1e274]: access
+                    - generic [ref=f1e275]: try
+                - cell "💬 Awesome! We just sent the instant demo access link to your direct messages 💬" [ref=f1e276]:
+                  - generic "Awesome! We just sent the instant demo access link to your direct messages 💬" [ref=f1e277]: 💬 Awesome! We just sent the instant demo access link to your direct messages 💬
+                - cell "128 replies" [ref=f1e278]
+                - cell [ref=f1e280]:
+                  - checkbox [checked] [ref=f1e282]
+                - cell [ref=f1e283]:
+                  - button "🗑️" [ref=f1e284] [cursor=pointer]
+        - generic [ref=f1e286]:
+          - generic [ref=f1e287]:
+            - generic [ref=f1e288]:
+              - generic [ref=f1e289]: Comment-to-DM Rules (Private Replies)
+              - generic [ref=f1e290]: Direct message users who comment on your posts (Rate-limited via background queue)
+            - button "+ New Auto-DM Rule" [ref=f1e291] [cursor=pointer]
+          - table [ref=f1e293]:
+            - rowgroup [ref=f1e294]:
+              - row [ref=f1e295]:
+                - columnheader "Rule Name" [ref=f1e296]
+                - columnheader "Trigger Keywords" [ref=f1e297]
+                - columnheader "Private DM Message" [ref=f1e298]
+                - columnheader "Total DMs Sent" [ref=f1e299]
+                - columnheader "Active" [ref=f1e300]
+                - columnheader "Actions" [ref=f1e301]
+            - rowgroup [ref=f1e302]:
+              - row [ref=f1e303]:
+                - cell "Lead Qualification & Booking Link Global Comment-to-DM" [ref=f1e304]:
+                  - generic [ref=f1e305]: Lead Qualification & Booking Link
+                  - generic [ref=f1e306]: Global Comment-to-DM
+                - cell "demo book pricing link info" [ref=f1e307]:
+                  - generic [ref=f1e308]:
+                    - generic [ref=f1e309]: demo
+                    - generic [ref=f1e310]: book
+                    - generic [ref=f1e311]: pricing
+                    - generic [ref=f1e312]: link
+                    - generic [ref=f1e313]: info
+                - 'cell "✉️ Hey! Thanks for commenting on our post 👋 Here is the direct link to book a 1-on-1 walkthrough and claim your 14-day free trial: https://w-asaas.vercel.app/demo. Reply here if you have any questions!" [ref=f1e314]':
+                  - 'generic "Hey! Thanks for commenting on our post 👋 Here is the direct link to book a 1-on-1 walkthrough and claim your 14-day free trial: https://w-asaas.vercel.app/demo. Reply here if you have any questions!" [ref=f1e315]': "✉️ Hey! Thanks for commenting on our post 👋 Here is the direct link to book a 1-on-1 walkthrough and claim your 14-day free trial: https://w-asaas.vercel.app/demo. Reply here if you have any questions!"
+                - cell "96 DMs sent" [ref=f1e316]
+                - cell [ref=f1e318]:
+                  - checkbox [checked] [ref=f1e320]
+                - cell [ref=f1e321]:
+                  - button "🗑️" [ref=f1e322] [cursor=pointer]
+        - generic [ref=f1e323]:
+          - generic [ref=f1e324]:
+            - generic [ref=f1e325]:
+              - button "All Posts" [ref=f1e326] [cursor=pointer]
+              - button "⏳ Pending" [ref=f1e327] [cursor=pointer]
+              - button "✓ Published" [ref=f1e328] [cursor=pointer]
+              - button "✕ Failed" [ref=f1e329] [cursor=pointer]
+            - button "+ Schedule Post" [ref=f1e330] [cursor=pointer]
+          - generic [ref=f1e331]:
+            - generic [ref=f1e332]:
+              - generic [ref=f1e333]:
+                - img "Post media" [ref=f1e334]
+                - generic [ref=f1e335]: POST
+                - generic [ref=f1e336]: ⏳ Pending
+              - generic [ref=f1e338]:
+                - generic [ref=f1e339]:
+                  - generic [ref=f1e340]:
+                    - text: "📅 Scheduled:"
+                    - strong [ref=f1e341]: Sep 2, 2026, 03:30 PM
+                  - paragraph [ref=f1e342]: "🚀 Transform your WhatsApp & Instagram customer conversions with automated AI agents. 24/7 qualifying, booking & closing. #salesautomation #whatsappmarketing #growthmarketing #ai"
+                - generic [ref=f1e343]:
+                  - generic [ref=f1e344]: Ready to publish
+                  - button "🗑️" [ref=f1e345] [cursor=pointer]
+            - generic [ref=f1e346]:
+              - generic [ref=f1e347]:
+                - generic [ref=f1e349]: ▶ Video
+                - generic [ref=f1e350]: REEL
+                - generic [ref=f1e351]: ✓ Published
+              - generic [ref=f1e353]:
+                - generic [ref=f1e354]:
+                  - generic [ref=f1e355]:
+                    - text: "📅 Scheduled:"
+                    - strong [ref=f1e356]: Aug 31, 2026, 11:30 PM
+                  - paragraph [ref=f1e357]: ✨ Comment "DEMO" below to get our instant 4-touch outreach template sent directly to your DMs!
+                - generic [ref=f1e358]:
+                  - generic [ref=f1e359]: "ID: 1792837491..."
+                  - button "🗑️" [ref=f1e360] [cursor=pointer]
+  - generic [ref=f1e361]:
+    - generic [ref=f1e362]:
+      - generic [ref=f1e363]:
+        - generic [ref=f1e364]: Lead Name
+        - generic [ref=f1e365]: Job Title
+      - button "✕" [ref=f1e366] [cursor=pointer]
+    - generic [ref=f1e367]:
+      - generic [ref=f1e368]:
+        - generic [ref=f1e369]:
+          - generic [ref=f1e370]: Company Name
+          - generic [ref=f1e371]: "Score: 94/100 (HOT)"
+        - generic [ref=f1e372]:
+          - generic [ref=f1e373]:
+            - text: "Phone:"
+            - strong
+          - generic [ref=f1e374]:
+            - text: "Email:"
+            - strong
+          - generic [ref=f1e375]:
+            - text: "Location:"
+            - strong
+          - generic [ref=f1e376]:
+            - text: "Industry:"
+            - strong
+      - generic [ref=f1e377]: AI Assessment & Strategy
+      - generic [ref=f1e379]:
+        - generic [ref=f1e380]: Pipeline Stage
+        - combobox [ref=f1e381]
+      - generic [ref=f1e382]: Interaction Timeline
+      - generic [ref=f1e383]: Notes & Observations
+      - generic [ref=f1e385]:
+        - textbox "Add private note..." [ref=f1e386]
+        - button "Add Note" [ref=f1e387] [cursor=pointer]
+  - generic:
+    - generic:
+      - generic:
+        - heading "Switch Workspace" [level=3]
+        - button "✕"
+      - generic:
+        - generic:
+          - generic:
+            - generic: Nexus Growth Labs
+            - generic: Scale Plan · Chennai (Primary)
+          - generic:
+            - generic: Malabar Dental Network
+            - generic: Growth Plan · Kochi, Kerala
+  - generic:
+    - generic:
+      - generic:
+        - heading "Create WhatsApp Campaign" [level=3]
+        - button "✕"
+      - generic:
+        - generic:
+          - generic:
+            - generic: Campaign Name
+            - textbox: Kerala Clinics WhatsApp Outreach
+          - generic:
+            - generic: Approved WhatsApp Template
+            - combobox
+          - generic:
+            - generic: Safe Daily Sending Limit (Compliance Rule)
+            - spinbutton: "150"
+          - generic:
+            - generic: Sending Hours Window
+            - textbox: 09:30 AM - 06:30 PM IST
+        - generic:
+          - button "Cancel"
+          - button "Queue & Launch Campaign"
+  - generic:
+    - generic:
+      - generic:
+        - heading "Create Lead Manually" [level=3]
+        - button "✕"
+      - generic:
+        - generic:
+          - generic:
+            - generic: Company Name *
+            - textbox "e.g. Apex Health Clinic"
+          - generic:
+            - generic: Contact Name *
+            - textbox "e.g. Dr. Anil Kumar"
+          - generic:
+            - generic: WhatsApp Phone Number *
+            - textbox "e.g. +91 98401 99887"
+          - generic:
+            - generic: Email Address
+            - textbox "e.g. anil@apexhealth.com"
+          - generic:
+            - generic: Industry
+            - textbox: Healthcare & Dental
+          - generic:
+            - generic: Location
+            - textbox: Kochi, Kerala, India
+        - generic:
+          - button "Cancel"
+          - button "Score & Add Lead"
+  - generic:
+    - generic:
+      - generic:
+        - generic:
+          - generic: f
+          - heading "Meta WhatsApp + Instagram Connection" [level=3]
+        - button "✕"
+      - generic:
+        - generic:
+          - button "🔑 Permanent Token"
+          - button "🌐 FB Login Popup"
+          - button "🧪 Simulation"
+        - generic:
+          - generic:
+            - text: 💡
+            - strong: Recommended for Cloud API
+            - text: ": Generate a permanent System User token from"
+            - link "Meta Business Manager →":
+              - /url: https://business.facebook.com/settings/system-users
+            - text: . Bypasses browser HTTPS/domain restrictions.
+          - generic:
+            - generic: Meta Permanent Access Token (or Test Token) *
+            - textbox "EAAG...": praveenK90@
+          - generic:
+            - generic: WhatsApp Phone Number ID *
+            - textbox "e.g. 104829104829104"
+          - generic:
+            - generic: WhatsApp Business Account (WABA) ID (Optional)
+            - textbox "e.g. 294810482910482"
+          - generic:
+            - generic: Display Phone Number
+            - textbox "e.g. +91 98401 23456"
+      - generic:
+        - button "Cancel"
+        - button "Connect & Authorize"
+  - generic:
+    - generic:
+      - generic:
+        - heading "Add New Lead to CRM" [level=3]
+        - button "✕"
+      - generic:
+        - generic:
+          - generic:
+            - generic:
+              - generic: Company / Business Name *
+              - textbox "e.g. Apex Tech Solutions"
+            - generic:
+              - generic: Contact Person Name *
+              - textbox "e.g. Rajesh Kumar"
+          - generic:
+            - generic:
+              - generic: WhatsApp Phone Number *
+              - textbox "e.g. +91 98401 23456"
+            - generic:
+              - generic: Email Address
+              - textbox "e.g. rajesh@apextech.in"
+          - generic:
+            - generic:
+              - generic: Industry / Vertical
+              - textbox "e.g. Healthcare, Software, Retail": General
+            - generic:
+              - generic: Location (City, State)
+              - textbox "e.g. Kochi, Kerala": India
+          - generic:
+            - generic: Website URL
+            - textbox "e.g. https://apextech.in"
+        - generic:
+          - button "Cancel"
+          - button "Save Lead to CRM"
+  - generic:
+    - generic:
+      - generic:
+        - generic:
+          - heading "Map CSV Columns to Lead Fields" [level=3]
+          - generic: Match your CSV header columns to CRM fields before importing.
+        - button "✕"
+      - generic:
+        - generic:
+          - generic:
+            - generic:
+              - generic: 🏢 Company / Business Name *
+              - combobox
+            - generic:
+              - generic: 👤 Contact / Owner Name *
+              - combobox
+            - generic:
+              - generic: 📱 WhatsApp Phone Number *
+              - combobox
+            - generic:
+              - generic: ✉️ Email Address
+              - combobox
+            - generic:
+              - generic: 🏭 Industry / Category
+              - combobox
+            - generic:
+              - generic: 📍 Location (City / State)
+              - combobox
+            - generic:
+              - generic: 🌐 Website URL
+              - combobox
+          - generic: "Mapped Live Preview (First 3 Records):"
+          - generic:
+            - table:
+              - rowgroup:
+                - row "Company Contact Phone Email Industry":
+                  - columnheader "Company"
+                  - columnheader "Contact"
+                  - columnheader "Phone"
+                  - columnheader "Email"
+                  - columnheader "Industry"
+              - rowgroup
+        - generic:
+          - generic: Total 0 rows detected
+          - generic:
+            - button "Cancel"
+            - button "Submit & Ingest Leads →"
+  - generic:
+    - generic:
+      - generic:
+        - heading "Lead Import & Deduplication Summary" [level=3]
+        - button "✕"
+      - generic:
+        - button "Cancel"
+        - button "Confirm & Import to CRM"
+  - generic:
+    - generic:
+      - generic:
+        - heading "Workflow Live Execution Tracer" [level=3]
+        - button "✕"
+      - generic:
+        - button "Close"
+  - generic:
+    - generic:
+      - generic:
+        - generic:
+          - 'heading "Step 1: Set Up Business Profile" [level=3]'
+          - generic: Step 1 of 7
+        - button "✕"
+      - generic:
+        - paragraph: Define your company name, industry, and timezone for smart scheduling.
+        - generic:
+          - generic:
+            - generic: Business Name
+            - textbox: Nexus Growth Labs
+          - generic:
+            - generic: Target Industry
+            - textbox: Healthcare, Clinics, B2B Services
+      - generic:
+        - button "Next Step →"
+  - generic:
+    - generic:
+      - generic:
+        - heading "Register WhatsApp Template" [level=3]
+        - button "✕"
+      - generic:
+        - generic:
+          - generic:
+            - generic: Template Name (Lowercase & Underscores)
+            - textbox: special_hospitality_promo_v1
+          - generic:
+            - generic: Category
+            - combobox:
+              - option "MARKETING" [selected]
+              - option "UTILITY"
+              - option "AUTHENTICATION"
+          - generic:
+            - generic: Language
+            - textbox: English (en_US)
+          - generic:
+            - generic: "Message Body with Tokens (e.g. {{first_name}}, {{company_name}})"
+            - textbox: "Hi {{first_name}}, noticed {{company_name}}! Would you like to automate direct customer bookings on WhatsApp?"
+        - generic:
+          - button "Cancel"
+          - button "Submit for Meta Approval"
+  - generic:
+    - generic:
+      - generic:
+        - heading "Invite Team Member" [level=3]
+        - button "✕"
+      - generic:
+        - generic:
+          - generic:
+            - generic: Full Name
+            - textbox "e.g. Rohith Sharma"
+          - generic:
+            - generic: Email Address
+            - textbox "e.g. rohith@company.io"
+          - generic:
+            - generic: Role
+            - combobox:
+              - option "Admin (Full Control)"
+              - option "Manager (Campaigns & CRM)"
+              - option "Sales Agent (Inbox & Leads)" [selected]
+              - option "Viewer (Read-Only Analytics)"
+        - generic:
+          - button "Cancel"
+          - button "Send Invitation"
+    - generic:
+      - generic:
+        - generic:
+          - heading "Create Auto-Reply Rule (Public Comment)" [level=3]
+          - button "✕"
+        - generic:
+          - generic:
+            - generic:
+              - text: "⚡ Quick Preset Templates:"
+              - generic:
+                - button "💰 Price / Cost"
+                - button "🚀 Free Demo Link"
+                - button "📞 Support / Contact"
+            - generic:
+              - generic: Rule Name
+              - textbox "e.g. Pricing Inquiries Reply"
+            - generic:
+              - generic: Trigger Match Type
+              - combobox:
+                - option "Contains Any Keyword (Flexible Match)" [selected]
+                - option "Exact Phrase Match"
+                - option "Starts With Keyword"
+                - option "Any Comment (Catch-all Reply)"
+            - generic:
+              - generic: Trigger Keywords (Comma-separated)
+              - textbox "price, cost, pricing, how much"
+              - generic: Case-insensitive match on incoming user comments.
+            - generic:
+              - generic: Public Comment Reply Message
+              - textbox "e.g. Sent you a DM with all details! 🚀"
+            - generic:
+              - generic: Scope to Specific Post / Reel Media ID (Optional)
+              - textbox "Leave blank to apply to all posts"
+          - generic:
+            - button "Cancel"
+            - button "Save Auto-Reply Rule"
+    - generic:
+      - generic:
+        - generic:
+          - heading "Create Comment-to-DM Private Reply Rule" [level=3]
+          - button "✕"
+        - generic:
+          - generic:
+            - generic:
+              - text: "⚡ Quick Preset Templates:"
+              - generic:
+                - button "📄 Send Pricing Brochure"
+                - button "🔑 Send Instant Demo Link"
+                - button "💬 Connect via WhatsApp"
+            - generic:
+              - generic: Rule Name
+              - textbox "e.g. Demo Link to DM"
+            - generic:
+              - generic: Trigger Match Type
+              - combobox:
+                - option "Contains Any Keyword (Flexible Match)" [selected]
+                - option "Exact Phrase Match"
+                - option "Starts With Keyword"
+                - option "Any Comment (Catch-all Private DM)"
+            - generic:
+              - generic: Trigger Keywords (Comma-separated)
+              - textbox "demo, link, access, try"
+            - generic:
+              - generic: Private Direct Message (Sent via Paced DM Queue)
+              - 'textbox "e.g. Hey! Thanks for commenting. Here is your free trial access link: https://..."'
+              - generic: Respects Meta's 1-private-reply-per-comment rule and rate limits.
+            - generic:
+              - generic: Scope to Specific Media ID (Optional)
+              - textbox "Leave blank to apply globally"
+          - generic:
+            - button "Cancel"
+            - button "Save Auto-DM Rule"
+    - generic [ref=f1e389]:
+      - generic [ref=f1e390]:
+        - heading "Schedule Instagram Content" [level=3] [ref=f1e391]
+        - button "✕" [ref=f1e392] [cursor=pointer]
+      - generic [ref=f1e393]:
+        - generic [ref=f1e394]:
+          - generic [ref=f1e395]:
+            - generic [ref=f1e396]: Post Format Type
+            - combobox [ref=f1e397]:
+              - option "Feed Post (Single Image / Video)" [selected]
+              - option "Instagram Reel (Video 9:16)"
+              - option "Instagram Story (24h Disappearing)"
+              - option "Carousel (Multi-Image / Slides)"
+          - generic [ref=f1e398]:
+            - generic [ref=f1e399]: Upload Media (Images / Video MP4)
+            - button "Choose File" [ref=f1e400]
+            - generic [ref=f1e401]:
+              - text: "Or Public Media URL:"
+              - textbox "https://your-domain.com/public-image.jpg" [ref=f1e402]
+          - generic [ref=f1e403]:
+            - generic [ref=f1e404]: Caption & Hashtags
+            - textbox "Write your post caption and relevant hashtags..." [ref=f1e405]
+          - generic [ref=f1e406]:
+            - generic [ref=f1e407]: Scheduled Date & Time (Your Local Timezone)
+            - textbox [ref=f1e408]: 2026-09-19T15:11
+            - generic [ref=f1e409]: Vercel Cron will create the container, poll status, and publish automatically.
+        - generic [ref=f1e410]:
+          - button "Cancel" [ref=f1e411] [cursor=pointer]
+          - button "Schedule Post →" [ref=f1e412] [cursor=pointer]
+  - generic:
+    - generic:
+      - generic:
+        - generic:
+          - generic: ✅
+          - heading "Mark as Contacted & Schedule Next" [level=3]
+        - button "✕"
+      - generic:
+        - paragraph:
+          - text: Record interaction for
+          - strong: Prospect Name
+          - text: and pick the next follow-up date.
+        - generic:
+          - text: "Quick Presets:"
+          - generic:
+            - button "+2 Days"
+            - button "+3 Days"
+            - button "+1 Week"
+            - button "+2 Weeks"
+        - generic:
+          - generic: Next Follow-up Date
+          - textbox "Next Follow-up Date"
+        - generic:
+          - generic: Updated Lead Status
+          - combobox "Updated Lead Status":
+            - option "Contacted" [selected]
+            - option "Replied"
+            - option "Qualified"
+            - option "Follow-up"
+            - option "Interested"
+            - option "Proposal"
+            - option "Won"
+            - option "Lost"
+        - generic:
+          - generic: Contact Log Notes (Optional)
+          - textbox "Contact Log Notes (Optional)":
+            - /placeholder: e.g. Discussed pricing model, prospect requested brochure.
+      - generic:
+        - button "Cancel"
+        - button "Save & Schedule →"
+  - generic:
+    - generic:
+      - generic:
+        - generic:
+          - generic: ✍️
+          - generic:
+            - heading "Personalized Follow-Up Composer" [level=3]
+            - text: Lead Name
+        - button "✕"
+      - generic:
+        - generic:
+          - generic:
+            - text: Follow-up Stage
+            - combobox:
+              - option "First Follow-up" [selected]
+              - option "Second Follow-up"
+              - option "Final Follow-up"
+          - generic:
+            - text: Tone & Style
+            - combobox:
+              - option "Professional" [selected]
+              - option "Friendly"
+              - option "Short Sales"
+              - option "Polite"
+        - generic:
+          - generic:
+            - generic: Generated Personalized Message
+            - generic: Editable before sending
+          - textbox
+      - generic:
+        - generic:
+          - button "💬 Open WhatsApp"
+          - button "✉️ Open Email"
+        - generic:
+          - button "Close"
+          - button "📋 Copy Message"

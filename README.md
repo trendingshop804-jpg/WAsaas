@@ -95,6 +95,17 @@ Supports 6 tailored tones: *Professional, Friendly, Short, Premium, Casual, Cons
 ### Interactive Frontend
 Open `index.html` directly in any modern browser (Chrome, Edge, Safari, Firefox). All demo data and simulations run out of the box with zero build step!
 
+### Live integration status (server-backed)
+
+The CRM Settings → Integrations cards and Master Admin monitors do not mark a provider as connected from demo data. They poll the server-side checks below every 30 seconds:
+
+```bash
+node dev-server.js
+# open http://localhost:3001/nextbright-crm/index.html#/settings
+```
+
+The endpoint is `GET /api/integration-status` (or `?integration=whatsapp`). Add the provider secrets from `.env.example` to the server environment. A static-only server will correctly show `Live status API is unavailable` until an API-capable server is running.
+
 ### Production Backend (Optional)
 ```bash
 cd backend

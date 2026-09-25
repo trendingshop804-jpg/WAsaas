@@ -1,0 +1,88 @@
+/* ============================================================
+   TOPBAR
+   ============================================================ */
+.topbar {
+  height: var(--topbar-height);
+  background: #fff;
+  border-bottom: 1px solid var(--border-light);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  gap: 12px;
+  flex-shrink: 0;
+  z-index: 50;
+  box-shadow: 0 1px 0 var(--border-light);
+}
+
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+.topbar-left .search-wrap {
+  max-width: 380px;
+  width: 100%;
+}
+
+.sidebar-mobile-toggle { display: none; }
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+/* Notification button */
+.notif-btn { position: relative; }
+.notif-dot {
+  position: absolute;
+  top: 6px;
+  right: 7px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--status-danger);
+  border: 2px solid #fff;
+}
+
+/* Workspace selector */
+.topbar-workspace-sel {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all var(--transition);
+  background: #fff;
+  white-space: nowrap;
+}
+.topbar-workspace-sel:hover { border-color: var(--border-medium); }
+.topbar-workspace-sel i, .topbar-workspace-sel svg { width: 12px; height: 12px; color: var(--text-muted); }
+
+/* Avatar */
+.topbar-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-full);
+  background: linear-gradient(135deg, var(--brand-primary), var(--brand-accent));
+  color: #fff;
+  font-size: 0.6875rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: opacity var(--transition);
+}
+.topbar-avatar:hover { opacity: 0.85; }

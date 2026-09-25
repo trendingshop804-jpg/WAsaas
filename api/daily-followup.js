@@ -255,6 +255,7 @@ export default async function handler(req, res) {
 
         // Mirror to messages table for CRM conversation view
         await supabase.from('messages').insert({
+          organization_id: lead.organization_id,
           wa_message_id:  waMsgId,
           sender_number:  normalizeInternationalPhone(lead.phone),
           sender:         'system',

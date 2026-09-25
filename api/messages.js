@@ -1,13 +1,6 @@
 // api/messages.js
-import { createClient } from '@supabase/supabase-js';
+import { createSupabaseAdminClient, missingSupabaseServerConfig } from './_supabase.js';
 
-const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
-
-const supabase = createClient(
-  supabaseUrl,
-  supabaseServiceKey
-);
 
 const SIGNED_URL_TTL = 60 * 60 * 24; // 24 hours
 
@@ -20,8 +13,18 @@ export default async function handler(req, res) {
     return res.status(200).end();
   }
 
+  const supabase = createSupabaseAdminClient();
+  if (!supabase) {
+    const missing = missingSupabaseServerConfig();
+    console.error('[messages] Supabase configuration missing:', missing.join(', '));
+    return res.status(503).json({ error: 'Server database configuration is unavailable.', missing, messages: [] });
+  }
+
+  const organizationId = req.query?.organization_id;
+  if (!organizationId) return res.status(400).json({ error: 'organization_id is required.', messages: [] });
+
   try {
-    let query = supabase.from('messages').select('*');
+    let query = supabase.from('messages').select('*').eq('organization_id', organizationId);
 
     if (req.query?.conversation_id) {
       query = query.eq('conversation_id', req.query.conversation_id);
@@ -38,6 +41,7 @@ export default async function handler(req, res) {
       const fallbackRes = await supabase
         .from('messages')
         .select('*')
+        .eq('organization_id', organizationId)
         .order('created_at', { ascending: false, nullsFirst: false })
         .limit(100);
       data = fallbackRes.data;

@@ -1,0 +1,39 @@
+/* Design Tokens */
+:root {
+  /* Brand Colors */
+  --brand-primary: #4f7ef7;
+  --brand-primary-hover: #3b5fe0;
+  --brand-secondary: #7c5ff6;
+  --brand-cyan: #06b6d4;
+
+  /* Backgrounds */
+  --bg-primary: #f4f6fb;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #f0f3fa;
+  --bg-card: #ffffff;
+  --bg-glass: rgba(255,255,255,0.85);
+
+  /* Sidebar */
+  --sidebar-bg: #1a2035;
+  --sidebar-width: 240px;
+  --sidebar-collapsed-width: 68px;
+
+  /* Text */
+  --text-primary: #1a2035;
+  --text-secondary: #4a5568;
+  --text-muted: #9aa5b4;
+  --text-inverse: #ffffff;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.06);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+  --shadow-lg: 0 10px 32px rgba(0,0,0,0.1);
+
+  /* Radii */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+
+  /* Transitions */
+  --transition-fast: 0.15s cubic-bezier(0.4,0,0.2,1);
+}

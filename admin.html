@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NextBright SaaS — Master Admin Control Center</title>
+  <meta name="description" content="NextBright Master Admin Control Center — Manage companies, products, plans, feature flags, usage limits, and platform health.">
+
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Feather Icons & Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+  <!-- Admin Styles -->
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/admin.css?v=20260925-live-status">
+</head>
+<body>
+
+  <div class="admin-shell">
+    <!-- ===== SIDEBAR ===== -->
+    <aside class="admin-sidebar" id="admin-sidebar">
+      <div class="brand">
+        <div class="brand-badge">MASTER ADMIN</div>
+        <div class="brand-title">NextBright<span>SaaS</span></div>
+      </div>
+
+      <nav class="admin-nav">
+        <div class="nav-label">Platform Control</div>
+        <a class="nav-item active" data-admin-view="overview" href="#overview">
+          <i data-feather="sliders"></i> Overview
+        </a>
+        <a class="nav-item" data-admin-view="companies" href="#companies">
+          <i data-feather="briefcase"></i> Companies <span class="nav-badge" id="badge-total-companies">24</span>
+        </a>
+        <a class="nav-item" data-admin-view="features" href="#features">
+          <i data-feather="toggle-left"></i> Products & Feature Flags
+        </a>
+        <a class="nav-item" data-admin-view="plans" href="#plans">
+          <i data-feather="layers"></i> Plans & Limits
+        </a>
+
+        <div class="nav-label">Omnichannel Monitors</div>
+        <a class="nav-item" data-admin-view="whatsapp-mon" href="#whatsapp-mon">
+          <i data-feather="message-circle"></i> WhatsApp Monitor
+        </a>
+        <a class="nav-item" data-admin-view="instagram-mon" href="#instagram-mon">
+          <i data-feather="instagram"></i> Instagram Monitor
+        </a>
+        <a class="nav-item" data-admin-view="calls-mon" href="#calls-mon">
+          <i data-feather="phone-call"></i> Calls Monitor
+        </a>
+
+        <div class="nav-label">System & Logs</div>
+        <a class="nav-item" data-admin-view="system-health" href="#system-health">
+          <i data-feather="activity"></i> System Health
+        </a>
+        <a class="nav-item" data-admin-view="webhook-logs" href="#webhook-logs">
+          <i data-feather="terminal"></i> Webhook Logs
+        </a>
+        <a class="nav-item" data-admin-view="audit-logs" href="#audit-logs">
+          <i data-feather="shield"></i> Audit Trail
+        </a>
+      </nav>
+
+      <div class="admin-sidebar-footer">
+        <div class="user-chip">
+          <div class="user-ava">SA</div>
+          <div>
+            <div class="user-name">NextBright Owner</div>
+            <div class="user-role">Super Admin</div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ===== MAIN CONTENT AREA ===== -->
+    <main class="admin-main">
+      <!-- TOPBAR -->
+      <header class="admin-topbar">
+        <div class="topbar-left">
+          <div class="env-chip">🟢 Production Environment</div>
+          <div class="search-wrap">
+            <i data-feather="search"></i>
+            <input type="text" id="admin-global-search" placeholder="Search companies, users, subscriptions...">
+          </div>
+        </div>
+        <div class="topbar-right">
+          <button class="btn btn-secondary btn-sm" id="btn-refresh-health"><i data-feather="refresh-cw"></i> Refresh System</button>
+          <a href="/nextbright-crm/index.html" class="btn btn-primary btn-sm" target="_blank"><i data-feather="external-link"></i> Launch Customer CRM Workspace</a>
+        </div>
+      </header>
+
+      <!-- CONTENT PANELS -->
+      <div class="admin-content">
+
+        <!-- ==========================================
+             1. OVERVIEW PANEL
+             ========================================== -->
+        <section class="admin-panel active" id="admin-view-overview">
+          <div class="panel-hero">
+            <div>
+              <h1 class="panel-title">Platform Master Command Center</h1>
+              <p class="panel-sub">Real-time multi-tenant operations, revenue metrics, and feature flag management.</p>
+            </div>
+          </div>
+
+          <!-- KPI Cards Grid -->
+          <div class="admin-kpi-grid">
+            <div class="kpi-card">
+              <div class="kpi-header"><i data-feather="briefcase"></i> Total Companies</div>
+              <div class="kpi-val" id="kpi-companies">24</div>
+              <div class="kpi-sub green">22 Active · 2 Suspended</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-header"><i data-feather="users"></i> Total Platform Users</div>
+              <div class="kpi-val">86</div>
+              <div class="kpi-sub">Across 24 organizations</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-header"><i data-feather="dollar-sign"></i> Monthly Recurring Revenue</div>
+              <div class="kpi-val">₹1,84,000</div>
+              <div class="kpi-sub green">+14.2% this month</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-header"><i data-feather="message-circle"></i> WhatsApp Messages</div>
+              <div class="kpi-val">1,42,800</div>
+              <div class="kpi-sub">Live delivery rate not reported</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-header"><i data-feather="cpu"></i> AI Sales Requests</div>
+              <div class="kpi-val">12,450</div>
+              <div class="kpi-sub green">Gemini 3.5 Engine</div>
+            </div>
+          </div>
+
+          <!-- Chart & System Quick Monitor -->
+          <div class="admin-dash-grid" style="margin-top: 24px;">
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title">Monthly Platform Revenue & Message Volume</div>
+              </div>
+              <div style="height: 260px; position: relative;">
+                <canvas id="admin-overview-chart"></canvas>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title">Real-Time Omnichannel Service Status</div>
+              </div>
+              <div class="status-list">
+                <div class="status-item">
+                  <div class="status-left">
+                    <span class="status-dot green"></span>
+                    <div>
+                      <strong>WhatsApp Cloud API Adapter</strong>
+                      <span class="muted">Waiting for live provider check.</span>
+                    </div>
+                  </div>
+                  <span class="badge badge-warning">Checking...</span>
+                </div>
+                <div class="status-item">
+                  <div class="status-left">
+                    <span class="status-dot green"></span>
+                    <div>
+                      <strong>Instagram Meta Messaging Adapter</strong>
+                      <span class="muted">Waiting for live provider check.</span>
+                    </div>
+                  </div>
+                  <span class="badge badge-warning">Checking...</span>
+                </div>
+                <div class="status-item">
+                  <div class="status-left">
+                    <span class="status-dot green"></span>
+                    <div>
+                      <strong>Twilio Call Provider Adapter</strong>
+                      <span class="muted">Waiting for live provider check.</span>
+                    </div>
+                  </div>
+                  <span class="badge badge-warning">Checking...</span>
+                </div>
+                <div class="status-item">
+                  <div class="status-left">
+                    <span class="status-dot green"></span>
+                    <div>
+                      <strong>Supabase Multi-Tenant RLS Database</strong>
+                      <span class="muted">Waiting for database health check.</span>
+                    </div>
+                  </div>
+                  <span class="badge badge-warning">Checking...</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==========================================
+             2. COMPANIES MANAGEMENT PANEL
+             ========================================== -->
+        <section class="admin-panel" id="admin-view-companies">
+          <div class="panel-hero">
+            <div>
+              <h1 class="panel-title">Customer Companies & Tenants</h1>
+              <p class="panel-sub">Manage multi-tenant accounts, subscription statuses, feature flags, and usage limits.</p>
+            </div>
+            <div>
+              <button class="btn btn-primary" id="btn-create-company"><i data-feather="plus"></i> Add New Company</button>
+            </div>
+          </div>
+
+          <div class="filter-bar">
+            <input type="text" id="company-search" class="form-input" placeholder="Search by name, owner, or email..." style="max-width: 320px;">
+            <div class="filter-group">
+              <button class="filter-btn active" data-filter="all">All (24)</button>
+              <button class="filter-btn" data-filter="active">Active (22)</button>
+              <button class="filter-btn" data-filter="trial">Trial (1)</button>
+              <button class="filter-btn" data-filter="suspended">Suspended (1)</button>
+            </div>
+          </div>
+
+          <div class="card table-wrap" style="margin-top: 16px;">
+            <table class="admin-table">
+              <thead>
+                <tr>
+                  <th>Company Name</th>
+                  <th>Business Type</th>
+                  <th>Owner</th>
+                  <th>Plan</th>
+                  <th>Status</th>
+                  <th>Users</th>
+                  <th>Messages</th>
+                  <th>AI Requests</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="companies-table-tbody">
+                <!-- JS Rendered -->
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- ==========================================
+             3. PRODUCTS & FEATURE FLAGS PANEL
+             ========================================== -->
+        <section class="admin-panel" id="admin-view-features">
+          <div class="panel-hero">
+            <div>
+              <h1 class="panel-title">Products & Feature Flag Hierarchy</h1>
+              <p class="panel-sub">Enable/disable modules globally, per product, per plan, or per company tenant.</p>
+            </div>
+          </div>
+
+          <div class="feature-matrix-grid">
+            <div class="card">
+              <div class="card-header"><div class="card-title">CRM Core Module</div><span class="badge badge-success">Enabled</span></div>
+              <div class="toggle-row"><span>Lead Management & Pipeline</span><input type="checkbox" checked disabled></div>
+              <div class="toggle-row"><span>Customer 360 Profiles</span><input type="checkbox" checked disabled></div>
+              <div class="toggle-row"><span>Lead Scoring Engine</span><input type="checkbox" id="ff-lead-scoring" checked></div>
+            </div>
+
+            <div class="card">
+              <div class="card-header"><div class="card-title">Omnichannel WhatsApp</div><span class="badge badge-success">Enabled</span></div>
+              <div class="toggle-row"><span>Cloud API Messaging</span><input type="checkbox" checked id="ff-wa-messaging"></div>
+              <div class="toggle-row"><span>Template Messages</span><input type="checkbox" checked id="ff-wa-templates"></div>
+              <div class="toggle-row"><span>Media Attachments</span><input type="checkbox" checked id="ff-wa-media"></div>
+            </div>
+
+            <div class="card">
+              <div class="card-header"><div class="card-title">AI Sales Assistant</div><span class="badge badge-success">Enabled</span></div>
+              <div class="toggle-row"><span>AI Reply Generation</span><input type="checkbox" checked id="ff-ai-replies"></div>
+              <div class="toggle-row"><span>AI Qualification & Intent</span><input type="checkbox" checked id="ff-ai-qualification"></div>
+              <div class="toggle-row"><span>Human Handoff Escalation</span><input type="checkbox" checked id="ff-ai-handoff"></div>
+            </div>
+
+            <div class="card">
+              <div class="card-header"><div class="card-title">Calls & Voice CRM</div><span class="badge badge-success">Enabled</span></div>
+              <div class="toggle-row"><span>Twilio Call Adapter</span><input type="checkbox" checked id="ff-calls-adapter"></div>
+              <div class="toggle-row"><span>Call Recording Storage</span><input type="checkbox" checked id="ff-calls-recording"></div>
+              <div class="toggle-row"><span>AI Call Summaries</span><input type="checkbox" id="ff-calls-ai-summary"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==========================================
+             4. SYSTEM HEALTH & LOGS PANEL
+             ========================================== -->
+        <section class="admin-panel" id="admin-view-system-health">
+          <div class="panel-hero">
+            <div>
+              <h1 class="panel-title">System Health & Infrastructure</h1>
+              <p class="panel-sub">Real-time health of APIs, database connections, and provider webhooks.</p>
+            </div>
+          </div>
+
+          <div class="admin-kpi-grid">
+            <div class="kpi-card">
+              <div class="kpi-header">API Server Latency</div>
+              <div class="kpi-val" id="admin-api-latency">—</div>
+              <div class="kpi-sub">Awaiting live check</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-header">Database Latency</div>
+              <div class="kpi-val" id="admin-db-latency">—</div>
+              <div class="kpi-sub">Awaiting live check</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-header">Webhook Success Rate</div>
+              <div class="kpi-val" id="admin-webhook-rate">—</div>
+              <div class="kpi-sub">Awaiting live check</div>
+            </div>
+          </div>
+        </section>
+
+        <div class="card" id="admin-live-integration-card">
+          <div class="card-header">
+            <div class="card-title">Live Integration Checks</div>
+            <span class="muted" id="admin-health-last-checked">Waiting for server check...</span>
+          </div>
+          <div class="status-list" id="admin-live-integration-list">
+            <div class="empty-state" style="padding:20px;color:var(--admin-text-muted);">Checking provider connections...</div>
+          </div>
+        </div>
+
+        <!-- FALLBACK MONITOR / LOG PANELS: kept in the DOM so hash routing
+             always has a visible target, even before the router initializes. -->
+        <section class="admin-panel" id="admin-view-plans">
+          <div class="panel-hero"><div><h1 class="panel-title">Plans & Limits</h1><p class="panel-sub">Configure subscription tiers, usage limits, and platform entitlements.</p></div><span class="badge badge-warning">Checking...</span></div>
+          <div class="card"><div class="card-header"><div class="card-title">Plan configuration</div></div><div class="status-list"><div class="status-item"><div class="status-left"><span class="status-dot green"></span><div><strong>Plan service</strong><span class="muted">Configuration loaded and ready</span></div></div><span class="badge badge-warning">Not checked</span></div></div></div>
+        </section>
+
+        <section class="admin-panel" id="admin-view-whatsapp-mon">
+          <div class="panel-hero"><div><h1 class="panel-title">WhatsApp Monitor</h1><p class="panel-sub">Live Meta Cloud API delivery, webhook, and message throughput status.</p></div><span class="badge badge-warning">Checking...</span></div>
+          <div class="card"><div class="card-header"><div class="card-title">WhatsApp connection</div></div><div class="status-list"><div class="status-item"><div class="status-left"><span class="status-dot green"></span><div><strong>WhatsApp Cloud API</strong><span class="muted">Waiting for monitor configuration</span></div></div><span class="badge badge-warning">Not checked</span></div></div></div>
+        </section>
+
+        <section class="admin-panel" id="admin-view-instagram-mon">
+          <div class="panel-hero"><div><h1 class="panel-title">Instagram Monitor</h1><p class="panel-sub">Monitor professional account connections and DM/comment automations.</p></div><span class="badge badge-warning">Checking...</span></div>
+          <div class="card"><div class="card-header"><div class="card-title">Instagram connection</div></div><div class="status-list"><div class="status-item"><div class="status-left"><span class="status-dot green"></span><div><strong>Instagram Graph API</strong><span class="muted">Waiting for monitor configuration</span></div></div><span class="badge badge-warning">Not checked</span></div></div></div>
+        </section>
+
+        <section class="admin-panel" id="admin-view-calls-mon">
+          <div class="panel-hero"><div><h1 class="panel-title">Calls Monitor</h1><p class="panel-sub">Track voice provider health, recordings, and call delivery events.</p></div><span class="badge badge-warning">Checking...</span></div>
+          <div class="card"><div class="card-header"><div class="card-title">Calls connection</div></div><div class="status-list"><div class="status-item"><div class="status-left"><span class="status-dot green"></span><div><strong>Voice provider</strong><span class="muted">Waiting for monitor configuration</span></div></div><span class="badge badge-warning">Not checked</span></div></div></div>
+        </section>
+
+        <section class="admin-panel" id="admin-view-webhook-logs">
+          <div class="panel-hero"><div><h1 class="panel-title">Webhook Logs</h1><p class="panel-sub">Inspect recent inbound and outbound webhook deliveries.</p></div><span class="badge badge-warning">Checking...</span></div>
+          <div class="card"><div class="card-header"><div class="card-title">Webhook delivery log</div></div><div class="empty-state" style="padding:24px;color:var(--admin-text-muted);">No webhook events in the current session.</div></div>
+        </section>
+
+        <section class="admin-panel" id="admin-view-audit-logs">
+          <div class="panel-hero"><div><h1 class="panel-title">Audit Trail</h1><p class="panel-sub">Review privileged actions and platform configuration changes.</p></div><span class="badge badge-warning">Checking...</span></div>
+          <div class="card"><div class="card-header"><div class="card-title">Recent audit activity</div></div><div class="empty-state" style="padding:24px;color:var(--admin-text-muted);">No audit events in the current session.</div></div>
+        </section>
+
+      </div>
+    </main>
+  </div>
+
+  <!-- CREATE / EDIT COMPANY MODAL -->
+  <div class="admin-modal" id="modal-company">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="modal-company-title">Add New Customer Company</h3>
+        <button class="modal-close" id="modal-company-close">&times;</button>
+      </div>
+      <div class="modal-body space-y-4">
+        <div class="form-group">
+          <label class="form-label">Company Name</label>
+          <input type="text" class="form-input" id="mc-name" placeholder="e.g. Sunshine Dental Clinic">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Business Owner Name</label>
+          <input type="text" class="form-input" id="mc-owner" placeholder="e.g. Dr. Rajesh Kumar">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Owner Email</label>
+          <input type="email" class="form-input" id="mc-email" placeholder="owner@sunshinedental.com">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Business Type</label>
+          <select class="form-input" id="mc-type">
+            <option>Dental Clinic</option>
+            <option>Clinic / Healthcare</option>
+            <option>Garage / Car Service</option>
+            <option>Salon / Spa</option>
+            <option>Coaching Centre</option>
+            <option>Gym / Fitness</option>
+            <option>General Business</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">SaaS Plan</label>
+          <select class="form-input" id="mc-plan">
+            <option>Starter</option>
+            <option selected>Growth</option>
+            <option>Professional</option>
+            <option>Enterprise</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="mc-cancel">Cancel</button>
+        <button class="btn btn-primary" id="mc-save">Save Company</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Admin JS -->
+  <script src="js/admin.js?v=20260925-live-status"></script>
+</body>
+</html>

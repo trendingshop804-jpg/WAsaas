@@ -1,0 +1,1229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NextBright CRM — Manage · Automate · Grow</title>
+  <meta name="description" content="NextBright CRM — A modern, premium B2B SaaS CRM for managing leads, customers, deals, and automations.">
+
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Feather Icons -->
+  <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+  <!-- CSS -->
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/sidebar.css">
+  <link rel="stylesheet" href="css/topbar.css">
+  <link rel="stylesheet" href="css/dashboard.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/leads.css">
+  <link rel="stylesheet" href="css/deals.css">
+  <link rel="stylesheet" href="css/messages.css">
+  <link rel="stylesheet" href="css/responsive.css">
+  <link rel="stylesheet" href="css/reference-theme.css">
+</head>
+<body>
+
+  <!-- ============================================================
+       APP SHELL
+       ============================================================ -->
+  <div class="app-shell" id="app-shell">
+
+    <!-- ===== SIDEBAR ===== -->
+    <aside class="sidebar" id="sidebar">
+      <!-- Logo -->
+      <div class="sidebar-logo">
+        <div class="logo-icon">
+          <svg width="21" height="21" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M14.4 4.1C17.2 2.8 20 3 20 3s.2 2.8-1.1 5.6c-1.1 2.4-3.1 4.2-5.6 5.1l-3-3c.9-2.5 2.7-4.5 5.1-5.6Z" fill="currentColor"/>
+            <circle cx="16.4" cy="7.6" r="1.45" fill="#2563eb"/>
+            <path d="m10.3 10.7-3.1.5-2.2 2.2 4.2.7m5.1-2.9.5 3.1 2.2 2.2.7-4.2M9.7 15.2l-2.2 3.5-1.2-.6.6-4.1m4.4-.5 3.5-2.2.6 1.2-2.2 3.5" fill="currentColor" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M7.4 17.8c-1.2.8-1.7 2.5-1.7 2.5s1.7-.5 2.5-1.7c.5-.8.2-1.5-.8-.8Z" fill="currentColor"/>
+          </svg>
+        </div>
+        <div class="logo-text">
+          <span class="logo-name">NextBright <b>CRM</b></span>
+          <span class="logo-tagline">Manage · Automate · Grow</span>
+        </div>
+        <button class="sidebar-collapse-btn" id="sidebar-collapse-btn" title="Collapse sidebar">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+      </div>
+
+      <!-- Workspace Selector -->
+      <div class="sidebar-workspace">
+        <div class="workspace-avatar">P</div>
+        <div class="workspace-info">
+          <span class="workspace-name" id="sb-workspace">Praveenkumar's CRM</span>
+          <span class="workspace-plan">Professional Plan</span>
+        </div>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+      </div>
+
+      <!-- Nav -->
+      <nav class="sidebar-nav">
+        <div class="nav-label">Main Menu</div>
+        <a class="nav-item active" data-view="dashboard" href="#dashboard">
+          <i data-feather="grid"></i><span>Dashboard</span>
+        </a>
+        <a class="nav-item" data-view="leads" href="#leads">
+          <i data-feather="users"></i><span>Leads</span>
+        </a>
+        <a class="nav-item" data-view="customers" href="#customers">
+          <i data-feather="user-check"></i><span>Customers</span>
+        </a>
+        <div class="nav-label">Communication</div>
+        <a class="nav-item" data-view="calls" href="#calls">
+          <i data-feather="phone"></i><span>Calls</span>
+        </a>
+        <a class="nav-item" data-view="messages" href="#messages">
+          <i data-feather="message-circle"></i><span>Messages</span>
+          <span class="nav-badge nav-badge-dot"></span>
+        </a>
+        <a class="nav-item" data-view="appointments" href="#appointments">
+          <i data-feather="calendar"></i><span>Appointments</span>
+        </a>
+        <a class="nav-item" data-view="tasks" href="#tasks">
+          <i data-feather="check-square"></i><span>Tasks</span>
+        </a>
+        <a class="nav-item" data-view="deals" href="#deals">
+          <i data-feather="briefcase"></i><span>Deals</span>
+        </a>
+
+        <div class="nav-label">Insights</div>
+        <a class="nav-item" data-view="reports" href="#reports">
+          <i data-feather="bar-chart-2"></i><span>Reports</span>
+        </a>
+        <a class="nav-item" data-view="settings" href="#settings">
+          <i data-feather="settings"></i><span>Settings</span>
+        </a>
+      </nav>
+
+      <!-- Sidebar Footer -->
+      <div class="sidebar-footer">
+        <div class="sidebar-user">
+          <div class="user-ava">PK</div>
+          <div class="user-info">
+            <span class="user-name" id="sb-user-name">Praveenkumar</span>
+            <span class="user-role">Admin · Owner</span>
+          </div>
+          <button class="icon-btn" title="Sign out">
+            <i data-feather="log-out"></i>
+          </button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ===== MAIN AREA ===== -->
+    <div class="main-area" id="main-area">
+
+      <!-- TOPBAR -->
+      <header class="topbar" id="topbar">
+        <div class="topbar-left">
+          <button class="icon-btn sidebar-mobile-toggle" id="sidebar-mobile-toggle" title="Open menu">
+            <i data-feather="menu"></i>
+          </button>
+          <div class="search-wrap">
+            <i data-feather="search" class="search-icon"></i>
+            <input type="text" id="global-search" class="search-input" placeholder="Search leads, customers, deals…">
+            <kbd class="search-kbd">⌘K</kbd>
+          </div>
+        </div>
+        <div class="topbar-right">
+          <button class="btn btn-primary btn-sm topbar-quick-add" id="quick-add-btn">
+            <i data-feather="plus"></i><span>Quick Add</span>
+          </button>
+          <button class="icon-btn notif-btn" title="Notifications" id="notif-btn">
+            <i data-feather="bell"></i>
+            <span class="notif-dot"></span>
+          </button>
+          <div class="topbar-workspace-sel" title="Current role">
+            <span>Admin</span>
+            <i data-feather="chevron-down"></i>
+          </div>
+          <button class="topbar-avatar" title="Open profile">
+            <span class="topbar-avatar-initials">PK</span>
+            <span class="topbar-profile-copy">
+              <strong>Praveenkumar</strong>
+              <small>Admin</small>
+            </span>
+            <i data-feather="chevron-down"></i>
+          </button>
+        </div>
+      </header>
+
+      <!-- CONTENT VIEWPORT -->
+      <main class="content-area">
+
+        <!-- ============================
+             1. DASHBOARD VIEW
+             ============================ -->
+        <section class="view-panel active" id="view-dashboard">
+          <div class="dashboard-welcome">
+            <div class="welcome-illustration" aria-hidden="true">
+              <svg viewBox="0 0 150 104" role="img">
+                <ellipse cx="75" cy="96" rx="54" ry="6" fill="#dbeafe"/>
+                <rect x="54" y="22" width="74" height="54" rx="7" fill="#ffffff" stroke="#bfdbfe" stroke-width="2"/>
+                <rect x="65" y="33" width="49" height="8" rx="3" fill="#dbeafe"/>
+                <rect x="65" y="48" width="15" height="18" rx="3" fill="#2563eb"/>
+                <rect x="85" y="49" width="13" height="14" rx="2" fill="#93c5fd"/>
+                <rect x="102" y="46" width="13" height="17" rx="2" fill="#60a5fa"/>
+                <path d="M19 75h65l-7 19H27z" fill="#1d4ed8"/>
+                <path d="M34 94l5-8h10l-5 8zm35 0 5-8h10l-5 8z" fill="#0f172a"/>
+                <circle cx="49" cy="40" r="13" fill="#f6c99b"/>
+                <path d="M36 40c0-10 5-16 14-16 10 0 14 7 12 16-3-5-7-8-13-8-4 0-8 3-13 8z" fill="#172554"/>
+                <path d="M31 75c2-16 9-24 19-24 12 0 18 8 21 24z" fill="#3b82f6"/>
+                <path d="M43 53c4 4 9 4 13 0" fill="none" stroke="#f6c99b" stroke-width="4" stroke-linecap="round"/>
+                <path d="M39 83h24" stroke="#bfdbfe" stroke-width="3" stroke-linecap="round"/>
+                <circle cx="41" cy="41" r="1.4" fill="#172554"/>
+                <circle cx="58" cy="41" r="1.4" fill="#172554"/>
+                <path d="M127 22v-9m0 0-4 4m4-4 4 4M132 39h8m-4-4v8" stroke="#60a5fa" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+            </div>
+            <div class="dashboard-welcome-copy">
+              <h1 class="page-title">Good Morning, Praveenkumar <span>👋</span></h1>
+              <p class="page-sub">Here's what's happening with your business today.</p>
+            </div>
+            <div class="welcome-momentum" aria-hidden="true">
+              <span>More Leads</span>
+              <span>More Sales</span>
+              <span>More Growth</span>
+              <svg viewBox="0 0 58 52" fill="none">
+                <path d="M7 38C19 39 31 27 43 9m0 0-1 15m1-15H29" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </div>
+            <div class="dashboard-hero-actions">
+              <div class="date-range-sel">
+                <i data-feather="calendar"></i>
+                <select id="date-range-select" class="range-select">
+                  <option>Last 7 Days</option>
+                  <option selected>This Month</option>
+                  <option>Last 30 Days</option>
+                  <option>Last 90 Days</option>
+                  <option>All Time</option>
+                </select>
+              </div>
+              <button class="btn btn-secondary btn-sm" id="dashboard-export-btn"><i data-feather="download"></i> Export</button>
+              <button class="btn btn-primary btn-sm" onclick="document.getElementById('quick-add-btn').click()"><i data-feather="plus"></i> Quick Add</button>
+            </div>
+          </div>
+
+          <!-- KPI Cards -->
+          <div class="kpi-grid">
+            <div class="kpi-card">
+              <div class="kpi-top">
+                <div class="kpi-icon blue"><i data-feather="users"></i></div>
+                <span class="kpi-trend trend-up"><i data-feather="trending-up"></i> +15%</span>
+              </div>
+              <div class="kpi-value">248</div>
+              <div class="kpi-label">Total Leads</div>
+              <div class="kpi-sub">vs last 7 days</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-top">
+                <div class="kpi-icon green"><i data-feather="user-check"></i></div>
+                <span class="kpi-trend trend-up"><i data-feather="trending-up"></i> +8%</span>
+              </div>
+              <div class="kpi-value">86</div>
+              <div class="kpi-label">Customers</div>
+              <div class="kpi-sub">vs last 7 days</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-top">
+                <div class="kpi-icon purple"><i data-feather="phone"></i></div>
+                <span class="kpi-trend trend-down"><i data-feather="trending-down"></i> -3%</span>
+              </div>
+              <div class="kpi-value">312</div>
+              <div class="kpi-label">Calls Made</div>
+              <div class="kpi-sub">vs last 7 days</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-top">
+                <div class="kpi-icon orange"><i data-feather="message-circle"></i></div>
+                <span class="kpi-trend trend-up"><i data-feather="trending-up"></i> +22%</span>
+              </div>
+              <div class="kpi-value">521</div>
+              <div class="kpi-label">Messages Sent</div>
+              <div class="kpi-sub">vs last 7 days</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-top">
+                <div class="kpi-icon teal"><i data-feather="calendar"></i></div>
+                <span class="kpi-trend trend-up"><i data-feather="trending-up"></i> +11%</span>
+              </div>
+              <div class="kpi-value">42</div>
+              <div class="kpi-label">Appointments</div>
+              <div class="kpi-sub">vs last 7 days</div>
+            </div>
+          </div>
+
+          <!-- Analytics + Right Sidebar -->
+          <div class="dash-content-grid">
+            <!-- Left: Charts -->
+            <div class="dash-charts">
+              <!-- Lead Overview -->
+              <div class="card lead-overview-card">
+                <div class="card-header">
+                  <div>
+                    <div class="card-title">Lead Overview</div>
+                    <div class="card-sub">Leads vs Customers</div>
+                  </div>
+                  <div class="chart-period-btns">
+                    <button class="period-btn active" data-period="7">7d</button>
+                    <button class="period-btn" data-period="30">30d</button>
+                    <button class="period-btn" data-period="90">90d</button>
+                  </div>
+                </div>
+                <div class="chart-wrap">
+                  <canvas id="lead-overview-chart" height="220"></canvas>
+                </div>
+              </div>
+
+              <!-- Lead Sources -->
+              <div class="card lead-sources-card" style="margin-top:18px;">
+                <div class="card-header">
+                  <div>
+                    <div class="card-title">Lead Sources</div>
+                    <div class="card-sub">Where your leads come from</div>
+                  </div>
+                </div>
+                <div class="sources-layout">
+                  <div class="donut-wrap">
+                    <canvas id="lead-sources-chart" height="180"></canvas>
+                    <div class="source-chart-center" aria-hidden="true">
+                      <strong>248</strong>
+                      <span>Total Leads</span>
+                    </div>
+                  </div>
+                  <div class="sources-legend" id="sources-legend"></div>
+                </div>
+              </div>
+
+              <!-- Recent Leads Table -->
+              <div class="card recent-leads-card" style="margin-top:18px;">
+                <div class="card-header">
+                  <div class="card-title">Recent Leads</div>
+                  <button class="card-link" data-view="leads" onclick="switchView('leads')">View All <span>›</span></button>
+                </div>
+                <div class="table-wrap">
+                  <table class="data-table" id="recent-leads-table">
+                    <thead>
+                      <tr>
+                        <th>Name</th>
+                        <th>Phone</th>
+                        <th>Source</th>
+                        <th>Status</th>
+                        <th>Date</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody id="recent-leads-tbody">
+                      <!-- JS rendered -->
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <!-- Right: Activity + Tasks -->
+            <div class="dash-right-panel">
+              <!-- Recent Activity -->
+              <div class="card recent-activity-card">
+                <div class="card-header">
+                  <div class="card-title">Recent Activity</div>
+                  <button class="card-link" data-view="leads" onclick="switchView('leads')">View All <span>›</span></button>
+                </div>
+                <div class="activity-list" id="activity-list">
+                  <!-- JS rendered -->
+                </div>
+              </div>
+
+              <!-- Today's Tasks -->
+              <div class="card today-tasks-card" style="margin-top:16px;">
+                <div class="card-header">
+                  <div class="card-title">Today's Tasks</div>
+                  <button class="card-link" data-view="tasks" onclick="switchView('tasks')">View All <span>›</span></button>
+                </div>
+                <div class="task-list" id="today-task-list">
+                  <!-- JS rendered -->
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============================
+             2. LEADS VIEW
+             ============================ -->
+        <section class="view-panel" id="view-leads">
+          <div class="page-hero">
+            <div class="page-hero-text">
+              <h1 class="page-title">Leads</h1>
+              <p class="page-sub">Manage, filter and work your lead pipeline.</p>
+            </div>
+            <div class="page-hero-actions">
+              <button class="btn btn-secondary btn-sm" id="leads-import-btn"><i data-feather="upload"></i> Import</button>
+              <button class="btn btn-secondary btn-sm" id="leads-export-btn"><i data-feather="download"></i> Export</button>
+              <button class="btn btn-primary btn-sm" id="add-lead-btn"><i data-feather="plus"></i> Add Lead</button>
+            </div>
+          </div>
+
+          <!-- Filters Bar -->
+          <div class="filter-bar">
+            <div class="search-wrap sm">
+              <i data-feather="search" class="search-icon"></i>
+              <input type="text" class="search-input" id="leads-search" placeholder="Search leads…">
+            </div>
+            <select class="filter-sel" id="leads-status-filter">
+              <option value="">All Statuses</option>
+              <option value="New">New</option>
+              <option value="Contacted">Contacted</option>
+              <option value="Qualified">Qualified</option>
+              <option value="Proposal">Proposal</option>
+              <option value="Converted">Converted</option>
+              <option value="Lost">Lost</option>
+            </select>
+            <select class="filter-sel" id="leads-source-filter">
+              <option value="">All Sources</option>
+              <option value="Website">Website</option>
+              <option value="Instagram">Instagram</option>
+              <option value="Facebook">Facebook</option>
+              <option value="WhatsApp">WhatsApp</option>
+              <option value="Referral">Referral</option>
+              <option value="Other">Other</option>
+            </select>
+            <select class="filter-sel" id="leads-assigned-filter">
+              <option value="">All Users</option>
+              <option value="Praveenkumar">Praveenkumar</option>
+              <option value="Diana Lee">Diana Lee</option>
+              <option value="Chana Lee">Chana Lee</option>
+            </select>
+            <div class="view-toggle">
+              <button class="view-btn active" data-mode="table" title="Table view"><i data-feather="list"></i></button>
+              <button class="view-btn" data-mode="kanban" title="Kanban view"><i data-feather="columns"></i></button>
+            </div>
+          </div>
+
+          <!-- Bulk Actions -->
+          <div class="bulk-bar" id="leads-bulk-bar" style="display:none;">
+            <span id="leads-selected-count">0</span> selected
+            <button class="btn btn-secondary btn-sm">Assign</button>
+            <button class="btn btn-secondary btn-sm">Change Status</button>
+            <button class="btn btn-danger btn-sm">Delete</button>
+          </div>
+
+          <!-- Table View -->
+          <div class="card table-view-container" id="leads-table-view">
+            <div class="table-wrap">
+              <table class="data-table" id="leads-full-table">
+                <thead>
+                  <tr>
+                    <th style="width:36px;"><input type="checkbox" id="leads-select-all"></th>
+                    <th>Name</th>
+                    <th>Phone</th>
+                    <th>Source</th>
+                    <th>Status</th>
+                    <th>Assigned</th>
+                    <th>Last Activity</th>
+                    <th>Date</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="leads-table-tbody">
+                  <!-- JS rendered -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Kanban View -->
+          <div class="kanban-board" id="leads-kanban-view" style="display:none;">
+            <!-- JS rendered -->
+          </div>
+        </section>
+
+        <!-- ============================
+             3. CUSTOMERS VIEW
+             ============================ -->
+        <section class="view-panel" id="view-customers">
+          <div class="page-hero">
+            <div class="page-hero-text">
+              <h1 class="page-title">Customers</h1>
+              <p class="page-sub">Converted leads and active customer accounts.</p>
+            </div>
+            <div class="page-hero-actions">
+              <button class="btn btn-primary btn-sm" id="add-customer-btn"><i data-feather="plus"></i> Add Customer</button>
+            </div>
+          </div>
+          <div class="card">
+            <div class="table-wrap">
+              <table class="data-table" id="customers-table">
+                <thead>
+                  <tr>
+                    <th>Name</th><th>Phone</th><th>Company</th><th>Revenue</th><th>Assigned</th><th>Last Contact</th><th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="customers-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============================
+             4. DEALS VIEW
+             ============================ -->
+        <section class="view-panel" id="view-deals">
+          <div class="page-hero">
+            <div class="page-hero-text">
+              <h1 class="page-title">Deals Pipeline</h1>
+              <p class="page-sub">Visual sales pipeline — drag cards to move stages.</p>
+            </div>
+            <div class="page-hero-actions">
+              <button class="btn btn-primary btn-sm" id="add-deal-btn"><i data-feather="plus"></i> Add Deal</button>
+            </div>
+          </div>
+          <div class="deals-pipeline" id="deals-pipeline">
+            <!-- JS rendered columns -->
+          </div>
+        </section>
+
+        <!-- ============================
+             5. CALLS VIEW
+             ============================ -->
+        <section class="view-panel" id="view-calls">
+          <div class="page-hero">
+            <div class="page-hero-text">
+              <h1 class="page-title">Calls</h1>
+              <p class="page-sub">Call history, recordings, and follow-up tasks.</p>
+            </div>
+            <div class="page-hero-actions">
+              <button class="btn btn-primary btn-sm" id="log-call-btn"><i data-feather="phone"></i> Log Call</button>
+            </div>
+          </div>
+          <div class="card">
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Direction</th><th>Customer</th><th>Phone</th><th>Duration</th><th>Status</th><th>Recording</th><th>Date</th><th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="calls-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============================
+             6. MESSAGES VIEW
+             ============================ -->
+        <section class="view-panel" id="view-messages">
+          <div class="messages-layout">
+            <!-- Left: Conversation List -->
+            <div class="conv-list-panel">
+              <div class="conv-search">
+                <div class="search-wrap sm">
+                  <i data-feather="search" class="search-icon"></i>
+                  <input type="text" class="search-input" id="conversation-search" placeholder="Search conversations…">
+                </div>
+                <div class="msg-tabs">
+                  <button class="msg-tab active" data-channel="all">All</button>
+                  <button class="msg-tab" data-channel="whatsapp">WhatsApp</button>
+                  <button class="msg-tab" data-channel="sms">SMS</button>
+                  <button class="msg-tab" data-channel="email">Email</button>
+                </div>
+              </div>
+              <div class="conv-list" id="conv-list">
+                <!-- JS rendered -->
+              </div>
+            </div>
+
+            <!-- Center: Active Conversation -->
+            <div class="conv-chat-panel">
+              <div class="conv-chat-header" id="conv-chat-header">
+                <button class="btn btn-secondary btn-sm btn-back-conv" id="btn-back-conv" title="Back to conversations">
+                  <i data-feather="arrow-left"></i>
+                </button>
+                <div class="conv-avatar" id="conv-chat-avatar">AL</div>
+                <div>
+                  <div class="conv-chat-name" id="conv-chat-name">Alice Lee</div>
+                  <div class="conv-chat-status" id="conv-chat-status">WhatsApp · Online</div>
+                </div>
+                <div class="conv-chat-actions">
+                  <button class="btn btn-secondary btn-sm" onclick="showToast('Calling Alice Lee...', 'success')"><i data-feather="phone"></i> Call</button>
+                  <button class="btn btn-secondary btn-sm" onclick="showToast('Showing customer details', 'default')"><i data-feather="info"></i> Info</button>
+                </div>
+              </div>
+              <div class="conv-messages" id="conv-messages">
+                <!-- JS rendered -->
+              </div>
+              <div class="conv-composer">
+                <input type="text" class="composer-input" placeholder="Type a message…" id="msg-composer-input">
+                <button class="btn btn-primary" id="msg-send-btn"><i data-feather="send"></i></button>
+              </div>
+            </div>
+
+            <!-- Right: Customer Info -->
+            <div class="conv-info-panel">
+              <div class="conv-info-avatar">AL</div>
+              <div class="conv-info-name">Alice Lee</div>
+              <div class="conv-info-role">Marketing Manager</div>
+              <div class="conv-info-fields">
+                <div class="info-row"><span>Phone</span><span>+91 927 455 8824</span></div>
+                <div class="info-row"><span>Email</span><span>alice@company.com</span></div>
+                <div class="info-row"><span>Source</span><span>Instagram</span></div>
+                <div class="info-row"><span>Status</span><span class="badge badge-new">New</span></div>
+              </div>
+              <div class="conv-info-actions">
+                <button class="btn btn-primary btn-sm w-full" id="message-add-note-btn">Add Note</button>
+                <button class="btn btn-secondary btn-sm w-full" id="message-create-task-btn" style="margin-top:8px;">Create Task</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============================
+             7. APPOINTMENTS VIEW
+             ============================ -->
+        <section class="view-panel" id="view-appointments">
+          <div class="page-hero">
+            <div class="page-hero-text">
+              <h1 class="page-title">Appointments</h1>
+              <p class="page-sub">Schedule and manage customer meetings.</p>
+            </div>
+            <div class="page-hero-actions">
+              <div class="cal-view-btns">
+                <button class="period-btn active" id="cal-view-day">Day</button>
+                <button class="period-btn" id="cal-view-week">Week</button>
+                <button class="period-btn" id="cal-view-month">Month</button>
+              </div>
+              <button class="btn btn-primary btn-sm" id="add-appointment-btn"><i data-feather="plus"></i> Schedule</button>
+            </div>
+          </div>
+          <div class="appt-layout">
+            <div class="card appt-upcoming">
+              <div class="card-title" style="margin-bottom:14px;">Upcoming</div>
+              <div id="appt-list"></div>
+            </div>
+            <div class="card appt-cal">
+              <div class="cal-top-bar">
+                <div class="cal-title" id="cal-month-title">September 2026</div>
+                <div class="cal-nav-btns">
+                  <button class="btn btn-secondary btn-sm" id="cal-btn-prev"><i data-feather="chevron-left"></i></button>
+                  <button class="btn btn-secondary btn-sm" id="cal-btn-today">Today</button>
+                  <button class="btn btn-secondary btn-sm" id="cal-btn-next"><i data-feather="chevron-right"></i></button>
+                </div>
+              </div>
+              <div class="cal-grid-header">
+                <div>SUN</div><div>MON</div><div>TUE</div><div>WED</div><div>THU</div><div>FRI</div><div>SAT</div>
+              </div>
+              <div class="cal-grid-days" id="cal-grid-days">
+                <!-- JS Rendered 35-day grid -->
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============================
+             8. TASKS VIEW
+             ============================ -->
+        <section class="view-panel" id="view-tasks">
+          <div class="page-hero">
+            <div class="page-hero-text">
+              <h1 class="page-title">Tasks</h1>
+              <p class="page-sub">Your team's daily task board.</p>
+            </div>
+            <div class="page-hero-actions">
+              <button class="btn btn-primary btn-sm" id="add-task-btn"><i data-feather="plus"></i> Add Task</button>
+            </div>
+          </div>
+          <div class="tasks-filters">
+            <button class="period-btn active" data-task-filter="all">All</button>
+            <button class="period-btn" data-task-filter="today">Today</button>
+            <button class="period-btn" data-task-filter="week">This Week</button>
+            <button class="period-btn" data-task-filter="overdue">Overdue</button>
+          </div>
+          <div class="card" style="margin-top:16px;">
+            <div class="task-full-list" id="tasks-full-list">
+              <!-- JS rendered -->
+            </div>
+          </div>
+        </section>
+
+        <!-- ============================
+             9. REPORTS VIEW
+             ============================ -->
+        <section class="view-panel" id="view-reports">
+          <div class="page-hero">
+            <div class="page-hero-text">
+              <h1 class="page-title">Reports & Analytics</h1>
+              <p class="page-sub">Business performance insights and trends.</p>
+            </div>
+            <div class="page-hero-actions">
+              <button class="btn btn-secondary btn-sm" onclick="window.exportCSV()"><i data-feather="download"></i> Export Report</button>
+            </div>
+          </div>
+          <div class="reports-grid">
+            <div class="card">
+              <div class="card-title">Lead Conversion Rate</div>
+              <div class="big-stat">14.2%</div>
+              <div class="card-sub">from 1,245 leads this month</div>
+              <canvas id="conversion-chart" height="100"></canvas>
+            </div>
+            <div class="card">
+              <div class="card-title">Revenue (Closed Deals)</div>
+              <div class="big-stat">₹4,82,000</div>
+              <div class="card-sub">across 18 closed deals</div>
+              <canvas id="revenue-chart" height="100"></canvas>
+            </div>
+            <div class="card">
+              <div class="card-title">Customer Growth</div>
+              <div class="big-stat">+127</div>
+              <div class="card-sub">new customers this month</div>
+              <canvas id="growth-chart" height="100"></canvas>
+            </div>
+            <div class="card">
+              <div class="card-title">Messages Sent</div>
+              <div class="big-stat">2,150</div>
+              <div class="card-sub">98.2% delivery rate</div>
+              <canvas id="messages-chart" height="100"></canvas>
+            </div>
+          </div>
+          <!-- Funnel -->
+          <div class="card" style="margin-top:18px;">
+            <div class="card-header">
+              <div class="card-title">Sales Funnel</div>
+            </div>
+            <div class="funnel-wrap" id="funnel-wrap">
+              <!-- JS rendered -->
+            </div>
+          </div>
+        </section>
+
+        <!-- ============================
+             10. SETTINGS VIEW
+             ============================ -->
+        <section class="view-panel" id="view-settings">
+          <div class="page-hero">
+            <div class="page-hero-text">
+              <h1 class="page-title">Settings</h1>
+              <p class="page-sub">Manage your workspace, team and preferences.</p>
+            </div>
+          </div>
+          <div class="settings-layout">
+            <nav class="settings-nav">
+              <a class="settings-nav-item active" data-settings-tab="profile">Profile</a>
+              <a class="settings-nav-item" data-settings-tab="workspace">Workspace</a>
+              <a class="settings-nav-item" data-settings-tab="team">Team & Roles</a>
+              <a class="settings-nav-item" data-settings-tab="integrations">Integrations</a>
+              <a class="settings-nav-item" data-settings-tab="notifications">Notifications</a>
+              <a class="settings-nav-item" data-settings-tab="billing">Billing</a>
+            </nav>
+            <div class="settings-content card">
+              
+              <!-- TAB 1: PROFILE -->
+              <div class="settings-tab-panel active" id="settings-tab-profile">
+                <div class="card-title" style="margin-bottom:20px;">Profile Settings</div>
+                <div class="form-grid">
+                  <div class="form-group">
+                    <label class="form-label">Full Name</label>
+                    <input type="text" class="form-input" id="set-prof-name" value="Praveenkumar">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Email</label>
+                    <input type="email" class="form-input" id="set-prof-email" value="praveenkumar@nextbright.io">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Phone</label>
+                    <input type="text" class="form-input" id="set-prof-phone" value="+91 98765 43210">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Role</label>
+                    <input type="text" class="form-input" value="Admin · Owner" disabled>
+                  </div>
+                </div>
+                <div style="margin-top:20px;">
+                  <button class="btn btn-primary" onclick="showToast('Profile settings saved successfully!', 'success')">Save Changes</button>
+                  <button class="btn btn-secondary" style="margin-left:10px;">Cancel</button>
+                </div>
+              </div>
+
+              <!-- TAB 2: WORKSPACE -->
+              <div class="settings-tab-panel" id="settings-tab-workspace">
+                <div class="card-title" style="margin-bottom:20px;">Workspace Settings</div>
+                <div class="form-grid">
+                  <div class="form-group">
+                    <label class="form-label">Workspace Name</label>
+                    <input type="text" class="form-input" id="set-ws-name" value="Praveenkumar's CRM">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Custom Domain / URL</label>
+                    <input type="text" class="form-input" value="app.nextbright.io/praveenkumar">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Timezone</label>
+                    <select class="form-input">
+                      <option>(GMT+05:30) India Standard Time</option>
+                      <option>(GMT+00:00) UTC</option>
+                      <option>(GMT-05:00) Eastern Time</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Business Type</label>
+                    <select class="form-input">
+                      <option selected>Dental Clinic</option>
+                      <option>Garage / Car Service</option>
+                      <option>Salon / Spa</option>
+                      <option>Gym / Fitness</option>
+                    </select>
+                  </div>
+                </div>
+                <div style="margin-top:20px;">
+                  <button class="btn btn-primary" onclick="showToast('Workspace settings saved!', 'success')">Save Changes</button>
+                </div>
+              </div>
+
+              <!-- TAB 3: TEAM & ROLES -->
+              <div class="settings-tab-panel" id="settings-tab-team">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                  <div class="card-title">Team Members & Roles</div>
+                  <button class="btn btn-primary btn-sm" onclick="showToast('Invitation sent to new member!', 'success')"><i data-feather="user-plus"></i> Invite Member</button>
+                </div>
+                <table class="data-table">
+                  <thead>
+                    <tr><th>Member</th><th>Email</th><th>Role</th><th>Status</th><th>Actions</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td><strong>Praveenkumar</strong></td>
+                      <td>praveenkumar@nextbright.io</td>
+                      <td><span class="badge badge-new">Owner</span></td>
+                      <td><span style="color:var(--status-success);font-weight:600;">Active</span></td>
+                      <td><button class="btn btn-secondary btn-sm" disabled>Owner</button></td>
+                    </tr>
+                    <tr>
+                      <td><strong>Diana Lee</strong></td>
+                      <td>diana@nextbright.io</td>
+                      <td><span class="badge badge-qualified">Manager</span></td>
+                      <td><span style="color:var(--status-success);font-weight:600;">Active</span></td>
+                      <td><button class="btn btn-secondary btn-sm" onclick="showToast('Role updated for Diana', 'success')">Edit</button></td>
+                    </tr>
+                    <tr>
+                      <td><strong>Chana Lee</strong></td>
+                      <td>chana@nextbright.io</td>
+                      <td><span class="badge badge-contacted">Sales Agent</span></td>
+                      <td><span style="color:var(--status-success);font-weight:600;">Active</span></td>
+                      <td><button class="btn btn-secondary btn-sm" onclick="showToast('Role updated for Chana', 'success')">Edit</button></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <!-- TAB 4: INTEGRATIONS -->
+              <div class="settings-tab-panel" id="settings-tab-integrations">
+                <div class="card-title" style="margin-bottom:4px;">Communication Channels & APIs</div>
+                 <p style="font-size:0.75rem;color:var(--text-muted);margin:0 0 16px;">Status is checked live against the server and refreshed every 30 seconds.</p>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px;">
+                  <div style="padding: 14px; border: 1px solid var(--border-light); border-radius: 8px; background: var(--navy-50);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                      <strong style="font-size: 0.875rem;">WhatsApp Cloud API</strong>
+                       <span class="badge badge-qualified" data-integration-status="whatsapp" aria-live="polite">Checking...</span>
+                    </div>
+                    <p data-integration-detail="whatsapp" style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 12px;">Checking live server status…</p>
+                    <button class="btn btn-secondary btn-sm w-full" data-integration="whatsapp">Configure</button>
+                  </div>
+
+                  <div style="padding: 14px; border: 1px solid var(--border-light); border-radius: 8px; background: var(--navy-50);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                      <strong style="font-size: 0.875rem;">Instagram DMs</strong>
+                      <span class="badge badge-qualified" data-integration-status="instagram" aria-live="polite">Checking...</span>
+                    </div>
+                    <p data-integration-detail="instagram" style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 12px;">Checking live server status…</p>
+                    <button class="btn btn-secondary btn-sm w-full" data-integration="instagram">Configure</button>
+                  </div>
+
+                  <div style="padding: 14px; border: 1px solid var(--border-light); border-radius: 8px; background: var(--navy-50);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                      <strong style="font-size: 0.875rem;">Twilio Voice Calls</strong>
+                      <span class="badge badge-qualified" data-integration-status="twilio" aria-live="polite">Checking...</span>
+                    </div>
+                    <p data-integration-detail="twilio" style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 12px;">Checking live server status…</p>
+                    <button class="btn btn-secondary btn-sm w-full" data-integration="twilio">Configure</button>
+                  </div>
+
+                  <div style="padding: 14px; border: 1px solid var(--border-light); border-radius: 8px; background: var(--navy-50);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                      <strong style="font-size: 0.875rem;">Stripe Payments</strong>
+                      <span class="badge badge-qualified" data-integration-status="stripe" aria-live="polite">Checking...</span>
+                    </div>
+                    <p data-integration-detail="stripe" style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 12px;">Checking live server status…</p>
+                    <button class="btn btn-secondary btn-sm w-full" data-integration="stripe">Configure</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- TAB 5: NOTIFICATIONS -->
+              <div class="settings-tab-panel" id="settings-tab-notifications">
+                <div class="card-title" style="margin-bottom:16px;">Notification Preferences</div>
+                <div style="display: flex; flex-direction: column; gap: 12px;">
+                  <label style="display: flex; align-items: center; gap: 10px; font-size: 0.875rem;">
+                    <input type="checkbox" checked style="accent-color: var(--brand-primary); width: 16px; height: 16px;">
+                    Send email alert when a new high-intent lead arrives
+                  </label>
+                  <label style="display: flex; align-items: center; gap: 10px; font-size: 0.875rem;">
+                    <input type="checkbox" checked style="accent-color: var(--brand-primary); width: 16px; height: 16px;">
+                    Send WhatsApp alert when AI escalates to human handoff
+                  </label>
+                  <label style="display: flex; align-items: center; gap: 10px; font-size: 0.875rem;">
+                    <input type="checkbox" checked style="accent-color: var(--brand-primary); width: 16px; height: 16px;">
+                    Daily appointment reminder digest at 8:00 AM
+                  </label>
+                  <label style="display: flex; align-items: center; gap: 10px; font-size: 0.875rem;">
+                    <input type="checkbox" checked style="accent-color: var(--brand-primary); width: 16px; height: 16px;">
+                    Task due date reminders
+                  </label>
+                </div>
+                <div style="margin-top:20px;">
+                  <button class="btn btn-primary" onclick="showToast('Notification preferences saved!', 'success')">Save Preferences</button>
+                </div>
+              </div>
+
+              <!-- TAB 6: BILLING -->
+              <div class="settings-tab-panel" id="settings-tab-billing">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                  <div>
+                    <div class="card-title">Professional SaaS Plan</div>
+                    <div style="font-size: 0.8125rem; color: var(--text-muted);">₹4,999 / month · Renews on Oct 15, 2026</div>
+                  </div>
+                  <button class="btn btn-primary btn-sm" onclick="showToast('Opening billing portal...', 'success')">Manage Plan</button>
+                </div>
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px;">
+                  <div style="padding: 12px; background: var(--navy-50); border-radius: 6px;">
+                    <div style="font-size: 0.75rem; color: var(--text-muted);">Leads Included</div>
+                    <strong style="font-size: 1.125rem;">1,245 / 5,000</strong>
+                  </div>
+                  <div style="padding: 12px; background: var(--navy-50); border-radius: 6px;">
+                    <div style="font-size: 0.75rem; color: var(--text-muted);">Messages / Month</div>
+                    <strong style="font-size: 1.125rem;">2,150 / 10,000</strong>
+                  </div>
+                  <div style="padding: 12px; background: var(--navy-50); border-radius: 6px;">
+                    <div style="font-size: 0.75rem; color: var(--text-muted);">Storage Used</div>
+                    <strong style="font-size: 1.125rem;">1.8 GB / 10 GB</strong>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </section>
+
+      </main>
+    </div><!-- .main-area -->
+
+    <!-- Mobile quick navigation -->
+    <nav class="mobile-bottom-nav" aria-label="Mobile navigation">
+      <button class="active" data-view="dashboard">
+        <i data-feather="home"></i><span>Home</span>
+      </button>
+      <button data-view="leads">
+        <i data-feather="users"></i><span>Leads</span>
+      </button>
+      <button data-view="deals">
+        <i data-feather="briefcase"></i><span>Deals</span>
+      </button>
+      <button data-view="appointments">
+        <i data-feather="calendar"></i><span>Calendar</span>
+      </button>
+      <button id="mobile-more-btn">
+        <i data-feather="menu"></i><span>More</span>
+      </button>
+    </nav>
+  </div><!-- .app-shell -->
+
+  <!-- ===== QUICK ADD MODAL ===== -->
+  <div class="modal-backdrop" id="quick-add-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 class="modal-title">Quick Add Lead</h2>
+        <button class="icon-btn modal-close" id="quick-add-close"><i data-feather="x"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label">Full Name</label>
+            <input type="text" class="form-input" id="qa-name" placeholder="e.g. Alice Green">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Phone</label>
+            <input type="text" class="form-input" id="qa-phone" placeholder="+91 9000 000000">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Source</label>
+            <select class="form-input" id="qa-source">
+              <option>Website</option><option>Instagram</option><option>Facebook</option>
+              <option>WhatsApp</option><option>Referral</option><option>Other</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Assigned To</label>
+            <select class="form-input" id="qa-assigned">
+              <option>Praveenkumar</option><option>Diana Lee</option><option>Chana Lee</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="qa-cancel">Cancel</button>
+        <button class="btn btn-primary" id="qa-save">Add Lead</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CUSTOMER 360 MODAL -->
+  <div class="modal-backdrop" id="modal-customer-360">
+    <div class="modal-container" style="max-width: 600px;">
+      <div class="modal-header">
+        <h2 class="modal-title" id="c360-title">Customer 360 Profile</h2>
+        <button class="icon-btn modal-close" onclick="document.getElementById('modal-customer-360').classList.remove('open')"><i data-feather="x"></i></button>
+      </div>
+      <div class="modal-body">
+        <div style="display: flex; gap: 14px; align-items: center; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border-light)">
+          <div class="lead-avatar" id="c360-avatar" style="width: 48px; height: 48px; font-size: 1.1rem; background: var(--brand-primary); color: #fff;">AL</div>
+          <div>
+            <h3 style="margin: 0; font-size: 1.125rem;" id="c360-name">Alice Lee</h3>
+            <p style="margin: 2px 0 0; font-size: 0.8125rem; color: var(--text-muted);" id="c360-meta">Lee Enterprise · Phone: +91 927 455 8824</p>
+          </div>
+        </div>
+        <div style="margin-bottom: 16px;">
+          <h4 style="font-size: 0.875rem; margin: 0 0 8px;">Customer 360 Timeline</h4>
+          <div id="c360-timeline" style="display: flex; flex-direction: column; gap: 10px; font-size: 0.8125rem;">
+            <!-- JS Rendered -->
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="document.getElementById('modal-customer-360').classList.remove('open')">Close</button>
+        <button class="btn btn-primary" onclick="showToast('Initiating direct call...', 'success')"><i data-feather="phone"></i> Call Customer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ADD CUSTOMER MODAL -->
+  <div class="modal-backdrop" id="modal-add-customer">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 class="modal-title">Add New Customer</h2>
+        <button class="icon-btn modal-close" onclick="document.getElementById('modal-add-customer').classList.remove('open')"><i data-feather="x"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label">Customer Name</label>
+            <input type="text" class="form-input" id="ac-name" placeholder="e.g. Rahul Sharma">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Phone</label>
+            <input type="text" class="form-input" id="ac-phone" placeholder="+91 98765 00000">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Company Name</label>
+            <input type="text" class="form-input" id="ac-company" placeholder="e.g. Sharma Tech Solutions">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Contract / Deal Value</label>
+            <input type="text" class="form-input" id="ac-revenue" placeholder="e.g. ₹50,000">
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="document.getElementById('modal-add-customer').classList.remove('open')">Cancel</button>
+        <button class="btn btn-primary" id="ac-save">Save Customer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ADD DEAL MODAL -->
+  <div class="modal-backdrop" id="modal-add-deal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 class="modal-title">Create New Deal</h2>
+        <button class="icon-btn modal-close" onclick="document.getElementById('modal-add-deal').classList.remove('open')"><i data-feather="x"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label">Deal Name</label>
+            <input type="text" class="form-input" id="ad-name" placeholder="e.g. Annual CRM Subscription">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Customer / Lead</label>
+            <input type="text" class="form-input" id="ad-customer" placeholder="e.g. Alice Lee">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Amount</label>
+            <input type="text" class="form-input" id="ad-amount" placeholder="e.g. ₹1,20,000">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Pipeline Stage</label>
+            <select class="form-input" id="ad-stage">
+              <option>New</option><option>Contacted</option><option>Proposal</option>
+              <option>Negotiation</option><option>Won</option><option>Lost</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="document.getElementById('modal-add-deal').classList.remove('open')">Cancel</button>
+        <button class="btn btn-primary" id="ad-save">Create Deal</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ADD TASK MODAL -->
+  <div class="modal-backdrop" id="modal-add-task">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 class="modal-title">Add New Task</h2>
+        <button class="icon-btn modal-close" onclick="document.getElementById('modal-add-task').classList.remove('open')"><i data-feather="x"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label">Task Description</label>
+            <input type="text" class="form-input" id="at-title" placeholder="e.g. Follow up on proposal details">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Due Time</label>
+            <input type="text" class="form-input" id="at-time" placeholder="Today · 4:00 PM">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Priority</label>
+            <select class="form-input" id="at-priority">
+              <option>High</option><option selected>Medium</option><option>Low</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="document.getElementById('modal-add-task').classList.remove('open')">Cancel</button>
+        <button class="btn btn-primary" id="at-save">Save Task</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ADD APPOINTMENT MODAL -->
+  <div class="modal-backdrop" id="modal-add-appointment">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 class="modal-title">Schedule Appointment</h2>
+        <button class="icon-btn modal-close" onclick="document.getElementById('modal-add-appointment').classList.remove('open')"><i data-feather="x"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label">Appointment Title / Service</label>
+            <input type="text" class="form-input" id="ap-type" placeholder="e.g. Dental Consultation">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Customer Name</label>
+            <input type="text" class="form-input" id="ap-customer" placeholder="e.g. Rahul Sharma">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Date & Time</label>
+            <input type="text" class="form-input" id="ap-date" placeholder="Tomorrow · 11:00 AM">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Assigned Staff</label>
+            <select class="form-input" id="ap-assigned">
+              <option>Praveenkumar</option><option>Diana Lee</option><option>Dr. Anita</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="document.getElementById('modal-add-appointment').classList.remove('open')">Cancel</button>
+        <button class="btn btn-primary" id="ap-save">Schedule</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- INTEGRATION EDITOR -->
+  <div class="modal-backdrop" id="integration-modal">
+    <div class="modal integration-modal">
+      <div class="modal-header">
+        <div>
+          <h2 class="modal-title" id="integration-modal-title">Integration settings</h2>
+          <p id="integration-modal-subtitle" style="font-size:0.75rem;color:var(--text-muted);margin-top:3px;">Edit connection details and save them for this workspace.</p>
+        </div>
+        <button class="icon-btn" id="integration-modal-close" title="Close"><i data-feather="x"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="integration-editor-note">
+          <i data-feather="shield"></i>
+          <span>Live status is checked against the server environment. These editor fields are local demo settings; production secrets must stay server-side.</span>
+        </div>
+        <form id="integration-form">
+          <input type="hidden" id="integration-key">
+          <div id="integration-fields" class="integration-fields"></div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="integration-test-btn"><i data-feather="zap"></i> Test connection</button>
+        <button class="btn btn-primary" id="integration-save-btn"><i data-feather="save"></i> Save changes</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- NOTIFICATIONS DROPDOWN PANEL -->
+  <div class="modal-backdrop" id="modal-notifications" style="background: transparent; backdrop-filter: none; z-index: 1500;">
+    <div class="card" style="position: absolute; top: 60px; right: 80px; width: 340px; box-shadow: var(--shadow-xl); padding: 16px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-light); padding-bottom: 8px; margin-bottom: 12px;">
+        <strong style="font-size: 0.9375rem;">Notifications</strong>
+        <button class="btn btn-secondary btn-sm" style="font-size: 0.75rem;" onclick="showToast('All notifications marked as read', 'success')">Mark Read</button>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 10px; font-size: 0.8125rem;">
+        <div style="padding: 8px; background: var(--brand-primary-light); border-radius: 6px;">
+          <strong style="color: var(--brand-primary);">New WhatsApp Lead</strong>
+          <p style="margin: 2px 0 0; color: var(--text-secondary);">Alice Lee requested service pricing on WhatsApp</p>
+        </div>
+        <div style="padding: 8px; background: var(--navy-50); border-radius: 6px;">
+          <strong>Missed Call</strong>
+          <p style="margin: 2px 0 0; color: var(--text-muted);">Incoming call from +91 98765 43210</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PROFILE MENU DROPDOWN -->
+  <div class="modal-backdrop" id="modal-profile" style="background: transparent; backdrop-filter: none; z-index: 1500;">
+    <div class="card" style="position: absolute; top: 60px; right: 20px; width: 240px; box-shadow: var(--shadow-xl); padding: 14px;">
+      <div style="border-bottom: 1px solid var(--border-light); padding-bottom: 10px; margin-bottom: 10px;">
+        <strong style="font-size: 0.875rem;">Praveenkumar</strong>
+        <div style="font-size: 0.75rem; color: var(--text-muted);">Admin · Owner</div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 6px; font-size: 0.8125rem;">
+        <button class="btn btn-secondary" style="justify-content: flex-start;" onclick="switchView('settings')"><i data-feather="settings"></i> Settings</button>
+        <a href="/admin.html" class="btn btn-secondary" style="justify-content: flex-start;" target="_blank"><i data-feather="sliders"></i> Master Admin Control</a>
+        <button class="btn btn-secondary" style="justify-content: flex-start; color: var(--status-danger);" onclick="showToast('Logged out successfully', 'default')"><i data-feather="log-out"></i> Sign Out</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <!-- JS -->
+  <script src="js/data.js"></script>
+  <script src="js/ui.js?v=20260925-live-status"></script>
+  <script src="js/charts.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

@@ -1,14 +1,12 @@
 // api/meta-webhook.js
 import { createClient } from '@supabase/supabase-js';
 import { decryptToken } from './_crypto.js';
+import { createSupabaseAdminClient, missingSupabaseServerConfig } from './_supabase.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
 
-const supabase = createClient(
-  SUPABASE_URL,
-  SUPABASE_SERVICE_ROLE_KEY
-);
+const supabase = createSupabaseAdminClient();
 
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || '';
 const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN || process.env.WA_ACCESS_TOKEN || '';
@@ -724,9 +722,9 @@ export default async function handler(req, res) {
     const mode = req.query['hub.mode'];
     const token = req.query['hub.verify_token'];
     const challenge = req.query['hub.challenge'];
-    const expectedToken = process.env.META_VERIFY_TOKEN || 'Wasaas@2026';
+    const expectedToken = process.env.META_VERIFY_TOKEN;
 
-    if (mode === 'subscribe' && (token === expectedToken || token === 'Wasaas@2026')) {
+    if (expectedToken && mode === 'subscribe' && token === expectedToken) {
       return res.status(200).send(challenge);
     }
     return res.status(403).send('Forbidden');
@@ -736,6 +734,12 @@ export default async function handler(req, res) {
     const payload = req.body;
 
     try {
+      if (!supabase) {
+        const missing = missingSupabaseServerConfig();
+        console.error('[Webhook] Supabase configuration missing:', missing.join(', '));
+        return res.status(503).json({ error: 'Server database configuration is unavailable.', missing });
+      }
+
       // ---------------------------------------------------------------------
       // Branch A: Instagram Webhook Payload (object === 'instagram' or page feed events)
       // ---------------------------------------------------------------------
@@ -921,6 +925,7 @@ export default async function handler(req, res) {
         }
 
         const messageRecord = {
+          organization_id: organizationId,
           conversation_id: conversationId,
           wa_message_id: msg.id,
           sender_number: sender,
@@ -973,6 +978,7 @@ export default async function handler(req, res) {
 
           const sentAt = new Date().toISOString();
           const { error: outboundError } = await supabase.from('messages').insert({
+            organization_id: organizationId,
             conversation_id: conversationId,
             wa_message_id: sendResult.messages?.[0]?.id,
             sender_number: sender,

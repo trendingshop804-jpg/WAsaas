@@ -13,6 +13,7 @@ Write-Host "====================================================================
 try {
     $listener.Start()
     Write-Host "⚡ Local server listening at: http://localhost:$port/" -ForegroundColor Green
+    Write-Host "For live integration status, run 'node dev-server.js' and use http://localhost:3001/" -ForegroundColor Yellow
     Write-Host "Opening app automatically..." -ForegroundColor DarkYellow
     Start-Process "http://localhost:$port/index.html"
     Write-Host "Press Ctrl+C in this terminal window to stop the server." -ForegroundColor Yellow
@@ -24,6 +25,16 @@ try {
         $response = $context.Response
 
         $path = $request.Url.LocalPath
+
+        # Keep clean CRM URLs working on the lightweight Windows server.
+        $cleanCrmMatch = [regex]::Match($path, '^/(?:nextbright-crm/index\.html/)?(dashboard|leads|customers|deals|calls|messages|appointments|tasks|reports|settings)/?$', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+        if ($cleanCrmMatch.Success) {
+            $response.StatusCode = 302
+            $response.Headers['Location'] = "/nextbright-crm/index.html#/$($cleanCrmMatch.Groups[1].Value.ToLower())"
+            $response.Close()
+            continue
+        }
+
         if ($path -eq "/" -or $path -eq "") {
             $path = "/index.html"
         }

@@ -1,0 +1,55 @@
+/* ============================================================
+   LEADS — Kanban Board
+   ============================================================ */
+.kanban-board {
+  display: flex;
+  gap: 14px;
+  overflow-x: auto;
+  padding-bottom: 16px;
+}
+.kanban-col {
+  min-width: 240px;
+  max-width: 260px;
+  flex-shrink: 0;
+  background: var(--navy-50);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.kanban-col-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  border-bottom: 1px solid var(--border-light);
+  background: #fff;
+}
+.kanban-count {
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 1px 8px;
+  border-radius: var(--radius-full);
+  background: var(--navy-200);
+  color: var(--text-secondary);
+}
+.kanban-cards { padding: 10px; display: flex; flex-direction: column; gap: 8px; min-height: 80px; }
+.kanban-card {
+  background: #fff;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  cursor: grab;
+  transition: box-shadow var(--transition), transform var(--transition);
+  box-shadow: var(--shadow-sm);
+}
+.kanban-card:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); }
+.kanban-card-name { font-size: 0.875rem; font-weight: 700; margin-bottom: 4px; }
+.kanban-card-meta { font-size: 0.75rem; color: var(--text-muted); }
+.kanban-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+}

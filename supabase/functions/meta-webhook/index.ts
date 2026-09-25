@@ -575,6 +575,7 @@ async function handler(request: Request): Promise<Response> {
 
         // Persist the inbound message
         const messageRecord = {
+          organization_id:  organizationId,
           conversation_id:  conversationId,
           wa_message_id:    msg.id,
           sender_number:    sender,
@@ -627,6 +628,7 @@ async function handler(request: Request): Promise<Response> {
             const sent   = await sendWhatsAppReply(phoneNumberId, sender, replyText);
             const sentAt = new Date().toISOString();
             const { error: outboundError } = await supabaseAdmin.from("messages").insert({
+              organization_id: organizationId,
               conversation_id: conversationId,
               wa_message_id:   sent.messages?.[0]?.id,
               sender_number:   sender,

@@ -1,13 +1,13 @@
 // api/send-media.js
 // Vercel serverless function to send outbound media via WhatsApp Cloud API.
-import { createClient } from '@supabase/supabase-js';
+import { createSupabaseAdminClient, missingSupabaseServerConfig } from './_supabase.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
 const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN || process.env.WA_ACCESS_TOKEN;
 const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.PHONE_NUMBER_ID || process.env.WA_PHONE_NUMBER_ID;
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+const supabase = createSupabaseAdminClient();
 
 function getMetaMediaType(messageType) {
   const map = {
@@ -178,8 +178,10 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'WhatsApp credentials not configured on server' });
     }
 
-    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-      return res.status(500).json({ error: 'Supabase credentials not configured on server' });
+    if (!supabase) {
+      const missing = missingSupabaseServerConfig();
+      console.error('[send-media] Supabase configuration missing:', missing.join(', '));
+      return res.status(503).json({ error: 'Supabase credentials not configured on server', missing });
     }
 
     const fileBuffer = Buffer.from(fileBase64, 'base64');
@@ -219,7 +221,7 @@ export default async function handler(req, res) {
       }
 
       const { data: conversation, error: conversationError } = await supabase
-        .from('conversations').select('id').eq('lead_id', leadId).maybeSingle();
+        .from('conversations').select('id, organization_id').eq('lead_id', leadId).maybeSingle();
       if (conversationError || !conversation) {
         throw new Error(conversationError?.message || 'No conversation exists for this lead.');
       }
@@ -227,6 +229,7 @@ export default async function handler(req, res) {
       const sentAt = new Date().toISOString();
       const bodyText = text || caption || fileName || 'Media message';
       const messageRecord = {
+        organization_id: conversation.organization_id,
         conversation_id: conversation.id,
         wa_message_id: waMessageId,
         sender_number: senderNumber,

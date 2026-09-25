@@ -1,6 +1,20 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="light">
 <head>
+  <!-- The working NextBright CRM entry lives in /nextbright-crm/. Keep the
+       legacy NexusLead page source below intact, but send the default app URL
+       to the functional CRM so its navigation and actions initialize. -->
+  <script>
+    (function redirectToNextBrightCRM() {
+      try {
+        if (window.location.pathname.indexOf('/nextbright-crm/') === -1) {
+          window.location.replace('./nextbright-crm/index.html' + window.location.search + window.location.hash);
+        }
+      } catch (error) {
+        // Keep the legacy page usable if a sandbox blocks navigation.
+      }
+    })();
+  </script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>NexusLead AI — AI Lead Generation & WhatsApp Sales Automation Operating System</title>
@@ -371,7 +385,7 @@
             <div class="kpi-card">
               <div class="kpi-top">
                 <span class="kpi-label">Total Leads Discovered</span>
-                <div class="kpi-icon-wrap">
+                <div class="kpi-icon-wrap blue">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle></svg>
                 </div>
               </div>
@@ -386,7 +400,7 @@
             <div class="kpi-card">
               <div class="kpi-top">
                 <span class="kpi-label">Contacted on WhatsApp</span>
-                <div class="kpi-icon-wrap" style="color: #3b82f6;">
+                <div class="kpi-icon-wrap green">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon></svg>
                 </div>
               </div>
@@ -399,7 +413,7 @@
             <div class="kpi-card">
               <div class="kpi-top">
                 <span class="kpi-label">Replies & Engagement</span>
-                <div class="kpi-icon-wrap" style="color: #8b5cf6;">
+                <div class="kpi-icon-wrap purple">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
                 </div>
               </div>
@@ -413,7 +427,7 @@
             <div class="kpi-card">
               <div class="kpi-top">
                 <span class="kpi-label">AI Qualified & Won Deals</span>
-                <div class="kpi-icon-wrap" style="color: #10b981;">
+                <div class="kpi-icon-wrap orange">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
                 </div>
               </div>

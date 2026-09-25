@@ -1,7 +1,7 @@
 ﻿/**
- * dev-server.js — NexusLead AI Local Dev Server
+ * dev-server.js â€” NexusLead AI Local Dev Server
  * - Reads .env file (sets process.env for API handlers)
- * - Serves static files from project root on http://localhost:3000
+ * - Serves static files from project root on http://localhost:3001
  * - Handles /api/* routes by importing the matching api/*.js handler
  * Start with:  node dev-server.js
  */
@@ -10,19 +10,22 @@ import path from 'path';
 import http from 'http';
 import { fileURLToPath, pathToFileURL } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const PORT = 3000;
+const PORT = 3001;
 function loadDotEnv() {
-  const envPath = path.join(__dirname, '.env');
-  if (!fs.existsSync(envPath)) return;
-  const lines = fs.readFileSync(envPath, 'utf8').split('\n');
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) continue;
-    const eqIdx = trimmed.indexOf('=');
-    if (eqIdx < 0) continue;
-    const key = trimmed.slice(0, eqIdx).trim();
-    const val = trimmed.slice(eqIdx + 1).trim().replace(/^["']|["']$/g, '');
-    if (key && !(key in process.env)) process.env[key] = val;
+  // Match Vercel/Next conventions: .env.local overrides .env for local runs.
+  for (const fileName of ['.env', '.env.local']) {
+    const envPath = path.join(__dirname, fileName);
+    if (!fs.existsSync(envPath)) continue;
+    const lines = fs.readFileSync(envPath, 'utf8').split('\n');
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      const eqIdx = trimmed.indexOf('=');
+      if (eqIdx < 0) continue;
+      const key = trimmed.slice(0, eqIdx).trim();
+      const val = trimmed.slice(eqIdx + 1).trim().replace(/^["']|["']$/g, '');
+      if (key) process.env[key] = val;
+    }
   }
 }
 loadDotEnv();
@@ -108,7 +111,19 @@ const server = http.createServer(async (nodeReq, nodeRes) => {
     }
     return;
   }
-  let filePath = path.join(__dirname, pathname === '/' ? 'index.html' : pathname);
+  const cleanCrmRoute = pathname.match(/^\/(?:nextbright-crm\/index\.html\/)?(dashboard|leads|customers|deals|calls|messages|appointments|tasks|reports|settings)\/?$/i);
+  if (cleanCrmRoute) {
+    nodeRes.writeHead(302, { Location: `/nextbright-crm/index.html#/${cleanCrmRoute[1].toLowerCase()}` });
+    return nodeRes.end();
+  }
+
+  let targetFile = pathname;
+  if (pathname === '/admin' || pathname === '/admin/' || pathname === '/master-admin') {
+    targetFile = 'admin.html';
+  } else if (pathname === '/app' || pathname === '/app/' || pathname === '/') {
+    targetFile = 'index.html';
+  }
+  let filePath = path.join(__dirname, targetFile);
   if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
     filePath = path.join(__dirname, 'index.html');
   }

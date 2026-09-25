@@ -27,7 +27,7 @@ class CRMComponent {
 
     window.appState.on('leads', () => this.render());
     window.appState.on('conversations', () => this.render());
-    window.appState.on('inboundReceived', () => this.render());
+    window.appState.on('inboundReceived', () => { this.render(); this.refreshLeadDrawerIfOpen(); });
     window.appState.on('*', (data) => {
       if (data?.key === 'inboundSync') this.render();
     });
@@ -394,6 +394,12 @@ class CRMComponent {
     if (drawer) drawer.classList.add('active');
     if (backdrop) backdrop.classList.add('active');
   }
+// Refresh drawer if it's open (e.g., after inbound message)
+refreshLeadDrawerIfOpen() {
+  if (this.activeDrawerLead && this.activeDrawerLead.id) {
+    this.openLeadDrawer(this.activeDrawerLead.id);
+  }
+}
 
   closeLeadDrawer() {
     const drawer = document.getElementById('lead-detail-drawer');
