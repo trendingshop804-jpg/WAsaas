@@ -1,5 +1,5 @@
-﻿/**
- * dev-server.js â€” NexusLead AI Local Dev Server
+/**
+ * dev-server.js — NexusLead AI Local Dev Server
  * - Reads .env file (sets process.env for API handlers)
  * - Serves static files from project root on http://localhost:3001
  * - Handles /api/* routes by importing the matching api/*.js handler
@@ -11,6 +11,14 @@ import http from 'http';
 import { fileURLToPath, pathToFileURL } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = 3001;
+
+const API_REWRITES = {
+  'test-connection': { target: 'integration-status', query: { route: 'test-connection' } },
+  'admin-companies': { target: 'admin', query: { resource: 'companies' } },
+  'admin-system': { target: 'admin', query: { resource: 'system' } },
+  'send-media': { target: 'messages', query: { route: 'send-media' } }
+};
+
 function loadDotEnv() {
   // Match Vercel/Next conventions: .env.local overrides .env for local runs.
   for (const fileName of ['.env', '.env.local']) {
@@ -36,10 +44,14 @@ const MIME = {
   '.svg': 'image/svg+xml', '.ico': 'image/x-icon',
   '.woff2': 'font/woff2', '.woff': 'font/woff', '.ttf': 'font/ttf',
 };
-function buildReq(nodeReq, body, parsedUrl) {
+function buildReq(nodeReq, body, parsedUrl, extraQuery = {}) {
+  const query = {
+    ...Object.fromEntries(parsedUrl.searchParams.entries()),
+    ...extraQuery
+  };
   return {
     method: nodeReq.method, url: nodeReq.url,
-    query: Object.fromEntries(parsedUrl.searchParams.entries()),
+    query,
     headers: nodeReq.headers, body
   };
 }
@@ -88,7 +100,12 @@ const server = http.createServer(async (nodeReq, nodeRes) => {
     return nodeRes.end();
   }
   if (pathname.startsWith('/api/')) {
-    const fnName = pathname.replace('/api/', '').replace(/\/$/, '') || 'index';
+    let fnName = pathname.replace('/api/', '').replace(/\/$/, '') || 'index';
+    let extraQuery = {};
+    if (API_REWRITES[fnName]) {
+      extraQuery = API_REWRITES[fnName].query || {};
+      fnName = API_REWRITES[fnName].target;
+    }
     const handlerPath = path.join(__dirname, 'api', `${fnName}.js`);
     if (!fs.existsSync(handlerPath)) {
       nodeRes.writeHead(404, { 'Content-Type': 'application/json' });
@@ -96,7 +113,7 @@ const server = http.createServer(async (nodeReq, nodeRes) => {
     }
     try {
       const body = await readBody(nodeReq);
-      const req = buildReq(nodeReq, body, parsedUrl);
+      const req = buildReq(nodeReq, body, parsedUrl, extraQuery);
       const res = buildRes(nodeRes);
       const mod = await import(`${pathToFileURL(handlerPath).href}?t=${Date.now()}`);
       const handler = mod.default || mod.handler;

@@ -12,5 +12,23 @@
       "path": "/api/daily-followup",
       "schedule": "0 10 * * *"
     }
+  ],
+  "rewrites": [
+    {
+      "source": "/api/test-connection",
+      "destination": "/api/integration-status?route=test-connection"
+    },
+    {
+      "source": "/api/admin-companies",
+      "destination": "/api/admin?resource=companies"
+    },
+    {
+      "source": "/api/admin-system",
+      "destination": "/api/admin?resource=system"
+    },
+    {
+      "source": "/api/send-media",
+      "destination": "/api/messages?route=send-media"
+    }
   ]
 }
