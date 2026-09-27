@@ -4,8 +4,17 @@
 // - action=dm-queue: processes pending comment-to-DM queue
 // - action=publish (default POST): publishes scheduled feed posts, reels, stories, carousels
 
+// SECURITY
+//   Every tenant-scoped action below requires a signed-in organization member.
+//   The organization is taken from the caller's organization_users membership,
+//   never from the request body, so a caller cannot connect, disconnect or send
+//   on behalf of another tenant. The service-role client is only used AFTER
+//   that check.
+//   There is no Meta server-to-server callback in this file (webhooks are
+//   handled by api/meta-webhook.js), so gating does not break OAuth.
 import { createClient } from '@supabase/supabase-js';
 import { decryptToken, encryptToken } from './_crypto.js';
+import { requireOrgAccess } from './_supabase.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
@@ -28,6 +37,27 @@ export default async function handler(req, res) {
   }
 
   const action = (req.query.action || '').toLowerCase();
+
+  // ── Authorization gate for tenant-scoped actions ─────────────────────────
+  // The organization below always comes from membership. Any organizationId in
+  // the request body is ignored for authorization purposes.
+  const TENANT_ACTIONS = new Set([
+    'test_connection',
+    'connect_manual',
+    'connect',
+    'disconnect',
+    'send_message',
+    'oauth-exchange',
+    'code_exchange'
+  ]);
+  const needsOrg = TENANT_ACTIONS.has(action) || req.method === 'DELETE';
+
+  let organizationId = null;
+  if (needsOrg) {
+    const access = await requireOrgAccess(req, res);
+    if (!access) return;
+    organizationId = access.organizationId;
+  }
 
   // ── 0a. TEST CONNECTION (Validate Meta Token & Business Account) ──────────
   if (action === 'test_connection') {
@@ -89,11 +119,9 @@ export default async function handler(req, res) {
   // ── 0b. CONNECT MANUAL (Token & ID Direct Integration) ─────────────────────
   if (action === 'connect_manual' || action === 'connect') {
     try {
-      const { organizationId, accessToken, instagramBusinessId, username, pageId, pageName } = req.body || {};
+      // organizationId is resolved from membership above, never from the body.
+      const { accessToken, instagramBusinessId, username, pageId, pageName } = req.body || {};
 
-      if (!organizationId) {
-        return res.status(400).json({ error: 'organizationId is required' });
-      }
       if (!accessToken) {
         return res.status(400).json({ error: 'Meta Permanent Access Token is required' });
       }
@@ -170,9 +198,9 @@ export default async function handler(req, res) {
   // ── 1. DISCONNECT ─────────────────────────────────────────────────────────
   if (req.method === 'DELETE' || action === 'disconnect') {
     try {
-      const { organizationId, instagramBusinessId } = req.body || {};
-      if (!organizationId) {
-        return res.status(400).json({ error: 'organizationId is required' });
+      const { instagramBusinessId } = req.body || {};
+      if (!instagramBusinessId) {
+        return res.status(400).json({ error: 'instagramBusinessId is required' });
       }
 
       if (supabase) {
@@ -203,12 +231,13 @@ export default async function handler(req, res) {
   // ── 2. SEND DIRECT MESSAGE (CRM Outbound) ──────────────────────────────────
   if (action === 'send_message' || (req.method === 'POST' && (req.body?.recipientId || req.body?.recipient_id))) {
     try {
-      const { organizationId, recipientId, recipient_id, text, message, mediaUrl, conversationId, leadId } = req.body || {};
+      // organizationId is resolved from membership above, never from the body.
+      const { recipientId, recipient_id, text, message, mediaUrl, conversationId, leadId } = req.body || {};
       const targetRecipient = recipientId || recipient_id;
       const messageText = text || message || '';
 
-      if (!organizationId || !targetRecipient || (!messageText && !mediaUrl)) {
-        return res.status(400).json({ error: 'organizationId, recipientId, and text or mediaUrl are required' });
+      if (!targetRecipient || (!messageText && !mediaUrl)) {
+        return res.status(400).json({ error: 'recipientId and text or mediaUrl are required' });
       }
 
       const { data: conn, error: connErr } = await supabase
@@ -308,10 +337,8 @@ export default async function handler(req, res) {
   // ── 3. OAUTH CODE / TOKEN EXCHANGE ─────────────────────────────────────────
   if (action === 'oauth-exchange' || action === 'code_exchange') {
     try {
-      const { code, accessToken, organizationId } = req.body || {};
-      if (!organizationId) {
-        return res.status(400).json({ error: 'organizationId is required' });
-      }
+      // organizationId is resolved from membership above, never from the body.
+      const { code, accessToken } = req.body || {};
 
       let longLivedToken = accessToken || '';
       if (code) {
@@ -376,7 +403,9 @@ export default async function handler(req, res) {
 
       return res.status(200).json({
         success: true,
-        instagram: discovered,
+        // SECURITY: never send Meta page tokens to the browser. Only safe
+        // connection metadata is returned; the token stays encrypted server-side.
+        instagram: discovered.map(({ pageToken, ...safe }) => safe),
         connected: {
           username: primary.username,
           instagramBusinessId: primary.instagramBusinessId,

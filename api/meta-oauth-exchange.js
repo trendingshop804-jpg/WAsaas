@@ -1,14 +1,21 @@
 // api/meta-oauth-exchange.js
 // Handles WhatsApp Embedded Signup & Meta OAuth code and token exchange
-import { createClient } from '@supabase/supabase-js';
+//
+// SECURITY
+//   This endpoint is entirely client-initiated: the browser performs Embedded
+//   Signup and then posts the resulting `code` here for a server-side exchange.
+//   There is no Meta server-to-server callback, so the whole handler requires a
+//   signed-in organization member.
+//   The tenant is ALWAYS taken from the caller's organization_users membership
+//   (access.organizationId). A client-supplied organizationId is ignored, so a
+//   caller cannot attach a WhatsApp connection to somebody else's tenant.
+import { createSupabaseAdminClient, requireOrgAccess } from './_supabase.js';
 import { encryptToken } from './_crypto.js';
 
-const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
-const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
 const META_APP_ID = process.env.META_APP_ID || '';
 const META_APP_SECRET = process.env.META_APP_SECRET || '';
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+const supabase = createSupabaseAdminClient();
 
 async function subscribeToWebhook(wabaId, accessToken) {
   try {
@@ -101,12 +108,15 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  try {
-    const { code, accessToken, organizationId, wabaId, phoneNumberId, mode } = req.body || {};
+  // ── Authorization ────────────────────────────────────────────────────────
+  // Valid session + organization membership, BEFORE any token exchange or DB
+  // write. The tenant comes from membership, never from the request body.
+  const access = await requireOrgAccess(req, res);
+  if (!access) return;
+  const organizationId = access.organizationId;
 
-    if (!organizationId) {
-      return res.status(400).json({ error: 'organizationId is required' });
-    }
+  try {
+    const { code, accessToken, wabaId, phoneNumberId, mode } = req.body || {};
 
     let token = accessToken || '';
 
@@ -177,7 +187,6 @@ export default async function handler(req, res) {
         waba_id: wabaId || null,
         phone_number_id: phoneNumberId || 'default',
         access_token_encrypted: encryptedToken,
-        access_token: longLivedToken || null,
         is_active: true,
         updated_at: new Date().toISOString()
       }, { onConflict: 'organization_id, phone_number_id' });

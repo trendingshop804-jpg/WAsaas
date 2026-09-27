@@ -558,7 +558,7 @@
                   <div class="conv-chat-status" id="conv-chat-status">WhatsApp · Online</div>
                 </div>
                 <div class="conv-chat-actions">
-                  <button class="btn btn-secondary btn-sm" onclick="showToast('Calling Alice Lee...', 'success')"><i data-feather="phone"></i> Call</button>
+                  <button class="btn btn-secondary btn-sm" id="btn-conv-call"><i data-feather="phone"></i> Call</button>
                   <button class="btn btn-secondary btn-sm" onclick="showToast('Showing customer details', 'default')"><i data-feather="info"></i> Info</button>
                 </div>
               </div>
@@ -1011,7 +1011,7 @@
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="document.getElementById('modal-customer-360').classList.remove('open')">Close</button>
-        <button class="btn btn-primary" onclick="showToast('Initiating direct call...', 'success')"><i data-feather="phone"></i> Call Customer</button>
+        <button class="btn btn-primary" id="c360-call-btn"><i data-feather="phone"></i> Call Customer</button>
       </div>
     </div>
   </div>
@@ -1220,10 +1220,14 @@
   <!-- TOAST -->
   <div class="toast-container" id="toast-container"></div>
 
+  <!-- Supabase JS (for real sign-in sessions) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
   <!-- JS -->
   <script src="js/data.js"></script>
-  <script src="js/ui.js?v=20260925-live-status"></script>
+  <script src="js/auth.js?v=20260926-secure-api"></script>
+  <script src="js/ui.js?v=20260926-secure-api"></script>
   <script src="js/charts.js"></script>
-  <script src="js/app.js"></script>
+  <script src="js/app.js?v=20260925-call-webhook-call"></script>
 </body>
 </html>

@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 
 process.env.SUPABASE_URL = 'https://test-project.supabase.co';
 process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-role-key';
+process.env.SUPABASE_PUBLISHABLE_KEY = 'test-publishable-key';
 process.env.WHATSAPP_ACCESS_TOKEN = 'test-wa-token';
 process.env.META_VERIFY_TOKEN = 'verify-me';
 
@@ -54,6 +55,15 @@ globalThis.fetch = async (input, init = {}) => {
     state.storage.push(path);
     return json({ Key: path.replace(/^whatsapp-media\//, '') });
   }
+  if (url.includes('/auth/v1/user')) {
+    // api/messages.js requires a real session; the anon key is not a session.
+    const auth = String(headers.Authorization || headers.authorization || '');
+    if (!/test-session-token/.test(auth)) return json({ msg: 'invalid' }, 401);
+    return json({ id: 'user_1', aud: 'authenticated' });
+  }
+  if (url.includes('/rest/v1/organization_users')) {
+    return json([{ organization_id: 'org_1', user_id: 'user_1', role: 'Owner' }]);
+  }
   if (url.includes('/rest/v1/messages')) {
     if ((init.method || 'GET').toUpperCase() === 'POST') {
       state.inserts.push(JSON.parse(init.body));
@@ -64,7 +74,7 @@ globalThis.fetch = async (input, init = {}) => {
     return json(url.includes('wa_message_id=eq.') ? state.selectResult : state.rows);
   }
   if (url.includes('/rest/v1/whatsapp_connections')) {
-    return json([{ organization_id: 'org_1', phone_number_id: '1234567890', is_active: true }]);
+    return json([{ organization_id: 'org_1', phone_number_id: '1234567890', is_active: true, access_token: 'test-tenant-token' }]);
   }
   if (url.includes('/rest/v1/conversations')) {
     return json([{ id: 'conv_1' }]);
@@ -146,7 +156,14 @@ await test('media download sends the bearer token to lookaside', async () => {
   await webhook({ method: 'POST', body: mediaPayload('document', 'MEDIA_1') }, res);
   assert.equal(res.statusCode, 200);
   assert.equal(state.mediaDownload.length, 1, 'expected one binary download');
-  assert.equal(state.mediaDownload[0].headers.Authorization, 'Bearer test-wa-token');
+  assert.equal(state.mediaDownload[0].headers.Authorization, 'Bearer test-tenant-token');
+  // Regression guard: the media download must never fall back to the global
+  // WHATSAPP_ACCESS_TOKEN, only to the matched tenant connection's token.
+  assert.notEqual(
+    state.mediaDownload[0].headers.Authorization,
+    `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`,
+    'media download must not use the global WhatsApp token'
+  );
 });
 
 await test('inbound media row stores a clean storage path and real size', async () => {
@@ -177,6 +194,15 @@ await test('duplicate delivery is skipped without re-downloading media', async (
 
 console.log('=== api/messages.js ===');
 
+// api/messages.js is tenant-scoped: every request needs a signed-in session.
+const SESSION = { headers: { Authorization: 'Bearer test-session-token' } };
+
+await test('rejects an unauthenticated inbox read', async () => {
+  const res = mockRes();
+  await messages({ method: 'GET', headers: {} }, res);
+  assert.equal(res.statusCode, 401);
+});
+
 await test('storage paths are converted to signed URLs', async () => {
   state.rows = [{
     id: 1, wa_message_id: 'w1', sender_number: '919999999999', content: 'x',
@@ -185,7 +211,7 @@ await test('storage paths are converted to signed URLs', async () => {
     file_name: 'pic.png', media_caption: null, media_size: 5,
   }];
   const res = mockRes();
-  await messages({ method: 'GET' }, res);
+  await messages({ method: 'GET', ...SESSION }, res);
   assert.equal(res.statusCode, 200);
   assert.ok(/^https?:\/\//.test(res.payload.messages[0].media_url), `not a URL: ${res.payload.messages[0].media_url}`);
 });
@@ -199,7 +225,7 @@ await test('legacy rows holding a full URL are passed through untouched', async 
     file_name: 'legacy.png', media_caption: null, media_size: 5,
   }];
   const res = mockRes();
-  await messages({ method: 'GET' }, res);
+  await messages({ method: 'GET', ...SESSION }, res);
   assert.equal(res.payload.messages[0].media_url, legacyUrl);
 });
 
@@ -210,7 +236,7 @@ await test('text messages are returned unchanged', async () => {
     media_url: null, media_mime_type: null, file_name: null, media_caption: null, media_size: 0,
   }];
   const res = mockRes();
-  await messages({ method: 'GET' }, res);
+  await messages({ method: 'GET', ...SESSION }, res);
   assert.equal(res.payload.messages[0].content, 'hello');
   assert.equal(res.payload.messages[0].media_url, null);
 });

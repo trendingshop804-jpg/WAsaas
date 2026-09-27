@@ -9,7 +9,11 @@ const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || proce
 const supabase = createSupabaseAdminClient();
 
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || '';
-const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN || process.env.WA_ACCESS_TOKEN || '';
+
+// NOTE: there is deliberately NO global WHATSAPP_ACCESS_TOKEN here.
+// Every Meta call uses the token belonging to the exact whatsapp_connections
+// row matched by phone_number_id. A shared/global token would let one tenant's
+// webhook act on another tenant's WhatsApp number.
 
 const MEDIA_TYPES = new Set(['image', 'video', 'audio', 'document', 'sticker']);
 
@@ -38,7 +42,7 @@ function extFromMime(mimeType) {
 }
 
 async function downloadMediaFromMeta(mediaId, customToken) {
-  const token = customToken || WHATSAPP_ACCESS_TOKEN;
+  const token = customToken;
   const headers = token ? { Authorization: `Bearer ${token}` } : {};
   const metaRes = await fetch(`https://graph.facebook.com/v21.0/${mediaId}`, {
     headers
@@ -109,51 +113,39 @@ async function processInboundMedia(msg, mediaType, customToken) {
 }
 
 async function getWhatsAppOrganizationId(phoneNumberId) {
-  let query = supabase
-    .from('whatsapp_connections')
-    .select('organization_id')
-    .eq('is_active', true);
+  if (!phoneNumberId) return null;
 
-  if (phoneNumberId) {
-    query = query.or(`phone_number_id.eq.${phoneNumberId},waba_id.eq.${phoneNumberId}`);
-  }
-
-  const { data } = await query.order('updated_at', { ascending: false }).limit(1);
-  if (data?.[0]?.organization_id) return data[0].organization_id;
-
-  const { data: anyConn } = await supabase
+  const { data, error } = await supabase
     .from('whatsapp_connections')
     .select('organization_id')
     .eq('is_active', true)
-    .order('updated_at', { ascending: false })
-    .limit(1);
-  if (anyConn?.[0]?.organization_id) return anyConn[0].organization_id;
+    .eq('phone_number_id', phoneNumberId)
+    .maybeSingle();
 
-  const { data: orgs } = await supabase.from('organizations').select('id').limit(1);
-  return orgs?.[0]?.id || null;
+  if (error) {
+    console.error('[Webhook] WhatsApp organization lookup failed:', error.message);
+    return null;
+  }
+
+  return data?.organization_id || null;
 }
 
 async function getWhatsAppConnection(phoneNumberId) {
-  let query = supabase
-    .from('whatsapp_connections')
-    .select('*')
-    .eq('is_active', true);
+  if (!phoneNumberId) return null;
 
-  if (phoneNumberId) {
-    query = query.or(`phone_number_id.eq.${phoneNumberId},waba_id.eq.${phoneNumberId}`);
-  }
-
-  const { data } = await query.order('updated_at', { ascending: false }).limit(1);
-  if (data?.[0]) return data[0];
-
-  const { data: anyConn } = await supabase
+  const { data, error } = await supabase
     .from('whatsapp_connections')
     .select('*')
     .eq('is_active', true)
-    .order('updated_at', { ascending: false })
-    .limit(1);
+    .eq('phone_number_id', phoneNumberId)
+    .maybeSingle();
 
-  return anyConn?.[0] || null;
+  if (error) {
+    console.error('[Webhook] WhatsApp connection lookup failed:', error.message);
+    return null;
+  }
+
+  return data || null;
 }
 
 async function getInstagramConnection(instagramBusinessId) {
@@ -423,14 +415,14 @@ async function generateAIReply(organization, history, userMessage) {
   throw new Error('Empty completion returned');
 }
 
-async function sendWhatsAppMessage(phoneNumberId, toNumber, text) {
+async function sendWhatsAppMessage(phoneNumberId, toNumber, text, accessToken) {
   const response = await fetch(
     `https://graph.facebook.com/v21.0/${phoneNumberId}/messages`,
     {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+        Authorization: `Bearer ${accessToken}`,
       },
       body: JSON.stringify({
         messaging_product: 'whatsapp',
@@ -715,6 +707,43 @@ async function handleInstagramDirectMessage(entry, messagingItem, igConnection) 
 }
 
 // ---------------------------------------------------------------------------
+// WhatsApp delivery receipts: update outbound rows by wa_message_id
+// ---------------------------------------------------------------------------
+const META_STATUS_TO_DB = {
+  sent: 'sent',
+  delivered: 'delivered',
+  read: 'read',
+  failed: 'failed',
+};
+
+async function applyDeliveryStatuses(statuses) {
+  for (const status of statuses) {
+    const waMessageId = status?.id;
+    if (!waMessageId) continue;
+
+    const mapped = META_STATUS_TO_DB[String(status.status || '').toLowerCase()];
+    if (!mapped) continue;
+
+    const patch = { status: mapped };
+    if (mapped === 'failed') {
+      patch.error_code = status.errors?.[0]?.code ?? null;
+      patch.error_message = status.errors?.[0]?.title ?? 'Delivery failed';
+    }
+
+    const { error } = await supabase
+      .from('messages')
+      .update(patch)
+      .eq('wa_message_id', waMessageId);
+
+    if (error) {
+      console.error(`[Webhook] status update failed for ${waMessageId}:`, error.message);
+    } else {
+      console.log(`[Webhook] message ${waMessageId} -> ${mapped}`);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Main Handler
 // ---------------------------------------------------------------------------
 export default async function handler(req, res) {
@@ -787,7 +816,18 @@ export default async function handler(req, res) {
       const change = entry?.changes?.[0];
       const value = change?.value;
       const messages = value?.messages;
+      const statuses = value?.statuses;
       const phoneNumberId = value?.metadata?.phone_number_id;
+
+      // Delivery / read receipts for outbound messages.
+      // Processed BEFORE the inbound early-return so status webhooks aren't dropped.
+      if (Array.isArray(statuses) && statuses.length > 0) {
+        try {
+          await applyDeliveryStatuses(statuses);
+        } catch (e) {
+          console.error('[Webhook] Failed to apply delivery statuses:', e.message);
+        }
+      }
 
       if (!messages || messages.length === 0) {
         return res.status(200).json({ received: true });
@@ -812,7 +852,8 @@ export default async function handler(req, res) {
         decryptedToken = waConnection.access_token;
       }
       if (!decryptedToken) {
-        decryptedToken = WHATSAPP_ACCESS_TOKEN;
+        console.error('[Webhook] No WhatsApp access token configured for matched connection:', phoneNumberId);
+        return res.status(200).json({ received: true });
       }
 
       let orgSettings = {};
@@ -974,7 +1015,7 @@ export default async function handler(req, res) {
             }
           }
 
-          const sendResult = await sendWhatsAppMessage(phoneNumberId, sender, replyText);
+          const sendResult = await sendWhatsAppMessage(phoneNumberId, sender, replyText, decryptedToken);
 
           const sentAt = new Date().toISOString();
           const { error: outboundError } = await supabase.from('messages').insert({

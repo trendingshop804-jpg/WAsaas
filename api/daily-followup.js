@@ -16,9 +16,79 @@ function makeRunId() {
   return `run_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 }
 
+// ---------------------------------------------------------------------------
+// Master switch for AUTOMATIC (cron) runs.
+// The cron stays scheduled but is a no-op until this is explicitly enabled,
+// so enabling the schedule can never surprise anyone with a real send.
+// Manual runs can still be forced with ?force=1 for testing.
+// ---------------------------------------------------------------------------
+function isAutoRunEnabled() {
+  return String(process.env.FOLLOWUP_AUTOMATION_ENABLED || '').toLowerCase() === 'true';
+}
+
+// ---------------------------------------------------------------------------
+// AI follow-up copy generation (OpenRouter).
+// The AI only WRITES the text — the actual send still goes through an
+// approved WhatsApp template, because Meta rejects free-form text outside the
+// 24-hour customer service window.
+// ---------------------------------------------------------------------------
+async function generateAiFollowup({ contactName, company, service, stage, lastMessage }) {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) return null;
+
+  const base = process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1';
+  const model = process.env.FOLLOWUP_AI_MODEL || 'openai/gpt-4o-mini';
+
+  const prompt = [
+    'You write short, friendly WhatsApp follow-up messages for a small business sales team.',
+    `Write a follow-up message for the "${stage}" step.`,
+    `Contact: ${contactName || 'there'}`,
+    company ? `Company: ${company}` : '',
+    service ? `They are interested in: ${service}` : '',
+    lastMessage ? `Their last message was: "${String(lastMessage).slice(0, 200)}"` : '',
+    '',
+    'Rules:',
+    '- Maximum 2 short sentences. No emojis. No markdown. No links unless asked.',
+    '- Sound human and specific, not salesy. Do not invent facts.',
+    '- Do not include a greeting like "Hello <name>" — it is added by the template.',
+    '- Return ONLY the message text, nothing else.'
+  ].filter(Boolean).join('\n');
+
+  try {
+    const res = await fetch(`${base}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://w-asaas.vercel.app',
+        'X-Title': 'NextBright Follow-up'
+      },
+      body: JSON.stringify({
+        model,
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.7,
+        max_tokens: 120
+      })
+    });
+
+    if (!res.ok) {
+      console.warn('[followup-ai] OpenRouter error', res.status);
+      return null;
+    }
+    const data = await res.json();
+    const text = data?.choices?.[0]?.message?.content?.trim();
+    if (!text) return null;
+    // Guard against runaway model output.
+    return text.replace(/\s+/g, ' ').slice(0, 320);
+  } catch (err) {
+    console.warn('[followup-ai] generation failed:', err.message);
+    return null;
+  }
+}
+
 export default async function handler(req, res) {
   // ── 1. Authorization check ───────────────────────────────────────────────
-  if (!authorizeCron(req, res)) return;
+  if (!(await authorizeCron(req, res))) return;
   if (!['GET', 'POST'].includes(req.method)) {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
@@ -55,6 +125,21 @@ export default async function handler(req, res) {
   }
 
   const runId = makeRunId();
+
+  // Automatic cron runs stay disabled until FOLLOWUP_AUTOMATION_ENABLED=true.
+  // ?force=1 lets an operator run it manually without flipping the switch.
+  const forced = String(req.query?.force || '') === '1';
+  if (!isAutoRunEnabled() && !forced) {
+    return res.status(200).json({
+      status: 'Disabled',
+      runId,
+      processed: 0,
+      sent: 0,
+      failed: 0,
+      message: 'Automatic follow-up is switched off. Set FOLLOWUP_AUTOMATION_ENABLED=true to enable, or call with ?force=1 to run once manually.'
+    });
+  }
+
   await logAutomationEvent(runId, 'execution_started', null, `Cron run started at ${new Date().toISOString()}`);
 
   try {
@@ -92,8 +177,10 @@ export default async function handler(req, res) {
         .not('follow_up_status', 'in', '("Paused","Completed")')
         .not('status', 'in', '("REPLIED","replied","Replied","Won","Lost")')
         .eq('opted_out', false)
-        .lte('next_followup_at', nowIso)
-        .order('next_followup_at', { ascending: true })
+        // A lead that has never been scheduled (NULL) is due immediately.
+        // Without this, leads with no next_followup_at are never picked up.
+        .or(`next_followup_at.is.null,next_followup_at.lte.${nowIso}`)
+        .order('next_followup_at', { ascending: true, nullsFirst: true })
         .limit(50);
 
       if (queryError) {
@@ -102,18 +189,6 @@ export default async function handler(req, res) {
         leads = dbLeads;
       }
     }
-
-    if (leads.length === 0 && Array.isArray(req.body?.leads)) {
-      leads = req.body.leads.filter(l => {
-        if (!l || l.opted_out || l.follow_up_enabled === false) return false;
-        if (['Paused', 'Completed'].includes(l.follow_up_status)) return false;
-        if (['REPLIED', 'replied', 'Replied', 'Won', 'Lost'].includes(l.status)) return false;
-        if (!l.next_followup_at || !l.nextFollowupDate) return true;
-        const due = l.next_followup_at || l.nextFollowupDate;
-        return new Date(due) <= new Date();
-      }).slice(0, 50);
-    }
-
     const leadCount = (leads || []).length;
     await logAutomationEvent(runId, 'due_followups_found', null, `Found ${leadCount} due lead(s)`);
 
@@ -182,8 +257,12 @@ export default async function handler(req, res) {
 
         // ── 8. Determine template and parameters ────────────────────────
         const currentStage   = lead.follow_up_stage  || 'First Follow-up';
-        const templateName   = lead.default_template  || 'followup_message';
-        const languageCode   = lead.template_language || 'en';
+        const templateName   = lead.default_template
+          || process.env.FOLLOWUP_TEMPLATE_NAME
+          || 'followup_message';
+        const languageCode   = lead.template_language
+          || process.env.FOLLOWUP_TEMPLATE_LANGUAGE
+          || 'en';
         const contactName    = lead.contact_name || lead.name || 'there';
         const company        = lead.company_name || lead.company || '';
         const service        = lead.interested_in || lead.industry || 'automation solution';
@@ -193,13 +272,27 @@ export default async function handler(req, res) {
         );
 
         // ── 9. Call the REAL Meta WhatsApp Cloud API ────────────────────
+        // The AI writes the copy; the approved template is what actually
+        // sends it. If AI is unavailable we fall back to the lead's template
+        // parameters so a follow-up is never silently lost.
+        const aiText = await generateAiFollowup({
+          contactName, company, service, stage: currentStage
+        });
+        if (aiText) {
+          await logAutomationEvent(runId, 'ai_copy_generated', lead.id, aiText.slice(0, 180));
+        }
+
+        const templateParams = aiText
+          ? [contactName, company || service, aiText]
+          : [contactName, service, company];
+
         let metaRes;
         try {
           metaRes = await sendMetaWhatsAppTemplate({
             to:           lead.phone,
             templateName,
             languageCode,
-            parameters:   [contactName, service, company],
+            parameters:   templateParams,
           });
         } catch (metaErr) {
           // Log Meta error details (safe — no secrets in metaErr.message)
@@ -253,23 +346,34 @@ export default async function handler(req, res) {
           created_at:          sentIso,
         });
 
-        // Mirror to messages table for CRM conversation view
-        await supabase.from('messages').insert({
-          organization_id: lead.organization_id,
+        // Mirror to messages table for CRM conversation view.
+        // The API inbox is tenant-scoped, so this row must carry organization_id
+        // or the sent follow-up would be invisible to the organization that owns
+        // it. Pre-migration the column does not exist yet, so fall back to the
+        // legacy shape instead of failing the whole insert.
+        const mirrorRow = {
+          organization_id: lead.organization_id || null,
           wa_message_id:  waMsgId,
           sender_number:  normalizeInternationalPhone(lead.phone),
           sender:         'system',
           body:           `Sent ${currentStage} template "${templateName}"`,
           message_body:   `Sent ${currentStage} template "${templateName}"`,
-          content:        `Sent ${currentStage} template "${templateName}"`,
+          content:        aiText || `Sent ${currentStage} template "${templateName}"`,
           message_type:   'template',
           direction:      'outbound',
           status:         'sent',
           received_at:    sentIso,
           created_at:     sentIso,
-        }).then(({ error }) => {
-          if (error) console.warn('[daily-followup] messages table mirror failed:', error.message);
-        });
+        };
+
+        let mirror = await supabase.from('messages').insert(mirrorRow);
+        if (mirror.error && /organization_id|column|schema cache|42703|PGRST204/i.test(mirror.error.message || '')) {
+          const { organization_id, ...legacyRow } = mirrorRow;
+          mirror = await supabase.from('messages').insert(legacyRow);
+        }
+        if (mirror.error) {
+          console.warn('[daily-followup] messages table mirror failed:', mirror.error.message);
+        }
 
         await logAutomationEvent(runId, 'message_sent', lead.id,
           `Stage: ${currentStage} | Msg ID: ...${waMsgId.slice(-8)}`

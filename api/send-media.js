@@ -1,13 +1,51 @@
 // api/send-media.js
 // Vercel serverless function to send outbound media via WhatsApp Cloud API.
-import { createSupabaseAdminClient, missingSupabaseServerConfig } from './_supabase.js';
-
-const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
-const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN || process.env.WA_ACCESS_TOKEN;
-const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.PHONE_NUMBER_ID || process.env.WA_PHONE_NUMBER_ID;
+//
+// SECURITY
+//   * Requires a signed-in Supabase session that is a member of an organization
+//     (requireOrgAccess). Runs BEFORE any Meta call, storage write or DB insert.
+//   * The tenant comes from organization_users membership, never the request.
+//   * The conversation is resolved scoped to that tenant, so a lead/conversation
+//     owned by another tenant can never be used as a send target.
+//   * WhatsApp credentials come from the tenant's own active whatsapp_connections
+//     row. There is deliberately NO global WHATSAPP_ACCESS_TOKEN /
+//     PHONE_NUMBER_ID fallback — a shared credential would let one tenant send
+//     from another tenant's WhatsApp number.
+import { createSupabaseAdminClient, missingSupabaseServerConfig, requireOrgAccess } from './_supabase.js';
+import { decryptToken } from './_crypto.js';
 
 const supabase = createSupabaseAdminClient();
+
+/**
+ * Resolve the calling tenant's active WhatsApp connection and its access token.
+ * Returns null when the tenant has no usable connection — the caller then fails
+ * closed rather than falling back to a global credential.
+ */
+async function getTenantWhatsAppCredentials(organizationId) {
+  const { data: conn, error } = await supabase
+    .from('whatsapp_connections')
+    .select('phone_number_id, access_token_encrypted, access_token')
+    .eq('organization_id', organizationId)
+    .eq('is_active', true)
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error || !conn) return null;
+  if (!conn.phone_number_id) return null;
+
+  let accessToken = null;
+  if (conn.access_token_encrypted) {
+    try {
+      accessToken = await decryptToken(conn.access_token_encrypted);
+    } catch (_) { accessToken = null; }
+  }
+  if (!accessToken && conn.access_token) accessToken = conn.access_token;
+
+  // No usable tenant token -> fail closed, never use a global credential.
+  if (!accessToken) return null;
+  return { phoneNumberId: conn.phone_number_id, accessToken };
+}
 
 function getMetaMediaType(messageType) {
   const map = {
@@ -164,6 +202,12 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  // ── Authorization ────────────────────────────────────────────────────────
+  // Signed-in organization member. Nothing below runs for anonymous callers.
+  const access = await requireOrgAccess(req, res);
+  if (!access) return;
+  const organizationId = access.organizationId;
+
   try {
     const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
     // The frontend posts `fileBase64`; `file` is accepted as a legacy alias.
@@ -174,15 +218,39 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'fileBase64, senderNumber, and leadId are required' });
     }
 
-    if (!WHATSAPP_ACCESS_TOKEN || !PHONE_NUMBER_ID) {
-      return res.status(500).json({ error: 'WhatsApp credentials not configured on server' });
-    }
-
     if (!supabase) {
       const missing = missingSupabaseServerConfig();
       console.error('[send-media] Supabase configuration missing:', missing.join(', '));
       return res.status(503).json({ error: 'Supabase credentials not configured on server', missing });
     }
+
+    // ── Resolve the conversation INSIDE the caller's tenant, BEFORE any Meta
+    // call, storage upload or message insert. A lead/conversation owned by a
+    // different tenant simply does not match, and we return a generic 404 so we
+    // do not reveal that another tenant owns the record.
+    const { data: conversation, error: conversationError } = await supabase
+      .from('conversations')
+      .select('id, organization_id')
+      .eq('lead_id', leadId)
+      .eq('organization_id', organizationId)
+      .maybeSingle();
+
+    if (conversationError || !conversation) {
+      return res.status(404).json({ error: 'No conversation found for this lead.' });
+    }
+    // Defence in depth: never trust the row blindly.
+    if (conversation.organization_id !== organizationId) {
+      return res.status(404).json({ error: 'No conversation found for this lead.' });
+    }
+
+    // ── Tenant WhatsApp credentials. No global fallback exists.
+    const creds = await getTenantWhatsAppCredentials(organizationId);
+    if (!creds) {
+      return res.status(409).json({
+        error: 'No active WhatsApp connection is configured for your organization.'
+      });
+    }
+    const { phoneNumberId, accessToken } = creds;
 
     const fileBuffer = Buffer.from(fileBase64, 'base64');
     if (!fileBuffer.length) {
@@ -196,7 +264,7 @@ export default async function handler(req, res) {
     let storagePath = null;
 
     try {
-      mediaId = await uploadMediaToMeta(PHONE_NUMBER_ID, WHATSAPP_ACCESS_TOKEN, fileBuffer, resolvedMimeType, fileName);
+      mediaId = await uploadMediaToMeta(phoneNumberId, accessToken, fileBuffer, resolvedMimeType, fileName);
     } catch (err) {
       console.error('Meta media upload failed:', err);
       return res.status(502).json({ error: `Meta upload failed: ${err.message}` });
@@ -204,8 +272,8 @@ export default async function handler(req, res) {
 
     try {
       const sendResult = await sendMediaMessage(
-        PHONE_NUMBER_ID,
-        WHATSAPP_ACCESS_TOKEN,
+        phoneNumberId,
+        accessToken,
         senderNumber,
         resolvedMessageType,
         mediaId,
@@ -220,16 +288,12 @@ export default async function handler(req, res) {
         console.error('Supabase Storage upload failed:', storageErr);
       }
 
-      const { data: conversation, error: conversationError } = await supabase
-        .from('conversations').select('id, organization_id').eq('lead_id', leadId).maybeSingle();
-      if (conversationError || !conversation) {
-        throw new Error(conversationError?.message || 'No conversation exists for this lead.');
-      }
-
+      // The conversation was already resolved AND tenant-verified above, before
+      // any Meta call. Reuse it rather than re-querying unscoped.
       const sentAt = new Date().toISOString();
       const bodyText = text || caption || fileName || 'Media message';
       const messageRecord = {
-        organization_id: conversation.organization_id,
+        organization_id: organizationId,
         conversation_id: conversation.id,
         wa_message_id: waMessageId,
         sender_number: senderNumber,

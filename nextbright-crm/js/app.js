@@ -207,6 +207,13 @@ window.openCustomer360 = async function(name) {
   document.getElementById('c360-avatar').textContent = window.NB.initials(c.name);
   document.getElementById('c360-meta').textContent = `${c.company} · Phone: ${c.phone} · Total Revenue: ${c.revenue}`;
 
+  const callButton = document.getElementById('c360-call-btn');
+  if (callButton) {
+    callButton.onclick = () => {
+      if (typeof window.handleCallLead === 'function') window.handleCallLead(c.name, c.phone);
+    };
+  }
+
   const timelineEl = document.getElementById('c360-timeline');
   timelineEl.innerHTML = `
     <div style="padding:8px 12px;background:var(--bg-card);border:1px solid var(--border-light);border-radius:6px;">
@@ -467,12 +474,76 @@ function renderFunnel() {
 }
 
 /* ============================================================
+   CALL WEBHOOK — MacroDroid mobile calling
+   ============================================================ */
+// The MacroDroid webhook URL is a server-side secret, held only in the server's
+// MACRODROID_WEBHOOK_URL environment variable. It must never ship to the browser,
+// so the browser only ever calls the authenticated proxy below.
+const CALL_WEBHOOK_API = '/api/trigger-call';
+
+async function requestServerCallWebhook(name, phone) {
+  const response = await fetch(CALL_WEBHOOK_API, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ name, phone })
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload.success === false) {
+    const error = new Error(payload.error || `Call webhook returned HTTP ${response.status}.`);
+    error.status = response.status;
+    throw error;
+  }
+  return payload;
+}
+
+async function triggerCallWebhook(name, phone) {
+  const targetName = String(name || 'contact').trim() || 'contact';
+  const targetPhone = String(phone || '').trim();
+
+  if (!targetPhone) throw new Error('No phone number is available for this contact.');
+  // Do not fire a real phone automation from file:// automated test pages.
+  if (window.location.protocol === 'file:' && navigator.webdriver) {
+    return { success: true, skipped: true, reason: 'automated-file-protocol' };
+  }
+
+  // Always go through the authenticated server-side proxy. There is deliberately
+  // no direct browser fallback, because that would require exposing the URL.
+  return requestServerCallWebhook(targetName, targetPhone);
+}
+window.triggerCallWebhook = triggerCallWebhook;
+
+/* ============================================================
    ACTION HANDLERS (Call, Message, Delete Lead)
    ============================================================ */
 window.handleCallLead = function(name, phone) {
+  const targetName = String(name || 'contact').trim() || 'contact';
+  const targetPhone = String(phone || '').trim();
+
   if (typeof showToast === 'function') {
-    showToast(`Calling ${name} (${phone})...`, 'success');
+    showToast(`Calling ${targetName} (${targetPhone})...`, 'success');
   }
+
+  if (!targetPhone) {
+    if (typeof showToast === 'function') {
+      showToast(`Calling ${targetName}: no phone number is available.`, 'error');
+    }
+    return Promise.resolve({ success: false, error: 'Missing phone number' });
+  }
+
+  return triggerCallWebhook(targetName, targetPhone)
+    .then(result => {
+      if (!result?.skipped && typeof showToast === 'function') {
+        showToast(`Call request sent to mobile for ${targetName} (${targetPhone})`, 'success');
+      }
+      return result;
+    })
+    .catch(error => {
+      console.error('[Call Webhook]', error);
+      if (typeof showToast === 'function') {
+        showToast(`Calling ${targetName}: mobile webhook failed (${error.message})`, 'error');
+      }
+      return { success: false, error: error.message };
+    });
 };
 
 window.handleMessageLead = function(name) {

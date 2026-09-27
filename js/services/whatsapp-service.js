@@ -426,73 +426,29 @@ class WhatsAppService {
     // Deduct usage credit
     org.creditsUsed = (org.creditsUsed || 0) + 1;
 
-    // Persist outbound message to Supabase for CRM visibility
-    if (window.supabaseConfig?.isSupabaseConfigured() && window.authService?.supabase && leadId) {
+    // Persist outbound message for CRM visibility.
+    // SECURITY: the browser must never write to the database directly.
+    // Persistence goes through the authenticated /api/messages endpoint,
+    // which validates the session, resolves the organization server-side and
+    // only then uses the service-role client.
+    const sessionHeaders = window.supabaseConfig?.getSessionHeaders?.() || null;
+    if (sessionHeaders && leadId) {
       try {
-        const sb = window.authService.supabase;
-        let conversationId = null;
-        let supabaseLeadId = leadId;
-
-        // If the local leadId is not a UUID, try to resolve the real Supabase lead by phone.
-        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(leadId));
-        if (!isUuid && lead?.phone) {
-          const cleanPhone = String(lead.phone).replace(/[^0-9]/g, '');
-          const { data: leadData } = await sb
-            .from('leads')
-            .select('id')
-            .eq('organization_id', org.id)
-            .eq('phone', cleanPhone)
-            .limit(1);
-          if (leadData?.[0]?.id) {
-            supabaseLeadId = leadData[0].id;
-          }
-        }
-
-        const { data: convData } = await sb
-          .from('conversations')
-          .select('id')
-          .eq('lead_id', supabaseLeadId)
-          .limit(1);
-
-        conversationId = convData?.[0]?.id || null;
-
-        if (!conversationId && org?.id) {
-          const { data: newConv } = await sb
-            .from('conversations')
-            .insert({
-              organization_id: org.id,
-              lead_id: supabaseLeadId,
-              mode: isAI ? 'AI' : 'HUMAN',
-              last_message: text,
-              last_timestamp: nowISO
-            })
-            .select('id')
-            .single();
-          conversationId = newConv?.id || null;
-        }
-
-        if (!conversationId) {
-          console.warn('[WhatsAppService] Unable to create CRM conversation for this message. Skipping Supabase persistence for outbound message.');
-        } else {
-          const { error: messageError } = await sb.from('messages').insert({
-            conversation_id: conversationId,
-            wa_message_id: metaMessageId,
-            sender_number: lead?.phone ? String(lead.phone).replace(/[^0-9]/g, '') : '',
-            sender: isAI ? 'agent' : 'user',
-            body: text,
-            message_body: text,
-            content: text,
-            message_type: 'text',
-            direction: 'outbound',
-            received_at: nowISO,
-            created_at: nowISO,
-            is_ai: isAI,
-            status: 'sent'
-          });
-          if (messageError) throw messageError;
+        const response = await fetch('/api/messages', {
+          method: 'POST',
+          headers: sessionHeaders,
+          body: JSON.stringify({
+            phone: lead?.phone || '',
+            text,
+            clientMessageId: `legacy:${leadId}:${Date.now()}`
+          })
+        });
+        if (!response.ok) {
+          const body = await response.json().catch(() => ({}));
+          throw new Error(body.error || `HTTP ${response.status}`);
         }
       } catch (err) {
-        console.warn('[WhatsAppService] Supabase outbound persist failed:', err);
+        console.warn('[WhatsAppService] Outbound persist failed:', err.message);
       }
     }
 
@@ -628,10 +584,26 @@ class WhatsAppService {
   async syncInboundMessagesFromSupabase() {
     try {
       let rawMessages = [];
+
+      // SECURITY: read messages ONLY through the authenticated API.
+      // A direct browser query with the anon key would bypass tenant
+      // filtering and expose other organizations' data, so there is
+      // deliberately no direct-Supabase fallback here.
+      const sessionHeaders = window.supabaseConfig?.getSessionHeaders?.() || null;
+      if (!sessionHeaders) {
+        console.warn('[WhatsAppService] Not signed in; skipping inbound sync.');
+        return;
+      }
       try {
         const organizationId = window.appState?.get('currentOrgId');
-        if (!organizationId) return;
-        const res = await fetch('/api/messages?organization_id=' + encodeURIComponent(organizationId));
+        const qs = organizationId
+          ? '?limit=100&organization_id=' + encodeURIComponent(organizationId)
+          : '?limit=100';
+        const res = await fetch('/api/messages' + qs, { headers: sessionHeaders });
+        if (res.status === 401) {
+          console.warn('[WhatsAppService] Session expired; skipping inbound sync.');
+          return;
+        }
         if (res.ok) {
           const data = await res.json();
           if (data.messages && Array.isArray(data.messages)) {
@@ -640,22 +612,6 @@ class WhatsAppService {
         }
       } catch (fErr) {
         console.warn('Local /api/messages fetch failed:', fErr.message);
-      }
-
-      // If no messages from local /api/messages, try client Supabase if configured
-      if (rawMessages.length === 0 && window.authService?.supabase) {
-        try {
-          const { data: sbMsgs, error: sbErr } = await window.authService.supabase
-            .from('messages')
-            .select('*')
-            .order('created_at', { ascending: false })
-            .limit(100);
-          if (!sbErr && sbMsgs) {
-            rawMessages = sbMsgs;
-          }
-        } catch (sbEx) {
-          console.warn('Direct Supabase messages query fallback failed:', sbEx.message);
-        }
       }
 
       if (rawMessages.length === 0) return;

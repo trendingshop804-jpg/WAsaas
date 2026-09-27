@@ -75,11 +75,18 @@ class AuthService {
   async syncUserProfile() {
     if (!this.supabase || !this.currentUser) return;
     try {
-      const { data: profile } = await this.supabase
-        .from('users')
+      // NOTE: this database has no `users` table — the profile lives in
+      // `profiles`, keyed by the same id as auth.users. Querying `users`
+      // always failed, which left the signed-in user with no organization.
+      // `organizations(*)` embeds via profiles.organization_id -> organizations.id
+      // (created by supabase/migrations/20260926_tenant_whatsapp_schema.sql).
+      const { data: profile, error } = await this.supabase
+        .from('profiles')
         .select('id, name, email, role, organization_id, organizations(*)')
         .eq('id', this.currentUser.id)
-        .single();
+        .maybeSingle();
+
+      if (error) throw error;
 
       if (profile) {
         this.currentUser.profile = profile;

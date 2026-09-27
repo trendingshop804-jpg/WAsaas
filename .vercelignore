@@ -1,0 +1,50 @@
+# .vercelignore
+# Files/directories that must never be uploaded in a Vercel deployment.
+# NOTE: .gitignore is NOT consulted for the Vercel upload, so anything that
+# should not reach the CDN must be listed here explicitly.
+
+# Customer data / restorable database dumps (contains real PII)
+backups/
+scratch/
+*.sql.gz
+
+# Secrets and local env
+.env
+.env.*
+!.env.example
+
+# Repositories, tooling and local state
+.git
+.agents/
+.claude/
+.kilo/
+.playwright-mcp/
+.vercel/
+
+# Tests, tooling and docs not needed at runtime
+scripts/
+supabase/migrations-backup/
+supabase/migrations-review-copy/
+supabase/migrations-pending-hold/
+supabase/.temp/
+CODEBASE_DOCUMENTATION.md
+migration-review.txt
+index.nextbright-backup.html
+
+# Backups of prior module versions
+*.bak
+*.before-*
+*.pre-*
+
+# Local binaries and databases
+*.exe
+*.db
+*.sqlite
+*.sqlite3
+cloudflared.exe
+
+# Python / build artefacts
+.venv/
+__pycache__/
+*.pyc
+dist/

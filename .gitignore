@@ -58,3 +58,10 @@ supabase/.temp/
 
 .vercel
 .env*
+
+# Customer data / database dumps - never commit or deploy
+# backups/ contains real customer PII (names, phone numbers, message bodies)
+# in restorable SQL form.
+backups/
+*.sql.gz
+scratch/

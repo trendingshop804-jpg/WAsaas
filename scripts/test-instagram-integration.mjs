@@ -4,6 +4,11 @@ import assert from 'node:assert/strict';
 
 process.env.SUPABASE_URL = 'https://test-project.supabase.co';
 process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-role-key';
+process.env.SUPABASE_PUBLISHABLE_KEY = 'test-publishable-key';
+
+// The tenant that the mocked signed-in user belongs to.
+const TEST_ORG = 'org_1';
+const TEST_USER = 'user_1';
 process.env.INTEGRATION_ENCRYPT_SECRET = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
 process.env.META_VERIFY_TOKEN = 'verify-me';
 
@@ -93,6 +98,16 @@ globalThis.fetch = async (input, init = {}) => {
       return json([{ id: 'lead_ig_1' }]);
     }
     return json([]);
+  }
+
+  // --- auth: session validation + organization membership -------------------
+  // api/instagram.js now requires a signed-in organization member for the
+  // tenant-scoped actions (test_connection, connect_manual, send_message, ...).
+  if (url.includes('/auth/v1/user')) {
+    return json({ id: TEST_USER, aud: 'authenticated' });
+  }
+  if (url.includes('/rest/v1/organization_users')) {
+    return json([{ organization_id: TEST_ORG, user_id: TEST_USER, role: 'Owner' }]);
   }
 
   throw new Error(`Unexpected fetch to ${url}`);
@@ -201,6 +216,7 @@ await test('Instagram test_connection validates Meta token and returns account i
   const res = mockRes();
   const req = {
     method: 'POST',
+    headers: { Authorization: 'Bearer test-session-token' },
     query: { action: 'test_connection' },
     body: {
       accessToken: 'EAAG_test_token',
@@ -219,9 +235,10 @@ await test('Instagram connect_manual saves token and links Instagram account', a
   const res = mockRes();
   const req = {
     method: 'POST',
+    headers: { Authorization: 'Bearer test-session-token' },
     query: { action: 'connect_manual' },
     body: {
-      organizationId: 'org_1',
+      organizationId: 'org_1',   // ignored for authorization; membership decides
       accessToken: 'EAAG_permanent_token_123',
       instagramBusinessId: 'ig_biz_456',
       username: 'test_brand',

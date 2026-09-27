@@ -106,6 +106,10 @@ node dev-server.js
 
 The endpoint is `GET /api/integration-status` (or `?integration=whatsapp`). Add the provider secrets from `.env.example` to the server environment. A static-only server will correctly show `Live status API is unavailable` until an API-capable server is running.
 
+### CRM Call button → MacroDroid
+
+Clicking a CRM Call button posts the contact phone number to `POST /api/trigger-call`. The server forwards it to the configured MacroDroid webhook as `?data=<phone>`, which lets MacroDroid place the call from the agent's SIM. Set `MACRODROID_WEBHOOK_URL` in the server environment to override the built-in webhook URL.
+
 ### Production Backend (Optional)
 ```bash
 cd backend

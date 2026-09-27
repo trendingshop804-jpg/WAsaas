@@ -229,27 +229,58 @@ function initPeriodBtns() {
 }
 
 /* ---- Messages Inbox Controller ---- */
-function initMessages() {
+let activeConversationKey = null;
+
+function conversationKey(conv, index) {
+  // Normalise to digits so demo data ("+91 98765 43210") and live API data
+  // ("919876543210") resolve to the same thread key.
+  const phone = String(conv?.phone || conv?.key || '').replace(/\D/g, '');
+  if (phone) return phone;
+  return String(conv?.name || `idx-${index}`);
+}
+
+// Demo data stores "08:31"; the API returns ISO timestamps. Render both nicely.
+function formatMessageTime(value) {
+  if (!value) return '';
+  const raw = String(value);
+  if (!/\d{4}-\d{2}-\d{2}T/.test(raw)) return raw;
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) return raw;
+  return date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+}
+
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, ch => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]
+  ));
+}
+
+function renderConversationList(preferredKey) {
   const convList = document.getElementById('conv-list');
   const layout   = document.querySelector('.messages-layout');
-  const backBtn  = document.getElementById('btn-back-conv');
-
   if (!convList || !window.NB || !window.NB.conversations) return;
 
+  const convs = window.NB.conversations;
   convList.innerHTML = '';
-  window.NB.conversations.forEach((conv, idx) => {
+
+  convs.forEach((conv, idx) => {
+    const key = conversationKey(conv, idx);
+    const isActive = preferredKey ? key === preferredKey : idx === 0;
     const el = document.createElement('div');
-    el.className = 'conv-item' + (idx === 0 ? ' active' : '');
+    el.className = 'conv-item' + (isActive ? ' active' : '');
     el.dataset.channel = conv.channel || 'other';
+    el.dataset.phone = String(conv.phone || conv.key || '').replace(/\D/g, '');
+    el.dataset.key = key;
     el.innerHTML = `
       <div class="conv-ava">${conv.initials}</div>
       <div class="conv-meta">
         <div class="conv-name">${conv.name}</div>
         <div class="conv-preview">${conv.preview}</div>
       </div>
-      <div class="conv-time">${conv.time}</div>
+      <div class="conv-time">${formatMessageTime(conv.time)}</div>
     `;
     el.addEventListener('click', () => {
+      activeConversationKey = key;
       document.querySelectorAll('.conv-item').forEach(c => c.classList.remove('active'));
       el.classList.add('active');
       renderConversation(conv);
@@ -258,14 +289,38 @@ function initMessages() {
     convList.appendChild(el);
   });
 
+  const active = convs.find((c, i) => conversationKey(c, i) === activeConversationKey) || convs[0];
+  if (active) {
+    activeConversationKey = conversationKey(active, 0);
+    renderConversation(active);
+  }
+}
+
+function initMessages() {
+  const convList = document.getElementById('conv-list');
+  const layout   = document.querySelector('.messages-layout');
+  const backBtn  = document.getElementById('btn-back-conv');
+  const callBtn  = document.getElementById('btn-conv-call');
+
+  if (!convList || !window.NB || !window.NB.conversations) return;
+
+  renderConversationList(activeConversationKey);
+
   if (backBtn && layout) {
     backBtn.addEventListener('click', () => {
       layout.classList.remove('mobile-chat-active');
     });
   }
 
-  if (window.NB.conversations.length > 0) {
-    renderConversation(window.NB.conversations[0]);
+  if (callBtn) {
+    callBtn.addEventListener('click', () => {
+      const activeItem = convList.querySelector('.conv-item.active');
+      const name = activeItem?.querySelector('.conv-name')?.textContent?.trim() || 'contact';
+      const phone = activeItem?.dataset.phone || '';
+      if (typeof window.handleCallLead === 'function') {
+        window.handleCallLead(name, phone);
+      }
+    });
   }
 }
 
@@ -278,17 +333,88 @@ function renderConversation(conv) {
   if (headerAva)  headerAva.textContent = conv.initials;
 
   if (messagesEl) {
-    messagesEl.innerHTML = conv.messages.map(m => `
-      <div style="margin-bottom: 8px;">
-        <div class="msg-bubble ${m.dir}">${m.text}</div>
-        <div class="msg-time" style="text-align:${m.dir === 'out' ? 'right' : 'left'}; padding: 2px 4px; font-size: 0.6875rem; color: var(--text-muted);">${m.time}</div>
-      </div>
-    `).join('');
+    messagesEl.innerHTML = conv.messages.map(m => {
+      const state = m.status || '';
+      const isOut = m.dir === 'out';
+      const failed = isOut && state === 'failed';
+      const stateChip = isOut && state
+        ? `<div style="font-size:0.625rem;margin-top:3px;opacity:0.85;">${state}</div>`
+        : '';
+      return `
+      <div style="margin-bottom: 8px;" data-msg-state="${state || 'received'}">
+        <div class="msg-bubble ${m.dir}" style="${failed ? 'border:1px solid var(--status-danger);' : ''}">${escapeHtml(m.text)}${stateChip}</div>
+        <div class="msg-time" style="text-align:${isOut ? 'right' : 'left'}; padding: 2px 4px; font-size: 0.6875rem; color: var(--text-muted);">${formatMessageTime(m.time)}</div>
+      </div>`;
+    }).join('');
     messagesEl.scrollTop = messagesEl.scrollHeight;
   }
 }
 window.renderConversation = renderConversation;
+window.renderConversationList = renderConversationList;
 window.initMessages = initMessages;
+
+/* ---- Live Inbox: pull real WhatsApp messages from the server ---- */
+const LIVE_INBOX_POLL_MS = 15_000;
+let liveInboxTimer = null;
+let liveInboxLastCount = null;
+
+async function fetchLiveConversations() {
+  // A real session JWT is required — the anon key is not a session.
+  const token = window.NB_AUTH ? await window.NB_AUTH.getAccessToken() : null;
+  if (!token) {
+    throw new Error('Sign in to load your organization inbox.');
+  }
+  const response = await fetch('/api/messages?limit=200', {
+    cache: 'no-store',
+    headers: { Accept: 'application/json', Authorization: `Bearer ${token}` }
+  });
+  if (response.status === 401) throw new Error('Your session expired. Please sign in again.');
+  if (!response.ok) throw new Error(`Messages API returned HTTP ${response.status}`);
+  const payload = await response.json();
+  if (!payload || !Array.isArray(payload.conversations)) {
+    throw new Error('Messages API returned an invalid response');
+  }
+  return payload.conversations;
+}
+
+async function refreshLiveInbox() {
+  try {
+    const live = await fetchLiveConversations();
+    if (!live.length) return false;
+
+    window.NB.conversations = live;
+    renderConversationList(activeConversationKey);
+    liveInboxLastCount = live.length;
+    return true;
+  } catch (error) {
+    // Keep the last good list on screen rather than blanking the inbox.
+    if (error.message && /sign in|session/i.test(error.message)) {
+      setInboxAuthNotice(error.message);
+    }
+    console.warn('[Live Inbox]', error.message);
+    return false;
+  }
+}
+
+function setInboxAuthNotice(message) {
+  const el = document.getElementById('inbox-auth-notice');
+  if (!el) return;
+  el.textContent = message;
+  el.style.display = 'block';
+}
+
+function initLiveInbox() {
+  if (liveInboxTimer) return;
+  refreshLiveInbox();
+  liveInboxTimer = window.setInterval(refreshLiveInbox, LIVE_INBOX_POLL_MS);
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) refreshLiveInbox();
+  });
+  window.addEventListener('online', refreshLiveInbox);
+}
+
+window.refreshLiveInbox = refreshLiveInbox;
+window.initLiveInbox = initLiveInbox;
 
 function initMessageFilters() {
   const tabs = Array.from(document.querySelectorAll('.msg-tab'));
@@ -325,26 +451,83 @@ function initMessageComposer() {
   const sendBtn= document.getElementById('msg-send-btn');
   if (!input || !sendBtn) return;
 
-  const send = () => {
+  const send = async () => {
     const text = input.value.trim();
     if (!text || !window.NB || !window.NB.conversations) return;
 
     const activeItem = document.querySelector('.conv-item.active');
     const activeName = activeItem ? activeItem.querySelector('.conv-name').textContent : '';
+    const activePhone = activeItem?.dataset.phone || '';
 
     const conv = window.NB.conversations.find(c => c.name === activeName) || window.NB.conversations[0];
     if (conv) {
-      const now = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
-      conv.messages.push({ dir: 'out', text, time: now });
-      conv.preview = 'You: ' + text;
-      renderConversation(conv);
+      // Guard against double-clicks / Enter+click racing.
+      if (sendBtn.disabled) return;
+      sendBtn.disabled = true;
+      const originalHtml = sendBtn.innerHTML;
+      sendBtn.innerHTML = '<i data-feather="loader"></i>';
+      if (typeof feather !== 'undefined') feather.replace();
 
-      if (activeItem) {
-        const previewEl = activeItem.querySelector('.conv-preview');
-        if (previewEl) previewEl.textContent = 'You: ' + text;
+      // Optimistic "sending" bubble.
+      const now = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+      const optimistic = { dir: 'out', text, time: now, status: 'sending' };
+      conv.messages.push(optimistic);
+      renderConversation(conv);
+      input.value = '';
+
+      try {
+        if (!activePhone) throw new Error('No phone number for this conversation.');
+
+        const token = window.NB_AUTH ? await window.NB_AUTH.getAccessToken() : null;
+        if (!token) throw new Error('Sign in to send WhatsApp messages.');
+
+        const response = await fetch('/api/messages', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            phone: activePhone,
+            text,
+            // Stable key so a retry of the same send is de-duplicated server-side.
+            clientMessageId: `${activePhone}:${text.slice(0, 40)}:${Date.now()}`
+          })
+        });
+
+        let payload = {};
+        try { payload = await response.json(); } catch (_) {}
+
+        if (!response.ok || payload.success === false) {
+          optimistic.status = 'failed';
+          renderConversation(conv);
+          showToast(payload.error || `Message failed (HTTP ${response.status})`, 'error');
+          input.value = text; // let them retry
+          return;
+        }
+
+        optimistic.status = payload.status || 'sent';
+        renderConversation(conv);
+        conv.preview = 'You: ' + text;
+        const previewEl = activeItem?.querySelector('.conv-preview');
+        if (previewEl) previewEl.textContent = conv.preview;
+        showToast(
+          payload.usedTemplate ? 'Sent using approved template' : 'Message sent to WhatsApp',
+          'success'
+        );
+        refreshLiveInbox();
+      } catch (error) {
+        optimistic.status = 'failed';
+        renderConversation(conv);
+        console.error('[Send Message]', error);
+        showToast(`Message failed: ${error.message}`, 'error');
+        input.value = text;
+      } finally {
+        sendBtn.disabled = false;
+        sendBtn.innerHTML = originalHtml;
+        if (typeof feather !== 'undefined') feather.replace();
       }
     }
-    input.value = '';
   };
 
   sendBtn.addEventListener('click', send);
@@ -1054,6 +1237,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initLeadsViewToggle();
   initPeriodBtns();
   initMessages();
+  initLiveInbox();
   initMessageFilters();
   initMessageComposer();
   initSettingsNav();

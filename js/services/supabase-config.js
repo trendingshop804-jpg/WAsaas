@@ -111,19 +111,46 @@ function getEdgeFunctionUrl(fnName) {
  * Falls back to anon key if no user session is found.
  * @returns {Object}
  */
-function getAuthHeaders() {
-  const session = (() => {
-    try {
-      // Look for a Supabase session stored by the official JS client
-      const raw = localStorage.getItem('sb-session') ||
-                  Object.keys(localStorage)
-                    .filter(k => k.startsWith('sb-') && k.endsWith('-auth-token'))
-                    .map(k => localStorage.getItem(k))[0];
-      return raw ? JSON.parse(raw) : null;
-    } catch (_) { return null; }
-  })();
+function readStoredSession() {
+  try {
+    // Look for a Supabase session stored by the official JS client
+    const raw = localStorage.getItem('sb-session') ||
+                Object.keys(localStorage)
+                  .filter(k => k.startsWith('sb-') && k.endsWith('-auth-token'))
+                  .map(k => localStorage.getItem(k))[0];
+    return raw ? JSON.parse(raw) : null;
+  } catch (_) { return null; }
+}
 
-  const token = session?.access_token || SUPABASE_CONFIG.anonKey || '';
+/**
+ * Returns the real signed-in user's access token, or '' when signed out.
+ * Never falls back to the anon key: the anon key is not a session and must
+ * not be used to call tenant-scoped APIs.
+ * @returns {string}
+ */
+function getSessionToken() {
+  const session = readStoredSession();
+  return session?.access_token || '';
+}
+
+/**
+ * Strict variant of getAuthHeaders() for tenant-scoped API calls.
+ * Returns null when there is no signed-in user, so callers can bail out
+ * instead of silently sending an anonymous request.
+ * @returns {Object|null}
+ */
+function getSessionHeaders() {
+  const token = getSessionToken();
+  if (!token) return null;
+  return {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type':  'application/json',
+    'apikey':        SUPABASE_CONFIG.anonKey || '',
+  };
+}
+
+function getAuthHeaders() {
+  const token = getSessionToken() || SUPABASE_CONFIG.anonKey || '';
   return {
     'Authorization': token ? `Bearer ${token}` : '',
     'Content-Type':  'application/json',
@@ -142,6 +169,8 @@ window.supabaseConfig = {
   ...SUPABASE_CONFIG,
   getEdgeFunctionUrl,
   getAuthHeaders,
+  getSessionToken,
+  getSessionHeaders,
   isSupabaseConfigured,
   instagramConfigId: SUPABASE_CONFIG.instagramConfigId || '',
 };

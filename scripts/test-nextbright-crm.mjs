@@ -149,7 +149,7 @@ async function runTests() {
       await page.waitForTimeout(200);
     });
 
-    await runTest('7. Test Lead Table Actions (Call Simulation & Toast)', async () => {
+    await runTest('7. Test Lead Table Call Action & Toast', async () => {
       await page.waitForTimeout(3500);
       const callBtn = page.locator('#leads-table-tbody tr .row-action-btn[title="Call"]').first();
       await callBtn.click();
