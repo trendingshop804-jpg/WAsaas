@@ -1,52 +1,60 @@
-import {
-  WHATSAPP_ACCESS_TOKEN,
-  PHONE_NUMBER_ID,
-  WHATSAPP_API_VERSION,
-  hasRequiredConfig
-} from './_lead-followups.js';
+import { getIntegrationStatus } from './_integration-status.js';
 
+/**
+ * GET, POST /api/test-connection
+ *
+ * Backward-compatible adapter for frontend settings callers
+ * (e.g., settings.js and settings-integrations.js). Delegates health
+ * check logic to the shared checker in _integration-status.js without
+ * exposing credentials or tokens.
+ */
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', ['https://yourdomain.com', 'https://app.yourdomain.com', 'http://localhost:3000']);
+  res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Cache-Control', 'no-store');
 
-  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method === 'OPTIONS') return res.status(204).end();
 
-  const configured = hasRequiredConfig();
-  if (!configured) {
-    return res.status(200).json({
-      connected: false,
-      status: 'Not Configured',
-      message: 'WhatsApp integration is not configured. Missing WHATSAPP_ACCESS_TOKEN or PHONE_NUMBER_ID in environment settings.'
-    });
+  if (req.method !== 'GET' && req.method !== 'POST') {
+    res.setHeader('Allow', 'GET, POST, OPTIONS');
+    return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
   try {
-    const url = `https://graph.facebook.com/${WHATSAPP_API_VERSION}/${PHONE_NUMBER_ID}`;
-    const response = await fetch(url, {
-      headers: { Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}` }
-    });
+    const waResult = await getIntegrationStatus('whatsapp');
 
-    const data = await response.json().catch(() => ({}));
-
-    if (!response.ok || data.error) {
-      const errMsg = data.error?.message || `HTTP ${response.status} error from Meta API`;
-      return res.status(200).json({
+    if (!waResult) {
+      return res.status(500).json({
         connected: false,
         status: 'Error',
-        message: `WhatsApp connection failed: ${errMsg}`
+        message: 'WhatsApp status checker unavailable.'
       });
     }
 
+    const isConnected = Boolean(waResult.connected);
+    const statusLabel = isConnected
+      ? 'Connected'
+      : waResult.status === 'not_configured'
+        ? 'Not Configured'
+        : 'Error';
+
+    const verifiedName = waResult.verifiedName || waResult.displayName || 'Meta WhatsApp Cloud API Verified';
+
     return res.status(200).json({
-      connected: true,
-      status: 'Connected',
-      phoneNumberId: PHONE_NUMBER_ID,
-      verifiedName: data.verified_name || data.display_phone_number || 'Meta WhatsApp Cloud API Verified',
-      message: '✓ WhatsApp Cloud API connection successful'
+      connected: isConnected,
+      status: statusLabel,
+      message: isConnected
+        ? '✓ WhatsApp Cloud API connection successful'
+        : waResult.message || 'WhatsApp connection failed.',
+      verifiedName,
+      displayName: waResult.displayName || null,
+      checkedAt: waResult.checkedAt || new Date().toISOString(),
+      latencyMs: waResult.latencyMs ?? null
     });
   } catch (err) {
-    return res.status(200).json({
+    console.error('[Test Connection Error]', err);
+    return res.status(500).json({
       connected: false,
       status: 'Error',
       message: `WhatsApp connection failed: ${err.message}`

@@ -81,10 +81,12 @@ async function checkWhatsApp() {
       return result('error', `WhatsApp connection failed: ${errorMessage(payload, response)}`, { latencyMs });
     }
 
+    const verifiedName = payload.verified_name || payload.display_phone_number || null;
     return result('connected', 'WhatsApp Cloud API responded successfully.', {
       latencyMs,
       provider: 'Meta WhatsApp Cloud API',
-      displayName: payload.verified_name || payload.display_phone_number || null
+      displayName: verifiedName,
+      verifiedName
     });
   } catch (error) {
     return result(error?.code === 'TIMEOUT' ? 'unavailable' : 'error', `WhatsApp connection unavailable: ${error.message}`, {
@@ -209,4 +211,11 @@ export async function getIntegrationStatuses(keys = INTEGRATION_KEYS) {
   const selected = [...new Set((keys || []).map(normalizeIntegrationKey).filter(key => CHECKERS[key]))];
   const entries = await Promise.all(selected.map(async key => [key, await CHECKERS[key]()]));
   return Object.fromEntries(entries);
+}
+
+export async function getIntegrationStatus(key) {
+  const normalized = normalizeIntegrationKey(key);
+  const checker = CHECKERS[normalized];
+  if (!checker) return null;
+  return checker();
 }
