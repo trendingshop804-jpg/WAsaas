@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { getAuthenticatedUser, getUserOrganizationIds } from './_supabase.js';
 
 // ---------------------------------------------------------------------------
 // Environment Variables — read at startup so misconfiguration is caught early.
@@ -18,17 +19,41 @@ export const supabase = SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY
   : null;
 
 // ---------------------------------------------------------------------------
-// Authorization guard for cron endpoints
+// Authorization guard for cron endpoints.
+//
+// This endpoint can send REAL WhatsApp messages, so it must fail CLOSED.
+// A valid request is either:
+//   * a Vercel cron call carrying `Authorization: Bearer <CRON_SECRET>`, or
+//   * a real signed-in Supabase user session JWT.
+// Previously a missing CRON_SECRET meant "allow anyone", which let any
+// visitor trigger outbound sends via ?force=1.
 // ---------------------------------------------------------------------------
-export function authorizeCron(req, res) {
+export async function authorizeCron(req, res) {
   const secret = process.env.CRON_SECRET;
-  if (!secret) return true; // No secret configured → allow (dev/test mode)
-  const authHeader = req.headers.authorization || '';
-  if (authHeader !== `Bearer ${secret}`) {
-    res.status(401).json({ error: 'Unauthorized — invalid CRON_SECRET' });
+  const authHeader = String(req.headers?.authorization || req.headers?.Authorization || '');
+  if (secret && authHeader === `Bearer ${secret}`) return true;
+
+  // Manual runs require an authenticated Owner or Admin membership.
+  const { user } = await getAuthenticatedUser(req);
+  if (!user) {
+    res.status(401).json({ error: 'Unauthorized — valid signed-in session required.' });
     return false;
   }
-  return true;
+
+  const { rows, error } = await getUserOrganizationIds(user.id);
+  if (error) {
+    res.status(503).json({ error: 'Unable to verify organization role.' });
+    return false;
+  }
+
+  const isOwnerOrAdmin = rows.some(row =>
+    ['owner', 'admin'].includes(String(row.role || '').trim().toLowerCase())
+  );
+
+  if (isOwnerOrAdmin) return true;
+
+  res.status(403).json({ error: 'Owner or Admin access required.' });
+  return false;
 }
 
 // ---------------------------------------------------------------------------
