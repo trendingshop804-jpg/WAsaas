@@ -53,6 +53,167 @@ function digitsOnly(value) {
   return String(value || '').replace(/\D/g, '');
 }
 
+function normalizePhone(value) {
+  if (!value) return '';
+  const digits = String(value).replace(/\D/g, '');
+  if (!digits) return '';
+  // India normalization:
+  // 10 digits: e.g. 8111986637 -> 918111986637
+  if (digits.length === 10) {
+    return '91' + digits;
+  }
+  // 11 digits with leading 0: e.g. 08111986637 -> 918111986637
+  if (digits.length === 11 && digits.startsWith('0')) {
+    return '91' + digits.slice(1);
+  }
+  // 12 digits with 91: e.g. 918111986637 -> 918111986637
+  if (digits.length === 12 && digits.startsWith('91')) {
+    return digits;
+  }
+  return digits;
+}
+
+const LEAD_SCAN_PAGE = 500;
+
+/**
+ * Every equivalent spelling of one phone number, used only for comparison.
+ *
+ * Shared with api/meta-webhook.js so the webhook and this API agree on who a
+ * number belongs to. Without a shared rule the webhook could reuse a lead
+ * (08111986637 == 918111986637) while this authorization check rejected it,
+ * producing a 403 on a thread that demonstrably exists.
+ *
+ * These are whole-number equivalences only. Nothing here compares suffixes, so
+ * two different numbers sharing their last 7 digits still never match.
+ */
+function phoneVariants(value) {
+  const digits = digitsOnly(value);
+  const forms = new Set();
+  if (!digits) return forms;
+
+  forms.add(digits);
+  if (digits.startsWith('00') && digits.length > 4) forms.add(digits.slice(2));
+  if (digits.startsWith('0') && digits.length > 10) forms.add(digits.slice(1));
+  if (digits.length === 10) forms.add('91' + digits);
+  if (digits.length === 12 && digits.startsWith('91')) forms.add(digits.slice(2));
+
+  return forms;
+}
+
+/** True when two phone values denote the same subscriber. */
+function phoneMatches(a, b) {
+  const left = phoneVariants(a);
+  if (left.size === 0) return false;
+  for (const form of phoneVariants(b)) {
+    if (left.has(form)) return true;
+  }
+  return false;
+}
+
+/**
+ * Exact normalized phone match against one organization's leads.
+ *
+ * The comparison has to happen in JS: PostgREST cannot express "digits only",
+ * and a stored phone may be "+91 98765 11111", "0912-345-6789" or
+ * "919876511111". Those all normalize to the same value, so an equality filter
+ * on any single stored spelling would miss the others.
+ *
+ * The scan is paginated to exhaustion in deterministic id order rather than
+ * capped, so a row limit can never hide a valid exact match. A short cap would
+ * silently deny legitimate sends once an organization had enough leads.
+ *
+ * Never widens to a suffix comparison: two different numbers that happen to
+ * share their last 7 digits must NOT authorize a send.
+ */
+async function organizationHasLeadForPhone(supabase, organizationId, target) {
+  let from = 0;
+  for (;;) {
+    const { data, error } = await supabase
+      .from('leads')
+      .select('id, phone')
+      .eq('organization_id', organizationId)
+      .order('id', { ascending: true })
+      .range(from, from + LEAD_SCAN_PAGE - 1);
+
+    // Fail closed on error: an unreadable lead list must not authorize anyone.
+    if (error) return false;
+
+    const rows = data || [];
+    if (rows.some(l => l.phone && phoneMatches(l.phone, target))) return true;
+    if (rows.length < LEAD_SCAN_PAGE) return false;
+    from += LEAD_SCAN_PAGE;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Lead creation helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Normalize a caller-supplied phone to bare digits and validate the result.
+ * Returns null when the value cannot be a real phone number, so the caller can
+ * answer 400 instead of storing junk.
+ *
+ * Accepts common human formats (+, spaces, dashes, dots, parentheses) and
+ * rejects anything that is not a plausible E.164 length (7..15 digits).
+ */
+function normalizePhoneForLead(value) {
+  const digits = digitsOnly(value);
+  if (digits.length < 7 || digits.length > 15) return null;
+  return digits;
+}
+
+/**
+ * Find a lead in THIS organization whose stored phone normalizes to `target`.
+ *
+ * Scoped to organization_id so a number belonging to another tenant can never
+ * be reported, matched or overwritten. Paginated to exhaustion for the same
+ * reason as organizationHasLeadForPhone: a row limit must not be able to hide
+ * a duplicate (which would silently create one) or to miss the exact match.
+ */
+async function findLeadByNormalizedPhone(supabase, organizationId, target) {
+  let from = 0;
+  for (;;) {
+    const { data, error } = await supabase
+      .from('leads')
+      .select('id, contact_name, company_name, name, phone, status')
+      .eq('organization_id', organizationId)
+      .order('id', { ascending: true })
+      .range(from, from + LEAD_SCAN_PAGE - 1);
+
+    if (error) return null;
+    const rows = data || [];
+    const hit = rows.find(l => l.phone && phoneMatches(l.phone, target));
+    if (hit) return hit;
+    if (rows.length < LEAD_SCAN_PAGE) return null;
+    from += LEAD_SCAN_PAGE;
+  }
+}
+
+function cleanText(value, maxLength) {
+  const s = String(value == null ? '' : value).trim().replace(/\s+/g, ' ');
+  return s ? s.slice(0, maxLength) : '';
+}
+
+/**
+ * Exact phone match against one organization's message threads.
+ *
+ * messages.sender_number is written digits-only by this endpoint and by the
+ * inbound webhook, so equality on the normalized value is complete here. The
+ * organization_id filter is what keeps this tenant-scoped.
+ */
+async function organizationHasMessageForPhone(supabase, organizationId, target) {
+  const { data, error } = await supabase
+    .from('messages')
+    .select('id, sender_number')
+    .eq('organization_id', organizationId)
+    .eq('sender_number', target)
+    .limit(1);
+
+  if (error) return false;
+  return (data || []).length > 0;
+}
+
 function pickText(row) {
   return row.content || row.body || row.message_body || '';
 }
@@ -295,6 +456,82 @@ export default async function handler(req, res) {
   if (!access) return;
   const organizationId = access.organizationId;
 
+  // ---- POST action=create-lead -------------------------------------------
+  // Lives inside this route (not a new api/*.js) because Vercel is already at
+  // the 12-function limit. organization_id comes from the verified membership
+  // above and is NEVER read from the request.
+  if (req.method === 'POST' && String(req.query?.action || '').toLowerCase() === 'create-lead') {
+    try {
+      const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
+
+      const rawPhone = body.phone ?? body.phoneNumber ?? body.contact_number ?? body.mobile;
+      if (rawPhone === undefined || rawPhone === null || String(rawPhone).trim() === '') {
+        return res.status(400).json({ success: false, error: 'A phone number is required.' });
+      }
+
+      const phone = normalizePhoneForLead(rawPhone);
+      if (!phone) {
+        return res.status(400).json({ success: false, error: 'A valid phone number (7-15 digits) is required.' });
+      }
+
+      const contactName = cleanText(body.contactName ?? body.contact_name ?? body.name, 120);
+      const companyName = cleanText(body.companyName ?? body.company_name ?? body.company, 120);
+      const email = cleanText(body.email, 160);
+      const source = cleanText(body.source, 60) || 'Manual';
+      const notes = cleanText(body.notes, 2000);
+
+      if (!contactName && !companyName) {
+        return res.status(400).json({ success: false, error: 'Provide at least a contact name or a company name.' });
+      }
+      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return res.status(400).json({ success: false, error: 'A valid email address is required.' });
+      }
+
+      // Duplicate within THIS organization only. Never merges, updates or
+      // reports a lead that belongs to a different tenant.
+      const existing = await findLeadByNormalizedPhone(supabase, organizationId, phone);
+      if (existing) {
+        return res.status(409).json({
+          success: false,
+          error: 'A lead with this phone number already exists in your organization.',
+          code: 'DUPLICATE_LEAD',
+          duplicate: true,
+          lead: existing
+        });
+      }
+
+      // leads.company_name / contact_name / phone / name are NOT NULL.
+      const insertRow = {
+        organization_id: organizationId,
+        phone,
+        contact_name: contactName || companyName,
+        name: contactName || companyName,
+        company_name: companyName || contactName,
+        status: 'NEW',
+        source,
+        notes,
+        opted_out: false
+      };
+      if (email) insertRow.email = email;
+
+      const { data: created, error: createErr } = await supabase
+        .from('leads')
+        .insert(insertRow)
+        .select('id, organization_id, contact_name, name, company_name, phone, email, status, source, created_at')
+        .single();
+
+      if (createErr) {
+        console.error('[messages] lead create failed:', createErr.message);
+        return res.status(500).json({ success: false, error: 'Could not create the lead.' });
+      }
+
+      return res.status(201).json({ success: true, lead: created });
+    } catch (err) {
+      console.error('[messages] create-lead error:', err.message);
+      return res.status(500).json({ success: false, error: 'Could not create the lead.' });
+    }
+  }
+
   const isMediaSend = req.method === 'POST' && (req.query?.route === 'send-media' || req.query?.media === '1');
 
   // ---- POST: Send Outbound Media (Consolidated /api/send-media handler) ---
@@ -430,28 +667,31 @@ export default async function handler(req, res) {
     if (!text) return res.status(400).json({ success: false, error: 'Message text is required.' });
     if (text.length > 4096) return res.status(400).json({ success: false, error: 'Message text is too long (max 4096).' });
 
-    const last7 = phone.slice(-7);
-    const leadPhoneFilter = last7 ? `phone.like.*${last7}` : null;
-
-    const [{ data: ownMessages }, { data: ownLeads }] = await Promise.all([
-      supabase.from('messages').select('id').eq('organization_id', organizationId).eq('sender_number', phone).limit(1),
-      leadPhoneFilter
-        ? supabase.from('leads').select('id, phone').eq('organization_id', organizationId).or(leadPhoneFilter).limit(25)
-        : Promise.resolve({ data: [] })
+    // --- Authorization: exact normalized phone match, organization-scoped ---
+    // No suffix matching. `phone` is already digitsOnly above, and a contact is
+    // authorized only when the normalized value stored in the database is
+    // IDENTICAL. A different number sharing the last 7 digits is rejected.
+    const [ownsMessage, ownsLead] = await Promise.all([
+      organizationHasMessageForPhone(supabase, organizationId, phone),
+      organizationHasLeadForPhone(supabase, organizationId, phone)
     ]);
 
-    const ownsLead = (ownLeads || []).some(l => digitsOnly(l.phone).slice(-7) === last7);
-    if (!ownMessages?.length && !ownsLead) {
+    if (!ownsMessage && !ownsLead) {
       return res.status(403).json({
         success: false,
         error: 'This phone number is not part of your organization.'
       });
     }
 
-    const accessToken = process.env.WHATSAPP_ACCESS_TOKEN || process.env.WA_ACCESS_TOKEN;
-    const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID
+    const tenantCreds = await getTenantWhatsAppCredentials(supabase, organizationId);
+    const accessToken = tenantCreds?.accessToken
+      || process.env.WHATSAPP_ACCESS_TOKEN
+      || process.env.WA_ACCESS_TOKEN;
+    const phoneNumberId = tenantCreds?.phoneNumberId
+      || process.env.WHATSAPP_PHONE_NUMBER_ID
       || process.env.PHONE_NUMBER_ID
       || process.env.WA_PHONE_NUMBER_ID;
+
     if (!accessToken || !phoneNumberId) {
       return res.status(500).json({
         success: false,
@@ -471,23 +711,28 @@ export default async function handler(req, res) {
       .in('status', ['sending', 'sent', 'delivered'])
       .gte('created_at', dupeCutoff)
       .order('created_at', { ascending: false })
-      .limit(1);
+      .limit(5);
 
-    if (dupe && dupe.length) {
+    const matchingDupe = (dupe || []).find(m => digitsOnly(m.sender_number) === phone);
+    if (matchingDupe) {
       return res.status(200).json({
         success: true,
         duplicate: true,
         deduplicatedBy: 'org+phone+content within ' + (DUPLICATE_WINDOW_MS / 1000) + 's',
         idempotencyKeyHonoured: false,
-        messageId: dupe[0].wa_message_id,
-        status: dupe[0].status,
-        message: dupe[0]
+        messageId: matchingDupe.wa_message_id,
+        status: matchingDupe.status,
+        message: matchingDupe
       });
     }
 
+    // Newest inbound for THIS exact number. Previously the 5 newest inbound
+    // messages for the whole organization were fetched and then filtered, so a
+    // busier tenant could push the matching row out of the result set and the
+    // 24-hour window would be computed from the wrong (missing) row.
     const { data: lastInbound } = await supabase
       .from('messages')
-      .select('received_at,created_at')
+      .select('received_at,created_at,sender_number')
       .eq('organization_id', organizationId)
       .eq('sender_number', phone)
       .eq('direction', 'inbound')
@@ -514,20 +759,39 @@ export default async function handler(req, res) {
       });
     }
 
+    let conversationId = body.conversation_id || null;
+    if (!conversationId) {
+      const lead = await findLeadByNormalizedPhone(supabase, organizationId, phone);
+      if (lead) {
+        const { data: conv } = await supabase
+          .from('conversations')
+          .select('id')
+          .eq('organization_id', organizationId)
+          .eq('lead_id', lead.id)
+          .limit(1);
+        if (conv?.[0]?.id) conversationId = conv[0].id;
+      }
+    }
+
+    const insertPayload = {
+      organization_id: organizationId,
+      sender_number: phone,
+      direction: 'outbound',
+      message_type: 'text',
+      channel: 'whatsapp',
+      content: text,
+      body: text,
+      message_body: text,
+      received_at: now,
+      created_at: now,
+      status: 'sending',
+      is_ai: !!body.is_ai
+    };
+    if (conversationId) insertPayload.conversation_id = conversationId;
+
     const { data: pendingRow, error: pendingErr } = await supabase
       .from('messages')
-      .insert({
-        organization_id: organizationId,
-        sender_number: phone,
-        direction: 'outbound',
-        message_type: 'text',
-        channel: 'whatsapp',
-        content: text,
-        received_at: now,
-        created_at: now,
-        status: 'sending',
-        is_ai: !!body.is_ai
-      })
+      .insert(insertPayload)
       .select()
       .single();
     if (pendingErr) {
@@ -581,6 +845,17 @@ export default async function handler(req, res) {
       .eq('id', pendingRow.id)
       .select()
       .single();
+
+    if (conversationId) {
+      await supabase
+        .from('conversations')
+        .update({
+          last_message: text,
+          last_timestamp: now,
+          channel: 'whatsapp',
+        })
+        .eq('id', conversationId);
+    }
 
     return res.status(200).json({
       success: true,
@@ -664,9 +939,13 @@ export default async function handler(req, res) {
       }
       (leads || []).forEach(lead => {
         const d = digitsOnly(lead.phone);
-        if (!d) return;
+        const norm = normalizePhone(lead.phone);
+        if (!d && !norm) return;
         const label = lead.name || lead.contact_name || lead.company || lead.company_name;
-        if (label && !nameByDigits.has(d)) nameByDigits.set(d, label);
+        if (label) {
+          if (d && !nameByDigits.has(d)) nameByDigits.set(d, label);
+          if (norm && !nameByDigits.has(norm)) nameByDigits.set(norm, label);
+        }
       });
     }
 
@@ -690,7 +969,7 @@ export default async function handler(req, res) {
     const conversations = [...byThread.entries()].map(([key, msgs]) => {
       const ordered = [...msgs].reverse();
       const last = ordered[ordered.length - 1];
-      const displayName = nameByDigits.get(digitsOnly(key)) || key;
+      const displayName = nameByDigits.get(normalizePhone(key)) || nameByDigits.get(digitsOnly(key)) || key;
       return {
         key,
         phone: key,

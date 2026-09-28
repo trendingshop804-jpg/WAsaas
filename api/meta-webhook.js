@@ -159,44 +159,105 @@ async function getInstagramConnection(instagramBusinessId) {
   return data?.[0] || null;
 }
 
+function phoneDigits(value) {
+  return String(value == null ? '' : value).replace(/\D/g, '');
+}
+
+/**
+ * Every equivalent spelling of one phone number, used only for *comparison*.
+ *
+ * The previous normalizePhone() rewrote a bare 10-digit number to "91" + digits.
+ * That silently corrupted any non-Indian number (a stored US 4155551234 became
+ * 91415551234 and could never match the 14155551234 Meta sends), which produced
+ * a brand-new lead for a contact who already existed. Comparing a set of
+ * equivalent forms is symmetric, so the same person cannot be duplicated no
+ * matter which side of the comparison carries the country code.
+ */
+function phoneVariants(value) {
+  const digits = phoneDigits(value);
+  const forms = new Set();
+  if (!digits) return forms;
+
+  forms.add(digits);
+  // International dialing prefix: 0091... == 91...
+  if (digits.startsWith('00') && digits.length > 4) forms.add(digits.slice(2));
+  // National trunk prefix: 08111986637 == 918111986637
+  if (digits.startsWith('0') && digits.length > 10) forms.add(digits.slice(1));
+  // India: local 10-digit form == 91 + local form
+  if (digits.length === 10) forms.add('91' + digits);
+  if (digits.length === 12 && digits.startsWith('91')) forms.add(digits.slice(2));
+
+  return forms;
+}
+
+/** True when two phone values denote the same subscriber. */
+function phoneMatches(a, b) {
+  const left = phoneVariants(a);
+  if (left.size === 0) return false;
+  for (const form of phoneVariants(b)) {
+    if (left.has(form)) return true;
+  }
+  return false;
+}
+
 async function findOrCreateLead(organizationId, phoneNumber, contactName = '', source = 'WhatsApp') {
-  let query = supabase
+  if (!organizationId) {
+    throw new Error('Organization ID is required to find or create lead');
+  }
+
+  const targetDigits = phoneDigits(phoneNumber);
+
+  // 1. Query leads for this tenant organization
+  const { data: orgLeads, error: searchError } = await supabase
     .from('leads')
-    .select('id, contact_name')
+    .select('id, name, contact_name, company, company_name, phone')
     .eq('organization_id', organizationId);
 
-  if (phoneNumber) {
-    query = query.eq('phone', phoneNumber);
+  if (searchError) {
+    console.error('[Webhook] Lead lookup query error:', searchError.message);
   }
 
-  const { data: existing } = await query.limit(1);
+  // 2. Match on equivalent full phone numbers (never on a guessed country code)
+  let matchedLead = null;
+  if (orgLeads && orgLeads.length > 0 && phoneDigits(phoneNumber)) {
+    matchedLead = orgLeads.find(l => l.phone && phoneMatches(l.phone, phoneNumber));
+  }
 
-  if (existing && existing.length > 0) {
-    if (contactName && (!existing[0].contact_name || existing[0].contact_name.includes('WhatsApp Lead'))) {
+  if (matchedLead) {
+    const currentName = matchedLead.name || matchedLead.contact_name || '';
+    if (contactName && (!currentName || currentName.includes('WhatsApp Lead') || currentName.includes('WhatsApp Contact'))) {
       await supabase
         .from('leads')
-        .update({ contact_name: contactName })
-        .eq('id', existing[0].id);
+        .update({
+          contact_name: contactName,
+          name: contactName,
+        })
+        .eq('id', matchedLead.id);
     }
-    return existing[0].id;
+    return matchedLead.id;
   }
 
+  // 3. If not found, insert a new lead
   const defaultName = source === 'Instagram'
     ? (contactName ? `@${contactName}` : 'Instagram Lead')
-    : (contactName || `WhatsApp Lead (+${phoneNumber || ''})`);
+    : (contactName || (phoneNumber ? `WhatsApp Contact (+${phoneNumber})` : 'WhatsApp Lead'));
+
+  const insertPayload = {
+    organization_id: organizationId,
+    name: defaultName,
+    contact_name: defaultName,
+    company: 'Inbound WhatsApp',
+    company_name: 'Inbound WhatsApp',
+    phone: phoneNumber || null,
+    source: source || 'WhatsApp',
+    status: 'REPLIED',
+    score: 75,
+    score_category: 'WARM',
+  };
 
   const { data: newLead, error } = await supabase
     .from('leads')
-    .insert({
-      organization_id: organizationId,
-      company_name: 'Inbound WhatsApp',
-      contact_name: defaultName,
-      phone: phoneNumber || null,
-      source: source,
-      status: 'REPLIED',
-      score: 75,
-      score_category: 'WARM',
-    })
+    .insert(insertPayload)
     .select('id')
     .single();
 
@@ -208,10 +269,15 @@ async function findOrCreateLead(organizationId, phoneNumber, contactName = '', s
   return newLead.id;
 }
 
-async function findOrCreateConversation(organizationId, leadId, channel = 'whatsapp') {
+async function findOrCreateConversation(organizationId, leadId, channel = 'whatsapp', contactName = '') {
+  if (!organizationId || !leadId) {
+    throw new Error('organizationId and leadId are required to find or create conversation');
+  }
+
   const { data: existing } = await supabase
     .from('conversations')
     .select('id')
+    .eq('organization_id', organizationId)
     .eq('lead_id', leadId)
     .eq('channel', channel)
     .limit(1);
@@ -223,6 +289,7 @@ async function findOrCreateConversation(organizationId, leadId, channel = 'whats
   const { data: fallbackExisting } = await supabase
     .from('conversations')
     .select('id')
+    .eq('organization_id', organizationId)
     .eq('lead_id', leadId)
     .limit(1);
 
@@ -230,6 +297,14 @@ async function findOrCreateConversation(organizationId, leadId, channel = 'whats
     return fallbackExisting[0].id;
   }
 
+  // Only columns that actually exist on public.conversations:
+  //   id, organization_id, lead_id, mode, unread_count, last_message,
+  //   last_timestamp, created_at, updated_at, channel
+  // There is NO name / status / ai_active column. Inserting them made PostgREST
+  // reject the whole INSERT, findOrCreateConversation threw, the caller caught
+  // it, conversationId stayed null and the inbound message was skipped - which
+  // is why conversations had 0 rows and every message had a NULL conversation_id.
+  // The contact's display name lives on the lead, not on the conversation.
   const { data: newConv, error } = await supabase
     .from('conversations')
     .insert({
@@ -243,8 +318,17 @@ async function findOrCreateConversation(organizationId, leadId, channel = 'whats
     .single();
 
   if (error) {
-    console.error('Conversation creation error:', error);
+    console.error('[Webhook] Conversation creation error for lead', leadId, ':', error);
     throw new Error(`Failed to create conversation: ${error.message}`);
+  }
+
+  if (!newConv || !newConv.id) {
+    throw new Error('Failed to create conversation: no id returned');
+  }
+
+  if (contactName) {
+    // Best-effort only: the column is absent, so this must never fail the flow.
+    console.warn('[Webhook] conversation has no name column; contact name kept on lead', leadId);
   }
 
   return newConv.id;
@@ -645,7 +729,7 @@ async function handleInstagramDirectMessage(entry, messagingItem, igConnection) 
   let conversationId = null;
   try {
     leadId = await findOrCreateLead(organizationId, senderId, senderId, 'Instagram');
-    conversationId = await findOrCreateConversation(organizationId, leadId, 'instagram');
+    conversationId = await findOrCreateConversation(organizationId, leadId, 'instagram', senderId);
   } catch (err) {
     console.error('[Instagram Webhook] Lead/Conversation error:', err);
   }
@@ -660,10 +744,13 @@ async function handleInstagramDirectMessage(entry, messagingItem, igConnection) 
 
   // 4. Save message in messages table
   const messageRecord = {
+    organization_id: organizationId,
     conversation_id: conversationId,
     wa_message_id: messageId,
     sender_number: senderId,
     content: displayContent,
+    body: displayContent,
+    message_body: displayContent,
     message_type: msgType,
     direction: isEcho ? 'outbound' : 'inbound',
     channel: 'instagram',
@@ -673,7 +760,7 @@ async function handleInstagramDirectMessage(entry, messagingItem, igConnection) 
     file_name: mediaInfo?.fileName || null,
     media_caption: caption || null,
     media_size: mediaInfo?.mediaSize || 0,
-    status: 'SENT',
+    status: 'sent',
   };
 
   const { error: msgErr } = await supabase.from('messages').insert(messageRecord);
@@ -761,6 +848,10 @@ export default async function handler(req, res) {
 
   if (req.method === 'POST') {
     const payload = req.body;
+    // Declared outside the try so the acknowledgement below can always report
+    // how many inbound messages were actually stored, even after a throw.
+    let storedCount = 0;
+    let expectedCount = 0;
 
     try {
       if (!supabase) {
@@ -832,12 +923,20 @@ export default async function handler(req, res) {
       if (!messages || messages.length === 0) {
         return res.status(200).json({ received: true });
       }
+      expectedCount = messages.length;
 
       const waConnection = await getWhatsAppConnection(phoneNumberId);
       const organizationId = waConnection?.organization_id || (await getWhatsAppOrganizationId(phoneNumberId));
       if (!organizationId) {
-        console.error('[Webhook] No active WhatsApp connection found for phone_number_id:', phoneNumberId);
-        return res.status(200).json({ received: true });
+        // Fail closed: without a tenant we must not write rows, or they would
+        // land with a NULL organization_id and be invisible in every CRM inbox.
+        // Answering 200 stops Meta retry-storming a payload we cannot place.
+        console.error(
+          '[Webhook] DROP: no active whatsapp_connections row for phone_number_id',
+          phoneNumberId,
+          '- connect WhatsApp in the app (Settings > Integrations > WhatsApp) so inbound can be attributed'
+        );
+        return res.status(200).json({ received: true, stored: 0, reason: 'no_tenant_for_phone_number_id' });
       }
 
       let decryptedToken = null;
@@ -852,8 +951,13 @@ export default async function handler(req, res) {
         decryptedToken = waConnection.access_token;
       }
       if (!decryptedToken) {
-        console.error('[Webhook] No WhatsApp access token configured for matched connection:', phoneNumberId);
-        return res.status(200).json({ received: true });
+        // The tenant IS resolved, so the message can still be stored. Only media
+        // download and the AI reply need the token; dropping here lost real
+        // inbound text purely because a credential was missing.
+        console.warn(
+          '[Webhook] No WhatsApp access token for phone_number_id', phoneNumberId,
+          '- storing message without media download or auto-reply'
+        );
       }
 
       let orgSettings = {};
@@ -869,6 +973,7 @@ export default async function handler(req, res) {
       }
 
       for (const msg of messages) {
+       try {
         const msgType = msg.type || 'text';
         const isMedia = MEDIA_TYPES.has(msgType);
         const sender = msg.from || '';
@@ -888,170 +993,191 @@ export default async function handler(req, res) {
 
         let mediaInfo = null;
         if (isMedia) {
-          mediaInfo = await processInboundMedia(msg, msgType, decryptedToken);
-          if (!mediaInfo) {
-            console.warn(`Media download failed for ${msg.id} (${msgType}) — saving message metadata only`);
-          }
-        }
-
-        const caption = msg[msgType]?.caption || msg.caption || '';
-        let userText = '';
-        if (msgType === 'text') {
-          userText = msg.text?.body || '';
-        } else if (msgType === 'interactive') {
-          userText = msg.interactive?.button_reply?.title || msg.interactive?.list_reply?.title || msg.interactive?.button_reply?.id || 'Interactive Reply';
-        } else if (msgType === 'button') {
-          userText = msg.button?.text || msg.button?.payload || 'Button Reply';
-        } else if (msgType === 'location') {
-          const loc = msg.location;
-          userText = loc ? `📍 Location: ${loc.name || loc.address || (loc.latitude + ', ' + loc.longitude)}` : '📍 Location';
-        } else if (msgType === 'contacts') {
-          const c = msg.contacts?.[0];
-          userText = c ? `👤 Contact: ${c.name?.formatted_name || c.phones?.[0]?.phone || 'Shared Contact'}` : '👤 Shared Contact';
-        } else if (msgType === 'reaction') {
-          userText = msg.reaction?.emoji ? `Reaction: ${msg.reaction.emoji}` : 'Reaction';
-        } else if (isMedia) {
-          userText = caption || (msgType === 'audio' || msgType === 'voice' ? '🎤 Voice message' : msgType === 'sticker' ? '🩷 Sticker' : `📎 ${msgType} message`);
-        } else {
-          userText = msg.text?.body || '📩 Inbound message';
-        }
-
-        let leadId = null;
-        let conversationId = null;
-        let chatHistory = [];
-
-        try {
-          const contactObj = value?.contacts?.find(c => c.wa_id === sender) || value?.contacts?.[0];
-          const rawContactName = contactObj?.profile?.name || '';
-          const formattedSender = sender && sender.length >= 10
-            ? (sender.startsWith('91') && sender.length === 12 ? `+${sender.slice(0, 2)} ${sender.slice(2, 7)} ${sender.slice(7)}` : `+${sender}`)
-            : sender;
-          const contactName = rawContactName || (formattedSender ? `WhatsApp Contact (${formattedSender})` : 'WhatsApp Contact');
-          leadId = await findOrCreateLead(organizationId, sender, contactName, 'WhatsApp');
-          conversationId = await findOrCreateConversation(organizationId, leadId, 'whatsapp');
-
-          if (isOptOut(userText) && leadId) {
-            await supabase
-              .from('leads')
-              .update({
-                opted_out: true,
-                opted_out_at: new Date().toISOString(),
-                score: 0,
-                next_followup_at: null,
-                followup_count: 0,
-              })
-              .eq('id', leadId);
+          if (!decryptedToken) {
+            console.warn(`[Webhook] No token to download media for ${msg.id} (${msgType}) - metadata only`);
           } else {
-            await supabase
-              .from('leads')
-              .update({
-                status: 'REPLIED',
-                follow_up_status: 'Paused',
-                next_followup_at: null,
-                updated_at: new Date().toISOString(),
-              })
-              .eq('id', leadId);
-          }
-
-          if (userText && msgType === 'text') {
-            chatHistory = await fetchChatHistory(conversationId);
-          }
-        } catch (err) {
-          console.error('[Webhook] Lead/Conversation setup error:', err);
-        }
-
-        if (!conversationId) {
-          console.error('[Webhook] Skipping message — no conversation_id available');
-          continue;
-        }
-
-        const messageRecord = {
-          organization_id: organizationId,
-          conversation_id: conversationId,
-          wa_message_id: msg.id,
-          sender_number: sender,
-          content: userText || '📩 Inbound message',
-          message_type: msgType,
-          direction: 'inbound',
-          channel: 'whatsapp',
-          received_at: new Date().toISOString(),
-          media_url: mediaInfo?.mediaUrl || null,
-          media_mime_type: mediaInfo?.mediaMimeType || null,
-          file_name: mediaInfo?.fileName || null,
-          media_caption: isMedia ? caption : null,
-          media_size: mediaInfo?.mediaSize || 0,
-          status: 'SENT',
-        };
-
-        const { error: msgError } = await supabase.from('messages').insert(messageRecord);
-        if (msgError) {
-          console.error('[Webhook] Supabase insert error:', msgError);
-        }
-
-        await supabase
-          .from('conversations')
-          .update({
-            last_message: messageRecord.content,
-            last_timestamp: messageRecord.received_at,
-            channel: 'whatsapp',
-          })
-          .eq('id', conversationId);
-
-        if (userText && msgType === 'text' && leadId && !isOptOut(userText)) {
-          let aiRaw = null;
-          let replyText = "Hi there! I'd love to help you. Could you tell me a bit more about what you're looking for?";
-          let crmData = null;
-
-          try {
-            aiRaw = await generateAIReply(orgSettings, chatHistory, userText);
-            const parsed = parseAIResponse(aiRaw);
-            replyText = parsed.replyText || replyText;
-            crmData = parsed.crmData;
-          } catch (err) {
-            console.error('[AI Agent Webhook Fallback]:', err.message);
-            const msgLower = userText.toLowerCase();
-            if (msgLower.includes('price') || msgLower.includes('cost') || msgLower.includes('rate') || msgLower.includes('how much')) {
-              replyText = "Hi! Our offerings are tailored to your needs — I can share details and pricing on a quick call. Shall we hop on a 10-min chat?";
+            mediaInfo = await processInboundMedia(msg, msgType, decryptedToken);
+            if (!mediaInfo) {
+              console.warn(`Media download failed for ${msg.id} (${msgType}) — saving message metadata only`);
             }
           }
+        }
 
-          const sendResult = await sendWhatsAppMessage(phoneNumberId, sender, replyText, decryptedToken);
+          const caption = msg[msgType]?.caption || msg.caption || '';
+          let userText = '';
+          if (msgType === 'text') {
+            userText = msg.text?.body || '';
+          } else if (msgType === 'interactive') {
+            userText = msg.interactive?.button_reply?.title || msg.interactive?.list_reply?.title || msg.interactive?.button_reply?.id || 'Interactive Reply';
+          } else if (msgType === 'button') {
+            userText = msg.button?.text || msg.button?.payload || 'Button Reply';
+          } else if (msgType === 'location') {
+            const loc = msg.location;
+            userText = loc ? `📍 Location: ${loc.name || loc.address || (loc.latitude + ', ' + loc.longitude)}` : '📍 Location';
+          } else if (msgType === 'contacts') {
+            const c = msg.contacts?.[0];
+            userText = c ? `👤 Contact: ${c.name?.formatted_name || c.phones?.[0]?.phone || 'Shared Contact'}` : '👤 Shared Contact';
+          } else if (msgType === 'reaction') {
+            userText = msg.reaction?.emoji ? `Reaction: ${msg.reaction.emoji}` : 'Reaction';
+          } else if (isMedia) {
+            userText = caption || (msgType === 'audio' || msgType === 'voice' ? '🎤 Voice message' : msgType === 'sticker' ? '🩷 Sticker' : `📎 ${msgType} message`);
+          } else {
+            userText = msg.text?.body || '📩 Inbound message';
+          }
 
-          const sentAt = new Date().toISOString();
-          const { error: outboundError } = await supabase.from('messages').insert({
+          let leadId = null;
+          let conversationId = null;
+          let chatHistory = [];
+
+          try {
+            const contactObj = value?.contacts?.find(c => c.wa_id === sender) || value?.contacts?.[0];
+            const rawContactName = contactObj?.profile?.name || '';
+            const formattedSender = sender && sender.length >= 10
+              ? (sender.startsWith('91') && sender.length === 12 ? `+${sender.slice(0, 2)} ${sender.slice(2, 7)} ${sender.slice(7)}` : `+${sender}`)
+              : sender;
+            const contactName = rawContactName || (formattedSender ? `WhatsApp Contact (${formattedSender})` : 'WhatsApp Contact');
+            leadId = await findOrCreateLead(organizationId, sender, contactName, 'WhatsApp');
+            conversationId = await findOrCreateConversation(organizationId, leadId, 'whatsapp', contactName);
+
+            if (isOptOut(userText) && leadId) {
+              await supabase
+                .from('leads')
+                .update({
+                  opted_out: true,
+                  opted_out_at: new Date().toISOString(),
+                  score: 0,
+                  next_followup_at: null,
+                  followup_count: 0,
+                })
+                .eq('id', leadId);
+            } else {
+              await supabase
+                .from('leads')
+                .update({
+                  status: 'REPLIED',
+                  follow_up_status: 'Paused',
+                  next_followup_at: null,
+                  updated_at: new Date().toISOString(),
+                })
+                .eq('id', leadId);
+            }
+
+            if (userText && msgType === 'text') {
+              chatHistory = await fetchChatHistory(conversationId);
+            }
+          } catch (err) {
+            console.error('[Webhook] Lead/Conversation setup error:', err);
+          }
+
+          if (!conversationId) {
+            console.error('[Webhook] Skipping message — no conversation_id available');
+            continue;
+          }
+
+          const messageRecord = {
             organization_id: organizationId,
+            lead_id: leadId,
             conversation_id: conversationId,
-            wa_message_id: sendResult.messages?.[0]?.id,
+            wa_message_id: msg.id,
             sender_number: sender,
-            sender: 'agent',
-            body: replyText,
-            message_body: replyText,
-            content: replyText,
-            message_type: 'text',
-            direction: 'outbound',
-            received_at: sentAt,
-            created_at: sentAt,
-            is_ai: true,
-            status: 'sent',
-          });
-          if (outboundError) throw outboundError;
+            content: userText || '📩 Inbound message',
+            body: userText || '📩 Inbound message',
+            message_body: userText || '📩 Inbound message',
+            message_type: msgType,
+            direction: 'inbound',
+            channel: 'whatsapp',
+            received_at: new Date().toISOString(),
+            media_url: mediaInfo?.mediaUrl || null,
+            media_mime_type: mediaInfo?.mediaMimeType || null,
+            file_name: mediaInfo?.fileName || null,
+            media_caption: isMedia ? caption : null,
+            media_size: mediaInfo?.mediaSize || 0,
+            status: 'delivered',
+          };
 
-          await updateLeadFromCRM(leadId, crmData);
+          const { error: msgError } = await supabase.from('messages').insert(messageRecord);
+          if (msgError) {
+            console.error('[Webhook] Supabase insert error:', msgError);
+          } else {
+            storedCount += 1;
+          }
 
           await supabase
             .from('conversations')
             .update({
-              last_message: replyText,
-              last_timestamp: new Date().toISOString()
+              last_message: messageRecord.content,
+              last_timestamp: messageRecord.received_at,
+              channel: 'whatsapp',
             })
             .eq('id', conversationId);
-        }
+
+          if (userText && msgType === 'text' && leadId && !isOptOut(userText)) {
+            let aiRaw = null;
+            let replyText = "Hi there! I'd love to help you. Could you tell me a bit more about what you're looking for?";
+            let crmData = null;
+
+            try {
+              aiRaw = await generateAIReply(orgSettings, chatHistory, userText);
+              const parsed = parseAIResponse(aiRaw);
+              replyText = parsed.replyText || replyText;
+              crmData = parsed.crmData;
+            } catch (err) {
+              console.error('[AI Agent Webhook Fallback]:', err.message);
+              const msgLower = userText.toLowerCase();
+              if (msgLower.includes('price') || msgLower.includes('cost') || msgLower.includes('rate') || msgLower.includes('how much')) {
+                replyText = "Hi! Our offerings are tailored to your needs — I can share details and pricing on a quick call. Shall we hop on a 10-min chat?";
+              }
+            }
+
+            const sendResult = await sendWhatsAppMessage(phoneNumberId, sender, replyText, decryptedToken);
+
+            const sentAt = new Date().toISOString();
+            const { error: outboundError } = await supabase.from('messages').insert({
+              organization_id: organizationId,
+              conversation_id: conversationId,
+              lead_id: leadId,
+              wa_message_id: sendResult.messages?.[0]?.id,
+              sender_number: sender,
+              sender: 'agent',
+              body: replyText,
+              message_body: replyText,
+              content: replyText,
+              message_type: 'text',
+              direction: 'outbound',
+              received_at: sentAt,
+              created_at: sentAt,
+              is_ai: true,
+              status: 'sent',
+            });
+            if (outboundError) {
+              console.error('[Webhook] AI reply send/insert error:', outboundError.message);
+            }
+
+            await updateLeadFromCRM(leadId, crmData);
+
+            await supabase
+              .from('conversations')
+              .update({
+                last_message: replyText,
+                last_timestamp: new Date().toISOString()
+              })
+              .eq('id', conversationId);
+          }
+       } catch (err) {
+         // One bad message must not discard the rest of the batch: Meta can
+         // deliver many messages per webhook call.
+         console.error('[Webhook] Failed to process inbound message', msg && msg.id, ':', err.message);
+       }
       }
     } catch (err) {
       console.error('Error processing webhook payload:', err);
     }
 
-    return res.status(200).json({ received: true });
+    if (expectedCount && storedCount !== expectedCount) {
+      console.warn('[Webhook] stored', storedCount, 'of', expectedCount, 'inbound messages');
+    }
+
+    return res.status(200).json({ received: true, stored: storedCount });
   }
 
   res.setHeader('Allow', ['GET', 'POST']);
