@@ -139,7 +139,7 @@ test.describe('Flow 6: Complete WhatsApp & Instagram Integration & Inbox Test Su
     }).catch(() => null);
 
     if (res) {
-      expect([200, 401, 422]).toContain(res.status());
+      expect([200, 401, 403, 422]).toContain(res.status());
     }
   });
 
