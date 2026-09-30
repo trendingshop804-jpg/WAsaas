@@ -239,11 +239,11 @@ function initialsFromName(name, phone) {
 /**
  * Build an approved-template payload for sends made outside the 24h window.
  */
-function buildTemplatePayload(phone, text, templateParams) {
-  const name = (process.env.WHATSAPP_TEMPLATE_NAME || '').trim();
+function buildTemplatePayload(phone, text, templateParams, templateNameOverride) {
+  const name = (templateNameOverride || process.env.WHATSAPP_TEMPLATE_NAME || 'hello_world').trim();
   if (!name) return null;
 
-  const language = (process.env.WHATSAPP_TEMPLATE_LANGUAGE || 'en').trim();
+  const language = (process.env.WHATSAPP_TEMPLATE_LANGUAGE || 'en_US').trim();
   const params = Array.isArray(templateParams) && templateParams.length
     ? templateParams.map(String)
     : [text];
@@ -730,11 +730,17 @@ export default async function handler(req, res) {
     // messages for the whole organization were fetched and then filtered, so a
     // busier tenant could push the matching row out of the result set and the
     // 24-hour window would be computed from the wrong (missing) row.
+    const phoneForms = Array.from(phoneVariants(phone));
+    if (!phoneForms.includes(phone)) phoneForms.push(phone);
+    const bareDigits = digitsOnly(phone);
+    if (bareDigits && !phoneForms.includes(bareDigits)) phoneForms.push(bareDigits);
+    if (bareDigits && !phoneForms.includes('+' + bareDigits)) phoneForms.push('+' + bareDigits);
+
     const { data: lastInbound } = await supabase
       .from('messages')
       .select('received_at,created_at,sender_number')
       .eq('organization_id', organizationId)
-      .eq('sender_number', phone)
+      .in('sender_number', phoneForms)
       .eq('direction', 'inbound')
       .order('received_at', { ascending: false, nullsFirst: false })
       .limit(1);
@@ -744,10 +750,11 @@ export default async function handler(req, res) {
       ? (Date.now() - new Date(lastInboundAt).getTime()) < SERVICE_WINDOW_MS
       : false;
 
+    const reqTemplateName = body.template_name || body.templateName || body.template || process.env.WHATSAPP_TEMPLATE_NAME || null;
     const now = new Date().toISOString();
     const payload = withinWindow
       ? { messaging_product: 'whatsapp', to: phone, type: 'text', text: { body: text } }
-      : buildTemplatePayload(phone, text, body.templateParams);
+      : buildTemplatePayload(phone, text, body.templateParams, reqTemplateName);
 
     if (!withinWindow && !payload) {
       return res.status(422).json({

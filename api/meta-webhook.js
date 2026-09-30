@@ -1070,8 +1070,7 @@ export default async function handler(req, res) {
           }
 
           if (!conversationId) {
-            console.error('[Webhook] Skipping message — no conversation_id available');
-            continue;
+            console.warn('[Webhook] Storing inbound message without conversation_id:', msg.id);
           }
 
           const messageRecord = {
