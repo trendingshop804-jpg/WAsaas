@@ -304,19 +304,19 @@ CREATE POLICY "Tenant isolation for customers" ON public.customers
     FOR ALL USING (
         organization_id IN (
             SELECT organization_id FROM public.organization_users WHERE user_id = auth.uid()
-        ) OR auth.uid() IS NULL
+        )
     );
 
 CREATE POLICY "Tenant isolation for leads" ON public.leads
     FOR ALL USING (
         organization_id IN (
             SELECT organization_id FROM public.organization_users WHERE user_id = auth.uid()
-        ) OR auth.uid() IS NULL
+        )
     );
 
 CREATE POLICY "Tenant isolation for conversations" ON public.conversations
     FOR ALL USING (
         organization_id IN (
             SELECT organization_id FROM public.organization_users WHERE user_id = auth.uid()
-        ) OR auth.uid() IS NULL
+        )
     );

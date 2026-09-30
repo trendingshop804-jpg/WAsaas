@@ -526,6 +526,13 @@
              6. MESSAGES VIEW
              ============================ -->
         <section class="view-panel" id="view-messages">
+          <!--
+            Live Inbox status. js/ui.js (setInboxAuthNotice) has always written
+            here, but this element did not exist, so the function bailed out on
+            `if (!el) return;` and every fetch failure was invisible. Keep the
+            id and the inline display:none: the JS toggles display itself.
+          -->
+          <div id="inbox-auth-notice" role="status" aria-live="polite" style="display:none; margin:0 0 10px; padding:8px 12px; border-radius:6px; font-size:0.8125rem; border:1px solid rgba(239,68,68,0.45); background:rgba(239,68,68,0.10); color:var(--text-primary);"></div>
           <div class="messages-layout">
             <!-- Left: Conversation List -->
             <div class="conv-list-panel">

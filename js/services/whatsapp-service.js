@@ -596,25 +596,36 @@ class WhatsAppService {
       }
       try {
         const organizationId = window.appState?.get('currentOrgId');
+        // 500 is the server's own hard cap (Math.min(limit, 500)). At limit=100
+        // the newest 100 rows were the only ones synced, so older conversations
+        // simply never reached the inbox and nothing reported an error.
         const qs = organizationId
-          ? '?limit=100&organization_id=' + encodeURIComponent(organizationId)
-          : '?limit=100';
+          ? '?limit=500&organization_id=' + encodeURIComponent(organizationId)
+          : '?limit=500';
         const res = await fetch('/api/messages' + qs, { headers: sessionHeaders });
         if (res.status === 401) {
           console.warn('[WhatsAppService] Session expired; skipping inbound sync.');
           return;
         }
-        if (res.ok) {
-          const data = await res.json();
-          if (data.messages && Array.isArray(data.messages)) {
-            rawMessages = data.messages;
-          }
+        if (!res.ok) {
+          // Previously any non-401 failure (403 cross-tenant, 404 wrong
+          // deployment, 500) fell through with no branch at all, so
+          // rawMessages stayed empty and the sync looked like a quiet no-op.
+          console.error('[WhatsAppService] /api/messages returned HTTP ' + res.status);
+          return;
+        }
+        const data = await res.json();
+        if (data.messages && Array.isArray(data.messages)) {
+          rawMessages = data.messages;
         }
       } catch (fErr) {
-        console.warn('Local /api/messages fetch failed:', fErr.message);
+        console.error('Local /api/messages fetch failed:', fErr.message);
       }
 
-      if (rawMessages.length === 0) return;
+      if (rawMessages.length === 0) {
+        console.warn('[WhatsAppService] /api/messages returned no messages for this organization.');
+        return;
+      }
 
       const leads = window.appState.get('leads') || [];
       const conversations = window.appState.get('conversations') || [];

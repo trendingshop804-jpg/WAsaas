@@ -1,0 +1,179 @@
+-- ============================================================================
+-- WhatsApp Media Support + Inbound Message Storage — Schema Migration
+-- ============================================================================
+-- This migration adds ALL columns required by:
+--   - api/meta-webhook.js        (INSERT on webhook receive)
+--   - api/messages.js            (SELECT for frontend polling)
+--   - js/services/whatsapp-service.js (field mapping)
+--   - supabase/functions/meta-webhook/index.ts (Edge Function)
+--
+-- The error "column messages.media_url does not exist" indicates these
+-- columns were never added to the live Supabase messages table.
+-- ============================================================================
+
+-- ---------------------------------------------------------------------------
+-- 1. Add WhatsApp-specific columns to messages table
+--    Using ADD COLUMN IF NOT EXISTS so this is safe to run on any state
+-- ---------------------------------------------------------------------------
+
+ALTER TABLE IF EXISTS public.messages
+    ADD COLUMN IF NOT EXISTS wa_message_id TEXT,
+    ADD COLUMN IF NOT EXISTS sender_number TEXT,
+    ADD COLUMN IF NOT EXISTS content TEXT,
+    ADD COLUMN IF NOT EXISTS message_type TEXT DEFAULT 'text',
+    ADD COLUMN IF NOT EXISTS direction TEXT,
+    ADD COLUMN IF NOT EXISTS received_at TIMESTAMPTZ DEFAULT now();
+
+-- ---------------------------------------------------------------------------
+-- 2. Add media columns (some may already exist from schema_crm_inbox.sql)
+-- ---------------------------------------------------------------------------
+
+ALTER TABLE IF EXISTS public.messages
+    ADD COLUMN IF NOT EXISTS media_url TEXT,
+    ADD COLUMN IF NOT EXISTS media_mime_type TEXT,
+    ADD COLUMN IF NOT EXISTS file_name TEXT,
+    ADD COLUMN IF NOT EXISTS media_caption TEXT,
+    ADD COLUMN IF NOT EXISTS media_size BIGINT DEFAULT 0;
+
+-- ---------------------------------------------------------------------------
+-- 3. Migrate existing data: map legacy columns if needed
+--    Use DO blocks with exception handling so this is safe even if
+--    the legacy columns (body, meta_message_id, created_at) don't exist
+-- ---------------------------------------------------------------------------
+
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'messages' AND column_name = 'body') THEN
+        UPDATE public.messages SET content = body WHERE content IS NULL AND body IS NOT NULL;
+    END IF;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'messages' AND column_name = 'meta_message_id') THEN
+        UPDATE public.messages SET wa_message_id = meta_message_id WHERE wa_message_id IS NULL AND meta_message_id IS NOT NULL;
+    END IF;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'messages' AND column_name = 'created_at') THEN
+        UPDATE public.messages SET received_at = created_at WHERE received_at IS NULL AND created_at IS NOT NULL;
+    END IF;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
+-- ---------------------------------------------------------------------------
+-- 4. Create PUBLIC storage bucket for WhatsApp media
+--    This bucket is PUBLIC so media URLs can be rendered directly in <img> tags
+-- ---------------------------------------------------------------------------
+
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES (
+  'whatsapp-media',
+  'whatsapp-media',
+  TRUE,
+  52428800,
+  ARRAY[
+    'image/jpeg', 'image/png', 'image/webp', 'image/gif',
+    'video/mp4', 'video/3gpp', 'video/quicktime', 'video/webm', 'video/x-msvideo',
+    'audio/mpeg', 'audio/ogg', 'audio/aac', 'audio/mp4', 'audio/wav', 'audio/webm', 'audio/amr',
+    'application/pdf', 'application/zip', 'application/octet-stream',
+    'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-powerpoint', 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    'text/plain', 'text/csv', 'application/msword'
+  ]
+) ON CONFLICT (id) DO UPDATE
+    SET public = TRUE,
+        file_size_limit = EXCLUDED.file_size_limit,
+        allowed_mime_types = EXCLUDED.allowed_mime_types;
+
+-- ---------------------------------------------------------------------------
+-- 5. RLS Policies on storage.objects for the whatsapp-media bucket
+--    (Storage buckets in Supabase use the storage.objects table for RLS)
+--    Postgres has no CREATE POLICY IF NOT EXISTS, so drop first to keep this
+--    migration re-runnable.
+-- ---------------------------------------------------------------------------
+
+DROP POLICY IF EXISTS "Public can read WhatsApp media" ON storage.objects;
+DROP POLICY IF EXISTS "Service role can manage WhatsApp media" ON storage.objects;
+DROP POLICY IF EXISTS "Service role can update WhatsApp media" ON storage.objects;
+DROP POLICY IF EXISTS "Service role can delete WhatsApp media" ON storage.objects;
+
+-- Public can READ media files (bucket is public for direct <img> src)
+CREATE POLICY "Public can read WhatsApp media"
+ON storage.objects
+FOR SELECT
+TO public
+USING (bucket_id = 'whatsapp-media');
+
+-- Service role can INSERT/UPDATE/DELETE (used by webhook handler)
+CREATE POLICY "Service role can manage WhatsApp media"
+ON storage.objects
+FOR INSERT
+TO service_role
+WITH CHECK (bucket_id = 'whatsapp-media');
+
+CREATE POLICY "Service role can update WhatsApp media"
+ON storage.objects
+FOR UPDATE
+TO service_role
+USING (bucket_id = 'whatsapp-media')
+WITH CHECK (bucket_id = 'whatsapp-media');
+
+CREATE POLICY "Service role can delete WhatsApp media"
+ON storage.objects
+FOR DELETE
+TO service_role
+USING (bucket_id = 'whatsapp-media');
+
+-- ---------------------------------------------------------------------------
+-- 6. Indexes for fast querying
+-- ---------------------------------------------------------------------------
+
+CREATE INDEX IF NOT EXISTS idx_messages_wa_message_id ON public.messages(wa_message_id);
+CREATE INDEX IF NOT EXISTS idx_messages_sender_number ON public.messages(sender_number);
+CREATE INDEX IF NOT EXISTS idx_messages_received_at ON public.messages(received_at DESC);
+CREATE INDEX IF NOT EXISTS idx_messages_media_url ON public.messages(media_url) WHERE media_url IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_messages_media_type ON public.messages(message_type) WHERE message_type != 'text';
+
+-- Meta retries webhook deliveries, and the handler's SELECT-then-INSERT check can
+-- lose a race. A unique index makes the duplicate impossible at the DB level.
+-- Only created when the table is already free of duplicates, so this never fails
+-- a deploy and never deletes existing rows.
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM public.messages
+        WHERE wa_message_id IS NOT NULL
+        GROUP BY wa_message_id HAVING count(*) > 1
+    ) THEN
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_messages_wa_message_id
+            ON public.messages(wa_message_id) WHERE wa_message_id IS NOT NULL;
+    ELSE
+        RAISE NOTICE 'Skipping uq_messages_wa_message_id: duplicate wa_message_id rows exist. Clean them up, then re-run.';
+    END IF;
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'Could not create uq_messages_wa_message_id: %', SQLERRM;
+END $$;
+
+-- ---------------------------------------------------------------------------
+-- 7. Enable Supabase Realtime for the messages table (for live updates)
+-- ---------------------------------------------------------------------------
+
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
+        IF NOT EXISTS (
+            SELECT 1 FROM pg_publication_tables
+            WHERE pubname = 'supabase_realtime' AND tablename = 'messages'
+        ) THEN
+            ALTER PUBLICATION supabase_realtime ADD TABLE public.messages;
+        END IF;
+    END IF;
+EXCEPTION WHEN OTHERS THEN
+    NULL;
+END $$;

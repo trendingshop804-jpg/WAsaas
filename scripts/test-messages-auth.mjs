@@ -56,7 +56,9 @@ const MESSAGES = [
   // Ownership unknown -> must never be surfaced to any tenant.
   { id: 'm3', organization_id: null, sender_number: '919555000000', direction: 'inbound', content: 'legacy null org', received_at: minutesAgo(600) },
   // A different tenant -> must never leak.
-  { id: 'm4', organization_id: OTHER_ORG, sender_number: '919444000000', direction: 'inbound', content: 'other tenant', received_at: minutesAgo(600) }
+  { id: 'm4', organization_id: OTHER_ORG, sender_number: '919444000000', direction: 'inbound', content: 'other tenant', received_at: minutesAgo(600) },
+  // Recent inbound for the "+91 99990 00002" contact so the 24h window is open.
+  { id: 'm10', organization_id: ORG, sender_number: '919999000002', direction: 'inbound', content: 'formatted contact', received_at: minutesAgo(5) }
 ];
 
 // NOTE: the two OTHER_ORG leads are listed FIRST on purpose. An unscoped
@@ -67,15 +69,27 @@ const LEADS = [
   { id: 'l4', organization_id: OTHER_ORG, phone: OWN_PHONE, name: 'LEAKED OTHER TENANT NAME' },
   { id: 'l3', organization_id: OTHER_ORG, phone: CROSS_TENANT_PHONE, name: 'Other Tenant Lead' },
   { id: 'l1', organization_id: ORG, phone: OWN_PHONE, name: 'Owned Lead' },
-  { id: 'l2', organization_id: ORG, phone: STALE_PHONE, name: 'Stale Lead' }
+  { id: 'l2', organization_id: ORG, phone: STALE_PHONE, name: 'Stale Lead' },
+  // Stored with a + prefix and spaces: normalizes to 919999000002
+  { id: 'l5', organization_id: ORG, phone: '+91 99990 00002', name: 'Formatted Owned Lead' },
+  // Exists ONLY in another tenant: 919999000009
+  { id: 'l6', organization_id: OTHER_ORG, phone: '+91 99990 00009', name: 'Foreign Only Lead' }
 ];
 
 // --- Network recorder -------------------------------------------------------
 let calls = [];
 let graphCalls = [];
+// Recorder for row writes (INSERT). Tests reset it when they assert on writes.
+calls.inserts = [];
 let mode = { tokenValid: true, memberships: ORGANIZATION_USERS, membershipError: false };
 
-function reset() { calls = []; graphCalls = []; }
+function reset() {
+  // Re-attach the INSERT recorder: reset() replaces the array, which would
+  // otherwise drop the non-index property.
+  calls = [];
+  calls.inserts = [];
+  graphCalls = [];
+}
 
 function jsonRes(body, status = 200) {
   return {
@@ -127,6 +141,10 @@ function fakePostgrest(url, options = {}) {
     const arr = Array.isArray(body) ? body : [body];
     const inserted = arr.map((r, i) => ({ id: `new-${table}-${i}`, ...r }));
     rows.push(...inserted);
+    // Record writes so tests can assert exactly what reached the table.
+    if (Array.isArray(calls.inserts)) {
+      for (const row of inserted) calls.inserts.push({ table, data: row });
+    }
     return wrap(inserted, 201);
   }
   if (method === 'PATCH') {
@@ -227,7 +245,10 @@ await t('GET for own org returns only that org (NULL-org + other tenant excluded
   assert.equal(q.filters.organization_id, ORG, 'GET must be filtered by the resolved org');
 
   const ids = (res.body.messages || []).map(m => m.id).sort();
-  assert.deepEqual(ids, ['m1', 'm2', 'm5'], 'only this org rows may be returned');
+  // m10 is a legitimate ORG row (the "+91 99990 00002" contact), so it belongs
+  // here. The point of the test is that m3 (NULL org) and m4 (OTHER_ORG) are
+  // absent - those assertions are separate and unchanged.
+  assert.deepEqual(ids, ['m1', 'm10', 'm2', 'm5'], 'only this org rows may be returned');
   assert.ok(!res.body.messages.some(m => m.organization_id === null), 'no NULL-org message may leak');
   assert.ok(!res.body.messages.some(m => m.organization_id === OTHER_ORG), 'no cross-tenant message may leak');
 });
@@ -357,8 +378,152 @@ await t('membership lookup failure -> 503 (not a misleading 403)', async () => {
 });
 
 // ---------------------------------------------------------------------------
-// CORS
+// POST authorization: exact normalized phone matching
 // ---------------------------------------------------------------------------
+
+await t('POST: stored phone with + prefix and spaces is accepted after normalization', async () => {
+  // stored as "+91 99990 00002" -> normalizes to 919999000002
+  const { res, graphCalls } = await call(authed({
+    method: 'POST', body: { phone: '919999000002', text: 'normalization probe stored' }
+  }));
+  assert.notEqual(res._status, 403, `must not be rejected: ${JSON.stringify(res.body)}`);
+  assert.equal(res._status, 200, `expected 200, got ${res._status}: ${JSON.stringify(res.body)}`);
+  assert.equal(graphCalls.length, 1, 'should actually send');
+});
+
+await t('POST: request phone with + prefix and spaces is accepted after normalization', async () => {
+  // stored as 919999000001 -> request "+91 99990 00001" normalizes to the same
+  const { res, graphCalls } = await call(authed({
+    method: 'POST', body: { phone: '+91 99990 00001', text: 'normalization probe request' }
+  }));
+  assert.equal(res._status, 200, `expected 200, got ${res._status}: ${JSON.stringify(res.body)}`);
+  assert.equal(graphCalls.length, 1);
+  assert.equal(graphCalls[0].body.to, '919999000001', 'must send to the normalized number');
+});
+
+await t('POST: a DIFFERENT number sharing the last 7 digits is rejected', async () => {
+  // 447999900001 and 919999000001 share the last 7 digits (9990001) but are
+  // different numbers. Loose suffix matching would have authorized this.
+  const { res, graphCalls } = await call(authed({
+    method: 'POST', body: { phone: '447999900001', text: 'suffix collision probe' }
+  }));
+  assert.equal(res._status, 403, `suffix collision must be rejected, got ${res._status}`);
+  assert.equal(graphCalls.length, 0, 'must never send to a number we do not own');
+});
+
+await t('POST: a contact that exists only in ANOTHER organization is rejected', async () => {
+  // "+91 99990 00009" -> 919999000009 exists in OTHER_ORG, not in ORG.
+  const { res, graphCalls } = await call(authed({
+    method: 'POST', body: { phone: '919999000009', text: 'cross tenant probe' }
+  }));
+  assert.equal(res._status, 403, `another org's contact must be rejected, got ${res._status}`);
+  assert.equal(graphCalls.length, 0);
+});
+
+await t('POST: exact matching contact in the caller organization is accepted', async () => {
+  const { res, graphCalls } = await call(authed({
+    method: 'POST', body: { phone: '919999000001', text: 'exact match probe' }
+  }));
+  assert.equal(res._status, 200, `expected 200, got ${res._status}: ${JSON.stringify(res.body)}`);
+  assert.equal(graphCalls.length, 1);
+  assert.equal(graphCalls[0].body.to, '919999000001');
+});
+
+// ---------------------------------------------------------------------------
+// POST action=create-lead  (tenant-scoped lead creation)
+// ---------------------------------------------------------------------------
+
+const createLead = (body, headers = { Authorization: 'Bearer mock-session-token' }, query = { action: 'create-lead' }) =>
+  call({ method: 'POST', headers, query, body });
+
+await t('create-lead: unauthenticated request -> 401, no lead written', async () => {
+  calls.inserts = [];
+  const { res } = await createLead({ phone: '919555000123', contactName: 'No Auth' }, {});
+  assert.equal(res._status, 401);
+  assert.equal(calls.inserts.filter(i => i.table === 'leads').length, 0);
+});
+
+await t('create-lead: valid member without membership -> 403, no lead written', async () => {
+  mode.memberships = [];
+  calls.inserts = [];
+  const { res } = await createLead({ phone: '919555000124', contactName: 'No Member' });
+  mode.memberships = ORGANIZATION_USERS;
+  assert.equal(res._status, 403);
+  assert.equal(calls.inserts.filter(i => i.table === 'leads').length, 0);
+});
+
+await t('create-lead: valid member creates a lead stamped with the caller org', async () => {
+  calls.inserts = [];
+  const { res } = await createLead({ phone: '+91 98765 43210', contactName: 'New Person', companyName: 'Acme' });
+  assert.equal(res._status, 201, `expected 201, got ${res._status}: ${JSON.stringify(res.body)}`);
+  const row = calls.inserts.filter(i => i.table === 'leads').at(-1);
+  assert.equal(row.data.organization_id, ORG, 'must use the caller org, never a client value');
+  assert.equal(row.data.phone, '919876543210', 'phone must be normalized to digits');
+  assert.equal(row.data.status, 'NEW');
+  // Real PostgREST returns a bare object for .single(); tolerate a 1-element
+  // array too so the assertion is about content, not client internals.
+  const lead = Array.isArray(res.body.lead) ? res.body.lead[0] : res.body.lead;
+  assert.ok(lead, 'response must include the created lead');
+  assert.equal(lead.organization_id, ORG);
+});
+
+await t('create-lead: invalid phone -> 400, nothing written', async () => {
+  for (const bad of ['', '   ', '12345', 'not-a-phone', '1234567890123456789']) {
+    calls.inserts = [];
+    const { res } = await createLead({ phone: bad, contactName: 'Bad Phone' });
+    assert.equal(res._status, 400, `"${bad}" should be rejected, got ${res._status}`);
+    assert.equal(calls.inserts.filter(i => i.table === 'leads').length, 0);
+  }
+});
+
+await t('create-lead: missing name/company and bad email -> 400', async () => {
+  let r = await createLead({ phone: '919555000125' });
+  assert.equal(r.res._status, 400, 'needs a contact or company name');
+  r = await createLead({ phone: '919555000126', contactName: 'X', email: 'not-an-email' });
+  assert.equal(r.res._status, 400, 'invalid email must be rejected');
+});
+
+await t('create-lead: duplicate phone in the SAME org -> 409, no second row', async () => {
+  calls.inserts = [];
+  // 919999000001 already exists as an ORG lead (l1).
+  const { res } = await createLead({ phone: '+91 99990 00001', contactName: 'Duplicate Person' });
+  assert.equal(res._status, 409, `expected 409, got ${res._status}: ${JSON.stringify(res.body)}`);
+  assert.equal(res.body.code, 'DUPLICATE_LEAD');
+  assert.equal(calls.inserts.filter(i => i.table === 'leads').length, 0, 'no duplicate row may be written');
+});
+
+await t('create-lead: duplicate check is scoped to the caller org only', async () => {
+  // 919999000009 exists ONLY in OTHER_ORG. The caller must be able to create it
+  // in their own org, and the other tenant's row must not be touched/reported.
+  calls.inserts = [];
+  const { res } = await createLead({ phone: '919999000009', contactName: 'Mine Now' });
+  assert.equal(res._status, 201, `expected 201, got ${res._status}: ${JSON.stringify(res.body)}`);
+  const row = calls.inserts.filter(i => i.table === 'leads').at(-1);
+  assert.equal(row.data.organization_id, ORG);
+  assert.equal(row.data.phone, '919999000009');
+});
+
+await t('create-lead: a client-supplied organizationId is ignored', async () => {
+  calls.inserts = [];
+  const { res } = await createLead({
+    phone: '919555000130', contactName: 'Spoof Attempt', organizationId: OTHER_ORG
+  });
+  assert.equal(res._status, 201);
+  const row = calls.inserts.filter(i => i.table === 'leads').at(-1);
+  assert.equal(row.data.organization_id, ORG, 'body organizationId must be ignored');
+  assert.notEqual(row.data.organization_id, OTHER_ORG);
+});
+
+await t('POST: the 24h window is read from THIS number, not another contact in the org', async () => {
+  // ORG also has m1/m2 (inbound 5 min ago) for 919999000001 and m10 for
+  // 919999000002. A limit that truncated the result set previously produced a
+  // false "outside the window" answer. Both must be inside the window.
+  for (const p of ['919999000001', '919999000002']) {
+    const { res } = await call(authed({ method: 'POST', body: { phone: p, text: 'window probe ' + p } }));
+    assert.equal(res._status, 200, `${p} expected 200, got ${res._status}: ${JSON.stringify(res.body)}`);
+    assert.equal(res.body.usedTemplate, false, `${p} should be inside the 24h window`);
+  }
+});
 
 await t('CORS reflects the production origin exactly', async () => {
   const { res } = await call(authed({

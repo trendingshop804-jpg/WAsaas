@@ -109,7 +109,7 @@ globalThis.fetch = async (input, init = {}) => {
   throw new Error(`Unexpected fetch to ${url}`);
 };
 
-const { default: handler } = await import('../api/send-media.js');
+const { default: handler } = await import('../api/messages.js');
 
 function mockRes() {
   return {
@@ -126,7 +126,7 @@ function mockRes() {
 const SESSION = { Authorization: 'Bearer test-session-token' };
 const post = async (body, headers = SESSION) => {
   const res = mockRes();
-  await handler({ method: 'POST', headers, body }, res);
+  await handler({ method: 'POST', query: { route: 'send-media' }, headers, body }, res);
   return res;
 };
 

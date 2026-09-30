@@ -364,7 +364,10 @@ async function fetchLiveConversations() {
   if (!token) {
     throw new Error('Sign in to load your organization inbox.');
   }
-  const response = await fetch('/api/messages?limit=200', {
+  // 500 is the server's own hard cap (Math.min(limit, 500)). Requesting less
+  // silently truncated the Inbox: 348 rows / 28 threads collapsed to 200 rows /
+  // 17 threads at limit=200, so whole conversations vanished with no error.
+  const response = await fetch('/api/messages?limit=500', {
     cache: 'no-store',
     headers: { Accept: 'application/json', Authorization: `Bearer ${token}` }
   });
@@ -380,17 +383,28 @@ async function fetchLiveConversations() {
 async function refreshLiveInbox() {
   try {
     const live = await fetchLiveConversations();
-    if (!live.length) return false;
+    if (!live.length) {
+      // An empty result is a real state, not a no-op: it means the server holds
+      // no messages for this organization. Silently keeping the previous list
+      // is what made "inbound is not arriving" impossible to diagnose.
+      setInboxAuthNotice(
+        'No messages returned for your organization. The list below may be out of date.'
+      );
+      return false;
+    }
 
     window.NB.conversations = live;
     renderConversationList(activeConversationKey);
     liveInboxLastCount = live.length;
+    clearInboxAuthNotice();
     return true;
   } catch (error) {
-    // Keep the last good list on screen rather than blanking the inbox.
-    if (error.message && /sign in|session/i.test(error.message)) {
-      setInboxAuthNotice(error.message);
-    }
+    // Keep the last good list on screen rather than blanking the inbox, but never
+    // silently: previously only sign-in errors were surfaced, so a 404, a 500 or
+    // a cross-tenant rejection looked exactly like "no new messages".
+    setInboxAuthNotice(
+      `Live inbox unavailable - ${error.message} Showing the last known list.`
+    );
     console.warn('[Live Inbox]', error.message);
     return false;
   }
@@ -401,6 +415,13 @@ function setInboxAuthNotice(message) {
   if (!el) return;
   el.textContent = message;
   el.style.display = 'block';
+}
+
+function clearInboxAuthNotice() {
+  const el = document.getElementById('inbox-auth-notice');
+  if (!el) return;
+  el.textContent = '';
+  el.style.display = 'none';
 }
 
 function initLiveInbox() {

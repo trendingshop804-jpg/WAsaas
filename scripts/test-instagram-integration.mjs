@@ -26,6 +26,15 @@ globalThis.fetch = async (input, init = {}) => {
   const json = (body, status = 200) =>
     new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 
+  // PostgREST returns a bare object (not an array) when the client asks for the
+  // pgrst.object media type, which is what .single() does. Returning an array
+  // there made meta-webhook.js read newLead.id off an array (undefined), so
+  // findOrCreateLead silently returned no id and the conversation step threw.
+  const rawHeaders = init.headers || {};
+  const header = (name) => (typeof rawHeaders.get === 'function' ? rawHeaders.get(name) : (rawHeaders[name] || rawHeaders[name.toLowerCase()] || ''));
+  const isSingle = () => String(header('Accept')).includes('vnd.pgrst.object+json');
+  const shape = (list) => (isSingle() ? (list[0] ?? null) : list);
+
   // Instagram Graph API send / verification
   if (url.includes('graph.facebook.com')) {
     if (url.includes('/messages')) {
@@ -95,7 +104,7 @@ globalThis.fetch = async (input, init = {}) => {
   if (url.includes('/rest/v1/leads')) {
     if ((init.method || 'GET').toUpperCase() === 'POST') {
       state.inserts.push({ table: 'leads', data: JSON.parse(init.body) });
-      return json([{ id: 'lead_ig_1' }]);
+      return json(shape([{ id: 'lead_ig_1' }]), 201);
     }
     return json([]);
   }
