@@ -320,8 +320,9 @@ function initMessages() {
   if (btnCall) {
     btnCall.addEventListener('click', () => {
       const activeName = document.getElementById('conv-chat-name')?.textContent || 'Client';
-      if (typeof handleCallLead === 'function') handleCallLead(activeName, '+91 927 455 8824');
-      else showToast(`Calling ${activeName}...`, 'success');
+      const phone = btnCall.dataset.phone || '';
+      if (typeof handleCallLead === 'function') handleCallLead(activeName, phone);
+      else if (typeof showToast === 'function') showToast(`Calling ${activeName} (${phone})...`, 'success');
     });
   }
   if (btnInfo) {
@@ -366,6 +367,12 @@ function renderConversation(conv) {
   if (headerName)   headerName.textContent = conv.name;
   if (headerAva)    headerAva.textContent = conv.initials;
   if (headerStatus) headerStatus.textContent = `${conv.channel || 'WhatsApp'} · Online`;
+
+  const btnCall = document.getElementById('btn-conv-call');
+  if (btnCall) {
+    btnCall.dataset.phone = conv.phone || conv.key || '';
+    btnCall.dataset.name = conv.name || 'contact';
+  }
 
   // Render chat messages
   if (messagesEl && conv.messages) {

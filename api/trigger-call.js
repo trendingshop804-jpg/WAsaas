@@ -35,7 +35,27 @@ function parseBody(body) {
 }
 
 function normalizePhone(value) {
-  return String(value || '').trim().replace(/[\r\n]/g, '');
+  if (!value) return '';
+  const raw = String(value).trim().replace(/[\r\n\t]/g, '');
+  const hasPlus = raw.startsWith('+');
+  const digits = raw.replace(/\D/g, '');
+  if (!digits) return '';
+
+  // India phone number normalization:
+  // 10 digits starting with 6-9: e.g. 8111986637 -> +918111986637
+  if (digits.length === 10 && /^[6-9]/.test(digits)) {
+    return '+91' + digits;
+  }
+  // 11 digits starting with 0: e.g. 08111986637 -> +918111986637
+  if (digits.length === 11 && digits.startsWith('0')) {
+    return '+91' + digits.slice(1);
+  }
+  // 12 digits starting with 91: e.g. 918111986637 -> +918111986637
+  if (digits.length === 12 && digits.startsWith('91')) {
+    return '+' + digits;
+  }
+
+  return hasPlus ? '+' + digits : digits;
 }
 
 export default async function handler(req, res) {
@@ -80,8 +100,15 @@ export default async function handler(req, res) {
     return res.status(503).json({ success: false, error: 'Call webhook is not configured on the server.' });
   }
 
-  // MacroDroid Webhook Trigger exposes request content through `data`.
+  // MacroDroid Webhook Trigger exposes request content through query parameters.
   webhook.searchParams.set('data', phone);
+  webhook.searchParams.set('phone', phone);
+  webhook.searchParams.set('number', phone);
+  const bareDigits = phone.replace(/\D/g, '');
+  const bare10 = bareDigits.slice(-10);
+  if (bare10.length === 10) {
+    webhook.searchParams.set('bare_phone', bare10);
+  }
   if (name) webhook.searchParams.set('name', name);
 
   const controller = new AbortController();
