@@ -965,6 +965,7 @@ export default async function handler(req, res) {
         dir: toDirection(msg),
         text: pickText(msg),
         time: pickTime(msg),
+        channel: msg.channel || 'whatsapp',
         messageType: msg.message_type || 'text',
         mediaUrl: msg.mediaUrl || msg.media_url || null,
         mediaCaption: msg.media_caption || null,
@@ -977,12 +978,13 @@ export default async function handler(req, res) {
       const ordered = [...msgs].reverse();
       const last = ordered[ordered.length - 1];
       const displayName = nameByDigits.get(normalizePhone(key)) || nameByDigits.get(digitsOnly(key)) || key;
+      const threadChannel = msgs.find(m => m.channel)?.channel || 'whatsapp';
       return {
         key,
         phone: key,
         name: displayName,
         initials: initialsFromName(displayName, key),
-        channel: 'whatsapp',
+        channel: threadChannel,
         preview: last?.text || (last?.messageType === 'text' ? '' : `[${last?.messageType || 'media'}]`),
         time: last?.time || null,
         messages: ordered

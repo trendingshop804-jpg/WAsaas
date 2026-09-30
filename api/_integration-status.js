@@ -62,9 +62,9 @@ async function requestJson(url, options = {}) {
   }
 }
 
-async function checkWhatsApp() {
-  const accessToken = firstEnv('WHATSAPP_ACCESS_TOKEN', 'WA_ACCESS_TOKEN', 'META_ACCESS_TOKEN');
-  const phoneNumberId = firstEnv('WHATSAPP_PHONE_NUMBER_ID', 'PHONE_NUMBER_ID', 'WA_PHONE_NUMBER_ID');
+async function checkWhatsApp(customConfig = {}) {
+  const accessToken = customConfig.accessToken || firstEnv('WHATSAPP_ACCESS_TOKEN', 'WA_ACCESS_TOKEN', 'META_ACCESS_TOKEN');
+  const phoneNumberId = customConfig.phoneNumberId || firstEnv('WHATSAPP_PHONE_NUMBER_ID', 'PHONE_NUMBER_ID', 'WA_PHONE_NUMBER_ID');
   const missing = [];
   if (!accessToken) missing.push('WHATSAPP_ACCESS_TOKEN');
   if (!phoneNumberId) missing.push('WHATSAPP_PHONE_NUMBER_ID');
@@ -78,7 +78,15 @@ async function checkWhatsApp() {
     });
     const latencyMs = Date.now() - startedAt;
     if (!response.ok || payload?.error) {
-      return result('error', `WhatsApp connection failed: ${errorMessage(payload, response)}`, { latencyMs });
+      const errCode = payload?.error?.code;
+      const errMsg = errorMessage(payload, response);
+      if (errCode === 190) {
+        return result('token_expired', 'WhatsApp connection failed: Meta Access Token has expired or been invalidated.', { latencyMs, code: 190 });
+      }
+      if (errCode === 100 || errCode === 200 || errCode === 10) {
+        return result('permission_missing', `WhatsApp connection failed: Messaging permission or Phone ID configuration missing (${errMsg}).`, { latencyMs, code: errCode });
+      }
+      return result('error', `WhatsApp connection failed: ${errMsg}`, { latencyMs, code: errCode || response.status });
     }
 
     const verifiedName = payload.verified_name || payload.display_phone_number || null;
@@ -86,7 +94,9 @@ async function checkWhatsApp() {
       latencyMs,
       provider: 'Meta WhatsApp Cloud API',
       displayName: verifiedName,
-      verifiedName
+      verifiedName,
+      phoneNumberId,
+      qualityRating: payload.quality_rating || 'UNKNOWN'
     });
   } catch (error) {
     return result(error?.code === 'TIMEOUT' ? 'unavailable' : 'error', `WhatsApp connection unavailable: ${error.message}`, {
@@ -95,9 +105,9 @@ async function checkWhatsApp() {
   }
 }
 
-async function checkInstagram() {
-  const accessToken = firstEnv('INSTAGRAM_ACCESS_TOKEN', 'META_INSTAGRAM_ACCESS_TOKEN', 'META_ACCESS_TOKEN');
-  const accountId = firstEnv('INSTAGRAM_BUSINESS_ID', 'INSTAGRAM_ACCOUNT_ID', 'INSTAGRAM_ID', 'INSTAGRAM_PAGE_ID');
+async function checkInstagram(customConfig = {}) {
+  const accessToken = customConfig.accessToken || firstEnv('INSTAGRAM_ACCESS_TOKEN', 'META_INSTAGRAM_ACCESS_TOKEN', 'META_ACCESS_TOKEN');
+  const accountId = customConfig.accountId || firstEnv('INSTAGRAM_BUSINESS_ID', 'INSTAGRAM_ACCOUNT_ID', 'INSTAGRAM_ID', 'INSTAGRAM_PAGE_ID');
   const missing = [];
   if (!accessToken) missing.push('INSTAGRAM_ACCESS_TOKEN');
   if (!accountId) missing.push('INSTAGRAM_BUSINESS_ID');
@@ -111,13 +121,22 @@ async function checkInstagram() {
     });
     const latencyMs = Date.now() - startedAt;
     if (!response.ok || payload?.error) {
-      return result('error', `Instagram connection failed: ${errorMessage(payload, response)}`, { latencyMs });
+      const errCode = payload?.error?.code;
+      const errMsg = errorMessage(payload, response);
+      if (errCode === 190) {
+        return result('token_expired', 'Instagram connection failed: Meta Access Token has expired or been invalidated.', { latencyMs, code: 190 });
+      }
+      if (errCode === 100 || errCode === 200 || errCode === 10) {
+        return result('permission_missing', `Instagram connection failed: Messaging permission or Page ID missing (${errMsg}).`, { latencyMs, code: errCode });
+      }
+      return result('error', `Instagram connection failed: ${errMsg}`, { latencyMs, code: errCode || response.status });
     }
 
     return result('connected', 'Instagram Graph API responded successfully.', {
       latencyMs,
       provider: 'Meta Instagram Graph API',
-      displayName: payload.username || payload.name || null
+      displayName: payload.username || payload.name || null,
+      accountId
     });
   } catch (error) {
     return result(error?.code === 'TIMEOUT' ? 'unavailable' : 'error', `Instagram connection unavailable: ${error.message}`, {

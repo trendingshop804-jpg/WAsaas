@@ -497,24 +497,39 @@ function initMessageComposer() {
       input.value = '';
 
       try {
-        if (!activePhone) throw new Error('No phone number for this conversation.');
-
+        const activeChannel = activeItem?.dataset.channel || conv.channel || 'whatsapp';
         const token = window.NB_AUTH ? await window.NB_AUTH.getAccessToken() : null;
-        if (!token) throw new Error('Sign in to send WhatsApp messages.');
+        if (!token) throw new Error(`Sign in to send ${activeChannel === 'instagram' ? 'Instagram' : 'WhatsApp'} messages.`);
 
-        const response = await fetch('/api/messages', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`
-          },
-          body: JSON.stringify({
-            phone: activePhone,
-            text,
-            // Stable key so a retry of the same send is de-duplicated server-side.
-            clientMessageId: `${activePhone}:${text.slice(0, 40)}:${Date.now()}`
-          })
-        });
+        let response;
+        if (activeChannel === 'instagram') {
+          response = await fetch('/api/instagram?action=send_message', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`
+            },
+            body: JSON.stringify({
+              recipientId: activePhone || conv.key,
+              messageText: text,
+              conversationId: conv.id || null
+            })
+          });
+        } else {
+          if (!activePhone) throw new Error('No phone number for this conversation.');
+          response = await fetch('/api/messages', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`
+            },
+            body: JSON.stringify({
+              phone: activePhone,
+              text,
+              clientMessageId: `${activePhone}:${text.slice(0, 40)}:${Date.now()}`
+            })
+          });
+        }
 
         let payload = {};
         try { payload = await response.json(); } catch (_) {}
@@ -533,7 +548,9 @@ function initMessageComposer() {
         const previewEl = activeItem?.querySelector('.conv-preview');
         if (previewEl) previewEl.textContent = conv.preview;
         showToast(
-          payload.usedTemplate ? 'Sent using approved template' : 'Message sent to WhatsApp',
+          activeChannel === 'instagram'
+            ? 'Message sent to Instagram'
+            : (payload.usedTemplate ? 'Sent using approved template' : 'Message sent to WhatsApp'),
           'success'
         );
         refreshLiveInbox();
