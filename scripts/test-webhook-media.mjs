@@ -411,6 +411,29 @@ await test('delivery receipts update outbound message statuses in database', asy
   assert.equal(msgUpdates[1].body.status, 'read');
 });
 
+await test('an inbound message after a receipt change in the same Meta delivery is stored', async () => {
+  state.inserts.length = 0;
+  state.updates.length = 0;
+  state.selectResult = [];
+  state.leadsInDb = [];
+  state.conversationsInDb = [];
+  state.connectionsInDb = [{ organization_id: 'org_1', phone_number_id: '1234567890', is_active: true, access_token: 'test-tenant-token' }];
+
+  const batch = {
+    entry: [{
+      changes: [
+        { value: { metadata: { phone_number_id: '1234567890' }, statuses: [{ id: 'wamid.OLD', status: 'delivered' }] } },
+        textPayload('message after receipt', 'MSG_AFTER_RECEIPT').entry[0].changes[0],
+      ],
+    }],
+  };
+  const res = mockRes();
+  await webhook({ method: 'POST', body: batch }, res);
+
+  assert.equal(res.statusCode, 200);
+  assert.ok(state.inserts.some(i => i.wa_message_id === 'wamid.MSG_AFTER_RECEIPT'), 'inbound message in a later change must be stored');
+  assert.ok(state.updates.some(u => u.table === 'messages' && u.body.status === 'delivered'), 'receipt in the first change must still be applied');
+});
 await test('duplicate delivery is skipped without re-downloading media', async () => {
   state.mediaDownload.length = 0;
   state.inserts.length = 0;

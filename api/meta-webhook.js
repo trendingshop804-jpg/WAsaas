@@ -945,11 +945,17 @@ export default async function handler(req, res) {
       // ---------------------------------------------------------------------
       // Branch B: WhatsApp Webhook Payload (entry[0].changes[0].value.messages)
       // ---------------------------------------------------------------------
-      const entry = payload?.entry?.[0];
-      const change = entry?.changes?.[0];
-      const value = change?.value;
+      // Meta can combine a receipt and a later inbound event in one delivery.
+      // Do not acknowledge the whole delivery after inspecting only change[0].
+      const whatsappValues = (payload?.entry || [])
+        .flatMap(entry => (entry?.changes || []).map(change => change?.value))
+        .filter(Boolean);
+      const value = whatsappValues.find(candidate => Array.isArray(candidate?.messages) && candidate.messages.length > 0)
+        || whatsappValues[0];
       const messages = value?.messages;
-      const statuses = value?.statuses;
+      const statuses = whatsappValues.flatMap(candidate =>
+        Array.isArray(candidate?.statuses) ? candidate.statuses : []
+      );
       const phoneNumberId = value?.metadata?.phone_number_id;
 
       // Delivery / read receipts for outbound messages.
