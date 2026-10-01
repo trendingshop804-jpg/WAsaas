@@ -207,6 +207,38 @@ const call = async (headers) => {
   return res;
 };
 
+await test('the number is the only dialable value in the query string', async () => {
+  macroCalls = [];
+  const res = await call({ authorization: 'Bearer mock-session-token' });
+  assert.equal(res.statusCode, 200, JSON.stringify(res.payload));
+  const u = new URL(macroCalls[0].url);
+  const keys = [...u.searchParams.keys()];
+  // Every alias must resolve to exactly the one normalized number.
+  for (const key of ['data', 'phone', 'number']) {
+    assert.equal(u.searchParams.get(key), '+918111986637', `${key} is not the normalized number`);
+  }
+  assert.equal(u.searchParams.get('bare_phone'), '8111986637');
+  // No parameter may smuggle a second copy of the number inside free text:
+  // a macro pointed at `name` used to dial "WhatsApp Contact (+91 81119 86637)".
+  const name = u.searchParams.get('name');
+  if (name) assert.ok(!/\d/.test(name), `name still contains digits: ${JSON.stringify(name)}`);
+  assert.equal(new Set(keys).size, keys.length, 'duplicate query keys would be ambiguous');
+});
+
+await test('a pre-existing query string on the configured URL is not merged', async () => {
+  macroCalls = [];
+  const { default: handler } = await loadHandler({
+    MACRODROID_WEBHOOK_URL: `${MACRO_URL}?stale=1&leftover=2`
+  });
+  const res = mockRes();
+  await handler({ method: 'POST', headers: { authorization: 'Bearer mock-session-token' }, query: {}, body: { name: NAME, phone: PHONE } }, res);
+  assert.equal(res.statusCode, 200, JSON.stringify(res.payload));
+  const u = new URL(macroCalls[0].url);
+  assert.equal(u.searchParams.get('stale'), null, 'a stale parameter survived into the dial request');
+  assert.equal(u.searchParams.get('leftover'), null);
+  assert.equal(u.searchParams.get('data'), '+918111986637');
+});
+
 await test('a valid session triggers the MacroDroid webhook', async () => {
   macroCalls = [];
   const res = await call({ authorization: 'Bearer mock-session-token' });

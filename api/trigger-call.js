@@ -94,13 +94,27 @@ export default async function handler(req, res) {
     if (!configured) throw new Error('MACRODROID_WEBHOOK_URL is not configured.');
     webhook = new URL(configured);
     if (webhook.protocol !== 'https:') throw new Error('MacroDroid webhook must use HTTPS.');
+    // A pre-existing query string would be concatenated with ours, and a macro
+    // that reads the request would then dial the merged string. Clear it so the
+    // only query parameters present are the ones set below.
+    webhook.search = '';
   } catch (error) {
     // Log the reason only — never the URL itself.
     console.error('[MacroDroid Webhook Config Error]', error.message);
     return res.status(503).json({ success: false, error: 'Call webhook is not configured on the server.' });
   }
 
+  // The display name is attacker-influenced free text and, in this CRM, already
+  // embeds the number ("WhatsApp Contact (+91 81119 86637)"). Passing it through
+  // verbatim put a second copy of the number into the query string, so a macro
+  // reading `name` dialled the label instead of the number. Strip every digit
+  // from it: the name is a label, never a dial target.
+  const safeName = name.replace(/[0-9+()\s-]/g, '').trim().slice(0, 60);
+  if (safeName) webhook.searchParams.set('name', encodeURIComponent(safeName));
+
   // MacroDroid Webhook Trigger exposes request content through query parameters.
+  // The number is published under several aliases so a macro can read whichever
+  // it was pointed at, but `data` is the canonical one.
   webhook.searchParams.set('data', phone);
   webhook.searchParams.set('phone', phone);
   webhook.searchParams.set('number', phone);
@@ -109,7 +123,6 @@ export default async function handler(req, res) {
   if (bare10.length === 10) {
     webhook.searchParams.set('bare_phone', bare10);
   }
-  if (name) webhook.searchParams.set('name', name);
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
