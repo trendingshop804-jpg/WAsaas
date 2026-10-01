@@ -38,15 +38,23 @@ const NB_AUTH = (() => {
     return initPromise;
   }
 
-  /** Return the current user's access token, or null when signed out. */
+  /**
+   * Return the current user's access token, or null when signed out.
+   *
+   * This previously fell back to the literal 'dev-demo-jwt-token' when no
+   * session existed. That sent a hardcoded, invalid credential to every
+   * protected endpoint, so the server correctly answered 401 and the UI
+   * reported it as an expired session rather than "you are signed out".
+   * A signed-out caller now gets null and the caller decides what to show.
+   */
   async function getAccessToken() {
     try {
       const sb = await getClient();
       const { data } = await sb.auth.getSession();
-      return data?.session?.access_token || 'dev-demo-jwt-token';
+      return data?.session?.access_token || null;
     } catch (err) {
       console.warn('[auth] getAccessToken failed:', err.message);
-      return 'dev-demo-jwt-token';
+      return null;
     }
   }
 
@@ -56,16 +64,38 @@ const NB_AUTH = (() => {
     if (!token) {
       const err = new Error('Not signed in');
       err.status = 401;
+      err.code = 'AUTH_REQUIRED';
       throw err;
     }
-    return fetch(path, {
+    const response = await fetch(path, {
       ...options,
       headers: {
         'Content-Type': 'application/json',
+        Accept: 'application/json',
         Authorization: `Bearer ${token}`,
         ...(options.headers || {})
       }
     });
+    // An expired token must be retried once against a refreshed session,
+    // otherwise a long-lived tab logs the user out of every view.
+    if (response.status === 401) {
+      const sb = await getClient();
+      if (sb?.auth?.refreshSession) {
+        const { data, error } = await sb.auth.refreshSession();
+        if (!error && data?.session?.access_token) {
+          return fetch(path, {
+            ...options,
+            headers: {
+              'Content-Type': 'application/json',
+              Accept: 'application/json',
+              Authorization: `Bearer ${data.session.access_token}`,
+              ...(options.headers || {})
+            }
+          });
+        }
+      }
+    }
+    return response;
   }
 
   function buildOverlay() {

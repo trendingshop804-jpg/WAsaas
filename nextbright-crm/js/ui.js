@@ -373,10 +373,14 @@ async function fetchLiveConversations() {
   // 500 is the server's own hard cap (Math.min(limit, 500)). Requesting less
   // silently truncated the Inbox: 348 rows / 28 threads collapsed to 200 rows /
   // 17 threads at limit=200, so whole conversations vanished with no error.
-  const response = await fetch('/api/messages?limit=500', {
-    cache: 'no-store',
-    headers: { Accept: 'application/json', Authorization: `Bearer ${token}` }
-  });
+  // Routed through NB_AUTH.apiFetch, which attaches the live token and retries
+  // once against a refreshed session when the token has expired.
+  const response = window.NB_AUTH?.apiFetch
+    ? await window.NB_AUTH.apiFetch('/api/messages?limit=500', { cache: 'no-store' })
+    : await fetch('/api/messages?limit=500', {
+      cache: 'no-store',
+      headers: { Accept: 'application/json', Authorization: `Bearer ${token}` }
+    });
   if (response.status === 401) throw new Error('Your session expired. Please sign in again.');
   if (!response.ok) throw new Error(`Messages API returned HTTP ${response.status}`);
   const payload = await response.json();
@@ -523,18 +527,20 @@ function initMessageComposer() {
           });
         } else {
           if (!activePhone) throw new Error('No phone number for this conversation.');
-          response = await fetch('/api/messages', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${token}`
-            },
-            body: JSON.stringify({
-              phone: activePhone,
-              text,
-              clientMessageId: `${activePhone}:${text.slice(0, 40)}:${Date.now()}`
-            })
+          const sendBody = JSON.stringify({
+            phone: activePhone,
+            text,
+            clientMessageId: `${activePhone}:${text.slice(0, 40)}:${Date.now()}`
           });
+          // Same authenticated path as the inbox read, so a send and a read can
+          // never disagree about who is signed in.
+          response = window.NB_AUTH?.apiFetch
+            ? await window.NB_AUTH.apiFetch('/api/messages', { method: 'POST', body: sendBody })
+            : await fetch('/api/messages', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+              body: sendBody
+            });
         }
 
         let payload = {};

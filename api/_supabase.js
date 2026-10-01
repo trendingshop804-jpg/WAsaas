@@ -56,6 +56,16 @@ export function getBearerToken(req) {
  * Validate the bearer JWT with the ANON client (network call to GoTrue).
  * Returns { user } on success, or { error, status } on failure.
  */
+/**
+ * Short, safe description of an authentication outcome for server logs.
+ * Records WHETHER a credential was presented and whether it verified. The
+ * token itself is never included, and no header value is ever logged.
+ */
+function authLogFields(req) {
+  const present = Boolean(getBearerToken(req));
+  return { authHeaderPresent: present };
+}
+
 export async function getAuthenticatedUser(req) {
   const { url, publishableKey } = getSupabaseServerConfig();
   const token = getBearerToken(req);
@@ -65,22 +75,42 @@ export async function getAuthenticatedUser(req) {
     // A token was presented, so it must be the token that decides the identity.
     // If we cannot validate it we must not substitute a different user for it.
     if (!url || !publishableKey) {
+      console.warn('[getAuthenticatedUser] verification unavailable', authLogFields(req));
       return { error: 'Authentication unavailable. Please retry.', status: 503 };
     }
     try {
       const publicClient = createClient(url, publishableKey, { auth: { persistSession: false, autoRefreshToken: false } });
       const { data, error } = await publicClient.auth.getUser(token);
-      if (!error && data?.user) return { user: data.user };
-      console.warn('[getAuthenticatedUser] token rejected:', error?.message || 'no user returned');
+      if (!error && data?.user) {
+        // userId only. Never the token, never the header value.
+        console.log('[getAuthenticatedUser] token verified', {
+          ...authLogFields(req),
+          verified: true,
+          userId: data.user.id
+        });
+        return { user: data.user };
+      }
+      console.warn('[getAuthenticatedUser] token rejected', {
+        ...authLogFields(req),
+        verified: false,
+        reason: error?.message || 'no user returned'
+      });
     } catch (e) {
       console.warn('[getAuthenticatedUser] GoTrue token validation notice:', e.message);
     }
     // An expired, forged or revoked token ends here. Falling through to any
     // other identity would silently promote the caller to that user's access.
-    return { error: 'Authentication required. Please sign in.', status: 401 };
+    // The client distinguishes "expired, sign in again" from "never signed in".
+    return {
+      error: 'Unauthorized',
+      message: 'Your session has expired. Please sign in again.',
+      status: 401,
+      code: 'UNAUTHORIZED'
+    };
   }
 
   // No token at all: the request is unauthenticated and must stay that way.
+  console.warn('[getAuthenticatedUser] no credential presented', authLogFields(req));
   // The only exception is an explicit, opt-in local dev switch. It requires an
   // env flag AND a non-production NODE_ENV, so it cannot be reached on a
   // deployed environment no matter how the server is configured.
@@ -101,7 +131,12 @@ export async function getAuthenticatedUser(req) {
     return { error: 'ALLOW_DEV_AUTH is set but no organization member was found.', status: 503 };
   }
 
-  return { error: 'Authentication required. Please sign in.', status: 401 };
+  return {
+    error: 'Unauthorized',
+    message: 'A valid signed-in session is required.',
+    status: 401,
+    code: 'AUTH_REQUIRED'
+  };
 }
 
 /**
@@ -145,9 +180,15 @@ export async function getUserOrganizationIds(userId) {
  * after having written the error response.
  */
 export async function requireOrgAccess(req, res, requestedOrganizationId) {
-  const { user, error, status } = await getAuthenticatedUser(req);
+  const { user, error, status, code, message } = await getAuthenticatedUser(req);
   if (!user) {
-    res.status(status || 401).json({ error });
+    // `message` distinguishes "no session" from "session expired" for the
+    // client. `code` is stable and machine-readable. Neither leaks anything.
+    res.status(status || 401).json({
+      error: error || 'Unauthorized',
+      message: message || 'A valid signed-in session is required.',
+      code: code || 'AUTH_REQUIRED'
+    });
     return null;
   }
 
@@ -170,11 +211,29 @@ export async function requireOrgAccess(req, res, requestedOrganizationId) {
 
   if (requestedOrganizationId) {
     if (!ids.includes(requestedOrganizationId)) {
-      res.status(403).json({ error: 'You do not have access to this organization.' });
+      // The client asked for an organization they do not belong to. Refuse and
+      // log the attempt without echoing any tenant data.
+      console.warn('[requireOrgAccess] cross-tenant request refused', {
+        userId: user.id,
+        membershipCount: ids.length
+      });
+      res.status(403).json({
+        error: 'Forbidden',
+        message: 'You do not have access to this organization.',
+        code: 'CROSS_TENANT_DENIED'
+      });
       return null;
     }
     organizationId = requestedOrganizationId;
   }
+
+  // The resolved tenant is the single source of truth for every downstream
+  // query. Logged for debugging; the id itself is not a secret.
+  console.log('[requireOrgAccess] access granted', {
+    userId: user.id,
+    organizationId,
+    membershipCount: ids.length
+  });
 
   return {
     user,

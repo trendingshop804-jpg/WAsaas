@@ -108,7 +108,11 @@ await test('a real API client still gets the original JSON 401', async () => {
   const res = await call(API);
   assert.equal(res.statusCode, 401);
   assert.ok(res.payload, 'expected a JSON body');
-  assert.match(res.payload.error, /Authentication required/i);
+  // The body is now the clearer { error: 'Unauthorized', message, code } shape
+  // so the client can tell "never signed in" from "session expired".
+  assert.equal(res.payload.error, 'Unauthorized');
+  assert.ok(res.payload.message, 'expected a human-readable message');
+  assert.ok(res.payload.code, 'expected a machine-readable code');
   assert.equal(res.body, null, 'must not send HTML to an API client');
 });
 
@@ -138,7 +142,8 @@ await test('a browser navigation with an INVALID token still gets 401 JSON, not 
   const res = await call({ ...NAV, authorization: 'Bearer not-a-real-token' });
   assert.equal(res.statusCode, 401);
   assert.ok(res.payload, 'a rejected token must get the JSON error');
-  assert.match(res.payload.error, /Authentication required/i);
+  assert.equal(res.payload.code, 'UNAUTHORIZED', 'a presented-but-rejected token is an expiry/rejection, not a first-time sign-in');
+  assert.equal(res.body, null, 'must not send HTML when a token was supplied');
 });
 
 await test('sec-fetch-mode=cors with text/html does not unlock anything', async () => {

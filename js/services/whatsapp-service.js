@@ -432,17 +432,27 @@ class WhatsAppService {
     // which validates the session, resolves the organization server-side and
     // only then uses the service-role client.
     const sessionHeaders = window.supabaseConfig?.getSessionHeaders?.() || null;
-    if (sessionHeaders && leadId) {
+    if ((sessionHeaders || window.apiClient) && leadId) {
       try {
-        const response = await fetch('/api/messages', {
-          method: 'POST',
-          headers: sessionHeaders,
-          body: JSON.stringify({
-            phone: lead?.phone || '',
-            text,
-            clientMessageId: `legacy:${leadId}:${Date.now()}`
+        // Central helper so the token is live/refreshed, same as the inbox read.
+        const response = window.apiClient
+          ? await window.apiClient.authenticatedFetch('/api/messages', {
+            method: 'POST',
+            body: JSON.stringify({
+              phone: lead?.phone || '',
+              text,
+              clientMessageId: `legacy:${leadId}:${Date.now()}`
+            })
           })
-        });
+          : await fetch('/api/messages', {
+            method: 'POST',
+            headers: sessionHeaders,
+            body: JSON.stringify({
+              phone: lead?.phone || '',
+              text,
+              clientMessageId: `legacy:${leadId}:${Date.now()}`
+            })
+          });
         if (!response.ok) {
           const body = await response.json().catch(() => ({}));
           throw new Error(body.error || `HTTP ${response.status}`);
@@ -602,7 +612,13 @@ class WhatsAppService {
         const qs = organizationId
           ? '?limit=500&organization_id=' + encodeURIComponent(organizationId)
           : '?limit=500';
-        const res = await fetch('/api/messages' + qs, { headers: sessionHeaders });
+        // Routed through the central helper: it resolves a LIVE session and
+        // refreshes an expired one. The old getSessionHeaders() path read a raw
+        // localStorage value with no expiry check, so a signed-in user whose
+        // token had expired was rejected with a bare 401 and an empty inbox.
+        const res = window.apiClient
+          ? await window.apiClient.authenticatedFetch('/api/messages' + qs)
+          : await fetch('/api/messages' + qs, { headers: sessionHeaders });
         if (res.status === 401) {
           console.warn('[WhatsAppService] Session expired; skipping inbound sync.');
           return;
@@ -619,7 +635,13 @@ class WhatsAppService {
           rawMessages = data.messages;
         }
       } catch (fErr) {
-        console.error('Local /api/messages fetch failed:', fErr.message);
+        // AuthRequiredError means "not signed in" - the helper deliberately did
+        // not send a request. Anything else is a real failure worth surfacing.
+        if (fErr?.code === 'AUTH_REQUIRED' || fErr?.name === 'AuthRequiredError') {
+          console.warn('[WhatsAppService] Not signed in; skipping inbound sync.');
+        } else {
+          console.error('Local /api/messages fetch failed:', fErr.message);
+        }
       }
 
       if (rawMessages.length === 0) {

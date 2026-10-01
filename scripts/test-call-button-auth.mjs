@@ -254,7 +254,8 @@ await test('no session -> 401 and MacroDroid is NOT called', async () => {
   macroCalls = [];
   const res = await call({});
   assert.equal(res.statusCode, 401);
-  assert.match(res.payload.error, /Authentication required/i);
+  assert.equal(res.payload.code, 'AUTH_REQUIRED', 'no credential at all');
+  assert.match(res.payload.message, /signed-in session is required/i);
   assert.equal(macroCalls.length, 0);
 });
 
