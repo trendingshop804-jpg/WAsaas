@@ -10,7 +10,7 @@
 //   * Messages whose organization_id is NULL are never returned. Their tenant
 //     ownership is unknown, so they stay server-side rather than leaking into
 //     the wrong tenant.
-import { createSupabaseAdminClient, missingSupabaseServerConfig, requireOrgAccess } from './_supabase.js';
+import { createSupabaseAdminClient, getBearerToken, missingSupabaseServerConfig, requireOrgAccess } from './_supabase.js';
 import { decryptToken } from './_crypto.js';
 
 const SIGNED_URL_TTL = 60 * 60 * 24; // 24 hours
@@ -18,6 +18,87 @@ const DEFAULT_LIMIT = 200;
 const GRAPH_VERSION = process.env.WHATSAPP_GRAPH_VERSION || 'v21.0';
 const SERVICE_WINDOW_MS = 24 * 60 * 60 * 1000; // WhatsApp 24h customer service window
 const DUPLICATE_WINDOW_MS = 60 * 1000;           // duplicate-suppression window
+
+/**
+ * True when the request came from someone typing/pasting the URL into a browser
+ * address bar rather than from an API client.
+ *
+ * A browser navigation advertises text/html and no XHR/fetch marker; fetch() and
+ * the Supabase client both send Accept: application/json.
+ */
+function isBrowserNavigation(req) {
+  const accept = String(req?.headers?.accept || req?.headers?.Accept || '');
+  if (!/text\/html/i.test(accept)) return false;
+  const requestedWith = String(req?.headers?.['sec-fetch-mode'] || req?.headers?.['Sec-Fetch-Mode'] || '');
+  // sec-fetch-mode= navigate is the definitive signal when the browser sends it.
+  if (requestedWith) return requestedWith.toLowerCase() === 'navigate';
+  return true;
+}
+
+/**
+ * Explain, in a browser, how to actually reach this data.
+ *
+ * Deliberately contains no tenant data: no messages, leads, conversations,
+ * organization names, ids or counts. It is a static page, served with the same
+ * 401 status as the JSON error, so nothing here can be mistaken for access.
+ */
+function sendAuthHelpPage(res) {
+  const body = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Sign in required - Messages API</title>
+<style>
+  body{font:15px/1.6 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#0f1115;color:#e6e6e6;margin:0;padding:40px 20px}
+  .card{max-width:680px;margin:0 auto;background:#171a21;border:1px solid #262b36;border-radius:12px;padding:28px 32px}
+  h1{font-size:20px;margin:0 0 6px}
+  .sub{color:#9aa4b2;margin:0 0 22px}
+  .pill{display:inline-block;background:#3a1d22;border:1px solid #7f2b34;color:#ff9aa4;border-radius:999px;padding:3px 12px;font-size:12px;font-weight:600;margin-bottom:14px}
+  h2{font-size:14px;text-transform:uppercase;letter-spacing:.06em;color:#9aa4b2;margin:22px 0 8px}
+  ol,ul{margin:0;padding-left:22px}
+  li{margin:6px 0}
+  code,pre{background:#0b0d11;border:1px solid #262b36;border-radius:6px;font-family:ui-monospace,Menlo,Consolas,monospace}
+  code{padding:1px 6px;font-size:13px}
+  pre{padding:12px 14px;overflow:auto;font-size:12.5px;line-height:1.5;margin:0}
+  .note{color:#9aa4b2;font-size:13px;margin-top:22px;border-top:1px solid #262b36;padding-top:16px}
+</style></head>
+<body><div class="card">
+  <div class="pill">HTTP 401 - Unauthorized</div>
+  <h1>This endpoint needs a signed-in session</h1>
+  <p class="sub">You opened the API URL directly in a browser. That sends no
+  <code>Authorization</code> header, so the request is correctly rejected.</p>
+
+  <h2>To read your messages</h2>
+  <ol>
+    <li>Sign in to the CRM.</li>
+    <li>Open the <strong>Messages</strong> / Inbox view.</li>
+    <li>The page calls this endpoint for you and sends your session token.</li>
+  </ol>
+
+  <h2>To call it from code</h2>
+  <p>Send the signed-in user's access token as a bearer credential:</p>
+  <pre>curl -H "Authorization: Bearer &lt;access_token&gt;" \\
+     "https://YOUR-DOMAIN/api/messages?limit=200"</pre>
+
+  <h2>To check it from the browser console</h2>
+  <p>While signed in on the CRM, open DevTools and run:</p>
+  <pre>const t = await window.NB_AUTH.getAccessToken();
+const r = await fetch('/api/messages?limit=200', {
+  headers: { Authorization: 'Bearer ' + t }
+});
+console.log('HTTP', r.status, (await r.json()).conversations?.length, 'threads');</pre>
+
+  <p class="note">This endpoint is tenant-scoped: it only ever returns data for
+  the organization the signed-in user belongs to. Messages with an unknown owner
+  are never returned. This page intentionally shows no message, lead, or
+  organization data.</p>
+</div></body></html>`;
+
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-store');
+  // Still 401. The status is the machine-readable part of the contract.
+  return res.status(401).send(body);
+}
 
 // ---------------------------------------------------------------------------
 // CORS
@@ -458,6 +539,20 @@ export default async function handler(req, res) {
 
   // ---- Authentication + organization membership ------------------------
   const requestedOrg = (req.query && req.query.organization_id) || null;
+
+  // Someone who opens this URL in a browser tab sends no Authorization header,
+  // so they get a bare {"error":"Authentication required."} with no idea what to
+  // do. When the request is clearly a page navigation rather than an API call,
+  // answer with a short explanation instead.
+  //
+  // This is a presentation change only. The status stays 401, no message,
+  // lead, conversation or organization data is included, and every real API
+  // client still receives the same JSON body as before. The endpoint remains
+  // fully protected by requireOrgAccess() below.
+  if (isBrowserNavigation(req) && !getBearerToken(req)) {
+    return sendAuthHelpPage(res);
+  }
+
   const access = await requireOrgAccess(req, res, requestedOrg);
   if (!access) return;
   const organizationId = access.organizationId;
