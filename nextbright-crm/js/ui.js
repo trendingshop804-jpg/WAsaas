@@ -757,24 +757,21 @@ const integrationDefinitions = {
   },
   twilio: {
     title: 'Twilio Voice Calls',
-    subtitle: 'Twilio credentials are read from the server environment. The fields below are a local reference only and are never sent anywhere.',
-    // Server-side deployment secrets. These cannot be set from the browser:
-    // the server reads them from the process environment, and the auth token is
-    // far too sensitive to keep in localStorage. Rendered as guidance instead
-    // of an input, and excluded from what gets persisted.
+    subtitle: 'Connect your Twilio account to enable voice calling. Credentials are encrypted on the server and scoped to your organization.',
+    // Credentials are POSTed to the server, which encrypts them before storing
+    // them. The browser never keeps the auth token, and no read path returns it.
     serverManaged: true,
+    saveEndpoint: '/api/integration-status',
     envVars: {
       'account-sid': 'TWILIO_ACCOUNT_SID',
       'auth-token': 'TWILIO_AUTH_TOKEN',
       'from-number': 'TWILIO_FROM_NUMBER'
     },
-    setupHint:
-      'In Vercel: Settings > Environment Variables, add the names on the right for all environments, then redeploy. The status badge polls every 30s and will turn green once the server can reach your Twilio account.',
     fields: [
-      { id: 'account-sid', label: 'Twilio Account SID', placeholder: 'ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx', serverEnv: true },
-      { id: 'auth-token', label: 'Auth Token', type: 'password', placeholder: 'Your Twilio auth token', serverEnv: true },
-      { id: 'from-number', label: 'Caller number', placeholder: '+91 98765 43210', serverEnv: true },
-      { id: 'region', label: 'API region', type: 'select', options: ['US1', 'IE1', 'IN1'] }
+      { id: 'account-sid', label: 'Twilio Account SID', placeholder: 'ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx', help: 'Starts with AC, then 32 hex characters.' },
+      { id: 'auth-token', label: 'Auth Token', type: 'password', placeholder: 'Your Twilio auth token', help: 'Encrypted before it is stored. Leave blank to keep the saved token.' },
+      { id: 'from-number', label: 'Caller number', placeholder: '+15551234567', help: 'A Twilio number calls are placed from. Optional.' },
+      { id: 'region', label: 'API region', type: 'select', options: ['US1', 'IE1', 'IN1', 'AU1', 'JP1', 'BR1', 'DE1', 'SG1'] }
     ]
   },
   stripe: {
@@ -989,32 +986,9 @@ function openIntegrationEditor(key) {
     label.htmlFor = `integration-${field.id}`;
     wrapper.appendChild(label);
 
-    // Server-managed credentials are shown as the exact variable to set, never
-    // as a text box. A box would collect the secret and silently discard it,
-    // which is what made this status impossible to clear.
-    if (field.serverEnv) {
-      const envName = definition.envVars?.[field.id] || field.id;
-      const readOnly = document.createElement('input');
-      readOnly.type = 'text';
-      readOnly.className = 'form-input';
-      readOnly.id = `integration-${field.id}`;
-      readOnly.name = field.id;
-      readOnly.readOnly = true;
-      readOnly.tabIndex = -1;
-      readOnly.style.opacity = '0.75';
-      readOnly.style.fontFamily = 'ui-monospace, SFMono-Regular, Menlo, monospace';
-      readOnly.value = envName;
-      wrapper.appendChild(readOnly);
-
-      const help = document.createElement('span');
-      help.className = 'integration-field-help';
-      help.textContent = 'Set on the server as this environment variable. Never stored in this browser.';
-      wrapper.appendChild(help);
-
-      fieldsWrap.appendChild(wrapper);
-      return;
-    }
-
+    // Credential fields are real inputs again: the values are POSTed to the
+    // server, which encrypts them. Only a previously-saved value is pre-filled,
+    // and never the secret itself - it is not returned by any read path.
     let input;
     if (field.type === 'select') {
       input = document.createElement('select');
@@ -1068,42 +1042,95 @@ function initIntegrationEditor() {
     if (event.target === modal) close();
   });
 
-  document.getElementById('integration-save-btn')?.addEventListener('click', () => {
+  document.getElementById('integration-save-btn')?.addEventListener('click', async event => {
     const key = keyInput.value;
     const definition = integrationDefinitions[key];
     if (!definition || !form.reportValidity()) return;
+
+    const button = event.currentTarget;
     const values = {};
     fieldsWrap.querySelectorAll('input, select').forEach(input => {
       const field = definition.fields.find(f => f.id === input.name);
-      // Never persist a credential, and never persist a server-managed value:
-      // both would either leak a secret into localStorage or imply the server
-      // was configured when it was not.
-      if (field?.serverEnv || field?.type === 'password') return;
+      // A credential is sent to the server for integrations that have a save
+      // endpoint, but it is never written to localStorage under any condition.
+      if (field?.type === 'password' && !definition.saveEndpoint) return;
       values[input.name] = input.value.trim();
     });
+
+    if (definition.saveEndpoint) {
+      // Real save: the server encrypts and stores it, scoped to this user's org.
+      button.disabled = true;
+      const original = button.innerHTML;
+      button.innerHTML = '<i data-feather="loader"></i> Saving...';
+      if (typeof feather !== 'undefined') feather.replace();
+      markIntegrationChecking(key);
+      try {
+        const token = window.NB_AUTH ? await window.NB_AUTH.getAccessToken() : null;
+        if (!token) throw new Error('Sign in to save integration credentials.');
+
+        const response = await fetch(definition.saveEndpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ integration: key, ...values })
+        });
+        const payload = await response.json().catch(() => ({}));
+
+        if (!response.ok || !payload.success) {
+          throw new Error(payload.error || `Save failed with HTTP ${response.status}.`);
+        }
+
+        // Trust the server's own live verdict, not the click.
+        if (payload.status) setIntegrationStatus(key, payload.status);
+
+        // Clear the token box so the secret is not left sitting in the DOM.
+        const tokenInput = fieldsWrap.querySelector('input[name="authToken"], input[type="password"]');
+        if (tokenInput) tokenInput.value = '';
+
+        close();
+        document.querySelectorAll(`[data-integration="${key}"]`).forEach(btn => {
+          btn.innerHTML = '<i data-feather="edit-2"></i> Edit';
+        });
+        if (typeof feather !== 'undefined') feather.replace();
+        void fetchIntegrationStatuses([key]);
+        showToast(
+          payload.status?.status === 'connected'
+            ? `${definition.title} connected.`
+            : `${definition.title} saved. ${payload.status?.message || ''}`,
+          payload.status?.status === 'connected' ? 'success' : 'error'
+        );
+        return;
+      } catch (error) {
+        button.disabled = false;
+        button.innerHTML = original;
+        if (typeof feather !== 'undefined') feather.replace();
+        showToast(`${definition.title}: ${error.message}`, 'error');
+        void fetchIntegrationStatuses([key]);
+        return;
+      }
+    }
+
+    // Integrations with no server-side store keep the previous local behaviour.
+    const localOnly = {};
+    Object.entries(values).forEach(([fieldId, value]) => {
+      const field = definition.fields.find(f => f.id === fieldId);
+      if (field?.type === 'password' || field?.serverEnv) return;
+      localOnly[fieldId] = value;
+    });
     const settings = readIntegrationSettings();
-    settings[key] = values;
+    settings[key] = localOnly;
     const saved = writeIntegrationSettings(settings);
     if (!saved) {
       showToast('Could not save settings in this browser.', 'error');
       return;
     }
-    document.querySelectorAll(`[data-integration="${key}"]`).forEach(button => {
-      button.innerHTML = '<i data-feather="edit-2"></i> Edit';
+    document.querySelectorAll(`[data-integration="${key}"]`).forEach(btn => {
+      btn.innerHTML = '<i data-feather="edit-2"></i> Edit';
     });
     close();
     if (typeof feather !== 'undefined') feather.replace();
     markIntegrationChecking(key);
     void fetchIntegrationStatuses([key]);
-    // Be honest about what the click did. For a server-managed integration the
-    // credentials were not sent anywhere, so claiming "saved" is what left the
-    // user believing Twilio was configured while the server still could not see it.
-    showToast(
-      definition.serverManaged
-        ? `${definition.title}: local preferences saved. Server credentials are unchanged — set the environment variables and redeploy.`
-        : `${definition.title} settings saved locally. Live server status is being checked.`,
-      definition.serverManaged ? 'error' : 'success'
-    );
+    showToast(`${definition.title} settings saved locally. Live server status is being checked.`, 'success');
   });
 
   document.getElementById('integration-test-btn')?.addEventListener('click', async event => {

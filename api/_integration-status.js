@@ -328,13 +328,65 @@ async function checkInstagram(customConfig = {}) {
   }
 }
 
+/**
+ * Read this organization's stored Twilio credentials.
+ *
+ * Scoped by organization_id on purpose. An earlier version of the tenant
+ * resolvers fell back to "first row wins", which attributed one tenant's
+ * provider account to another; a missing organizationId returns null rather
+ * than guessing.
+ */
+async function getTwilioTenantConfig(organizationId) {
+  if (!organizationId || !supabase) return null;
+
+  const { data, error } = await supabase
+    .from('twilio_connections')
+    .select('account_sid, auth_token_encrypted, from_number, region')
+    .eq('organization_id', organizationId)
+    .eq('is_active', true)
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    console.error('[integration-status] Twilio connection lookup failed:', error.message);
+    return null;
+  }
+
+  if (!data?.account_sid || !data?.auth_token_encrypted) return null;
+
+  let authToken = null;
+  try {
+    authToken = await decryptToken(data.auth_token_encrypted);
+  } catch (error) {
+    console.error('[integration-status] Twilio token decrypt failed:', error.message);
+    return null;
+  }
+  if (!authToken) return null;
+
+  return {
+    accountSid: data.account_sid,
+    authToken,
+    fromNumber: data.from_number || null
+  };
+}
+
 // A Twilio Account SID is always "AC" followed by 32 hex characters. Catching a
 // malformed value here turns an opaque HTTP 401 from Twilio into a clear message.
 const TWILIO_SID_PATTERN = /^AC[0-9a-fA-F]{32}$/;
 
-async function checkTwilio() {
-  const accountSid = firstEnv('TWILIO_ACCOUNT_SID', 'TWILIO_SID');
-  const authToken = firstEnv('TWILIO_AUTH_TOKEN', 'TWILIO_TOKEN');
+async function checkTwilio(customConfig = {}) {
+  // Credentials saved from the Integrations form take precedence; the
+  // environment variables remain a valid deployment-level configuration.
+  const tenantConfig = await getTwilioTenantConfig(customConfig.organizationId);
+  const accountSid =
+    customConfig.accountSid ||
+    tenantConfig?.accountSid ||
+    firstEnv('TWILIO_ACCOUNT_SID', 'TWILIO_SID');
+  const authToken =
+    customConfig.authToken ||
+    tenantConfig?.authToken ||
+    firstEnv('TWILIO_AUTH_TOKEN', 'TWILIO_TOKEN');
 
   const missing = [];
 
@@ -342,28 +394,31 @@ async function checkTwilio() {
   if (!authToken) missing.push('TWILIO_AUTH_TOKEN');
 
   if (missing.length) {
-    // These are deployment secrets and can only be supplied as server
-    // environment variables - the in-app integration form stores its values in
-    // this browser's localStorage and never reaches this process. Say exactly
-    // where to set them, otherwise this status can never turn green.
+    // These can now be supplied either from the Integrations form (stored
+    // encrypted per organization) or as deployment environment variables. Say
+    // both, otherwise this status can never be turned green.
     return notConfigured('Twilio Voice', missing, {
       envVars: ['TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN'],
       setupHint:
-        'Set these as Vercel environment variables for this project ' +
-        '(Settings > Environment Variables), then redeploy. They cannot be set ' +
-        'from the in-app Integrations form.',
+        'Open Settings > Integrations > Twilio Voice Calls and save your Account SID and Auth Token, ' +
+        'or set them as Vercel environment variables (TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN) and redeploy.',
+      canSaveInApp: true
     });
   }
 
   if (!TWILIO_SID_PATTERN.test(accountSid)) {
     return result('error', 'TWILIO_ACCOUNT_SID is not a valid Twilio Account SID (expected "AC" + 32 hex characters).', {
       envVars: ['TWILIO_ACCOUNT_SID'],
+      canSaveInApp: true
     });
   }
 
   // Not required to reach the API, but without a Twilio number no call can be
   // placed. Reported as a warning so a "connected" badge is never misleading.
-  const fromNumber = firstEnv('TWILIO_FROM_NUMBER', 'TWILIO_PHONE_NUMBER', 'TWILIO_CALLER_NUMBER');
+  const fromNumber =
+    customConfig.fromNumber ||
+    tenantConfig?.fromNumber ||
+    firstEnv('TWILIO_FROM_NUMBER', 'TWILIO_PHONE_NUMBER', 'TWILIO_CALLER_NUMBER');
   const warnings = fromNumber
     ? []
     : ['No Twilio caller number configured (TWILIO_FROM_NUMBER); the account is reachable but outbound calls cannot be placed.'];
