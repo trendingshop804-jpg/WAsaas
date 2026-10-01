@@ -238,9 +238,15 @@ function initialsFromName(name, phone) {
 
 /**
  * Build an approved-template payload for sends made outside the 24h window.
+ *
+ * Returns null when no template is configured. There used to be a hardcoded
+ * 'hello_world' fallback here, which meant this function never returned null:
+ * the caller's 422 TEMPLATE_REQUIRED guard was unreachable, and a customer last
+ * contacted 40 days ago silently received Meta's sample template instead of the
+ * operator being told to configure one.
  */
 function buildTemplatePayload(phone, text, templateParams, templateNameOverride) {
-  const name = (templateNameOverride || process.env.WHATSAPP_TEMPLATE_NAME || 'hello_world').trim();
+  const name = String(templateNameOverride || process.env.WHATSAPP_TEMPLATE_NAME || '').trim();
   if (!name) return null;
 
   const language = (process.env.WHATSAPP_TEMPLATE_LANGUAGE || 'en_US').trim();

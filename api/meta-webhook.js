@@ -112,38 +112,37 @@ async function processInboundMedia(msg, mediaType, customToken) {
   }
 }
 
+/**
+ * Resolve the organization that owns a WhatsApp business phone number ID.
+ *
+ * The ONLY accepted source of truth is an active whatsapp_connections row whose
+ * phone_number_id matches exactly.
+ *
+ * Three fallbacks used to sit below this and have all been removed, because
+ * every one of them attributes a tenant's messages to somebody else:
+ *   1. DEFAULT_ORGANIZATION_ID / ORGANIZATION_ID env vars - one org for all traffic
+ *   2. `select organization_id from whatsapp_connections limit 1` - first row wins
+ *   3. `select id from organizations limit 1` - first org wins
+ * With more than one tenant those write another company's inbound messages,
+ * leads and conversations into the wrong CRM. Returning null makes the caller
+ * fail closed instead.
+ */
 async function getWhatsAppOrganizationId(phoneNumberId) {
-  if (phoneNumberId) {
-    const { data, error } = await supabase
-      .from('whatsapp_connections')
-      .select('organization_id')
-      .eq('is_active', true)
-      .eq('phone_number_id', phoneNumberId)
-      .maybeSingle();
+  if (!phoneNumberId) return null;
 
-    if (!error && data?.organization_id) return data.organization_id;
-  }
-
-  // Fallback 1: check environment variable configuration
-  const envOrg = process.env.DEFAULT_ORGANIZATION_ID || process.env.ORGANIZATION_ID || process.env.VITE_DEFAULT_ORGANIZATION_ID;
-  if (envOrg) return envOrg;
-
-  // Fallback 2: get organization from any existing whatsapp_connections row
-  const { data: firstConn } = await supabase
+  const { data, error } = await supabase
     .from('whatsapp_connections')
     .select('organization_id')
-    .limit(1)
-    .maybeSingle();
-  if (firstConn?.organization_id) return firstConn.organization_id;
-
-  // Fallback 3: get primary organization from organizations table
-  const { data: firstOrg } = await supabase
-    .from('organizations')
-    .select('id')
-    .limit(1)
+    .eq('is_active', true)
+    .eq('phone_number_id', phoneNumberId)
     .maybeSingle();
 
-  return firstOrg?.id || null;
+  if (error) {
+    console.error('[Webhook] WhatsApp organization lookup failed:', error.message);
+    return null;
+  }
+
+  return data?.organization_id || null;
 }
 
 async function getWhatsAppConnection(phoneNumberId) {
@@ -164,39 +163,31 @@ async function getWhatsAppConnection(phoneNumberId) {
   return data || null;
 }
 
+/**
+ * Resolve the Instagram connection for a business (or page) ID.
+ *
+ * Exact match on instagram_business_id or page_id only. The previous version
+ * fell back to "any active connection" and then to a *synthetic* connection
+ * built from an unrelated organization, which filed one tenant's comments and
+ * DMs into another tenant's CRM. Unknown IDs must return null so the caller
+ * skips the entry.
+ */
 async function getInstagramConnection(instagramBusinessId) {
-  if (instagramBusinessId) {
-    const { data } = await supabase
-      .from('instagram_connections')
-      .select('*')
-      .or(`instagram_business_id.eq.${instagramBusinessId},page_id.eq.${instagramBusinessId}`)
-      .eq('is_active', true)
-      .limit(1);
+  if (!instagramBusinessId) return null;
 
-    if (data?.[0]) return data[0];
-  }
-
-  // Fallback 1: get any active instagram_connection
-  const { data: anyConn } = await supabase
+  const { data, error } = await supabase
     .from('instagram_connections')
     .select('*')
+    .or(`instagram_business_id.eq.${instagramBusinessId},page_id.eq.${instagramBusinessId}`)
     .eq('is_active', true)
     .limit(1);
 
-  if (anyConn?.[0]) return anyConn[0];
-
-  // Fallback 2: build synthetic connection for organization
-  const fallbackOrgId = await getWhatsAppOrganizationId(null);
-  if (fallbackOrgId) {
-    return {
-      organization_id: fallbackOrgId,
-      instagram_business_id: instagramBusinessId || 'default_ig',
-      access_token_encrypted: null,
-      is_active: true
-    };
+  if (error) {
+    console.error('[Webhook] Instagram connection lookup failed:', error.message);
+    return null;
   }
 
-  return null;
+  return data?.[0] || null;
 }
 
 function phoneDigits(value) {
@@ -875,9 +866,23 @@ export default async function handler(req, res) {
     const mode = req.query['hub.mode'];
     const token = req.query['hub.verify_token'];
     const challenge = req.query['hub.challenge'];
-    const expectedToken = process.env.META_VERIFY_TOKEN || process.env.WEBHOOK_VERIFY_TOKEN || 'nexus_meta_secret_2026';
+    const expectedToken = String(
+      process.env.META_VERIFY_TOKEN || process.env.WEBHOOK_VERIFY_TOKEN || ''
+    ).trim();
 
-    if (mode === 'subscribe' && (token === expectedToken || !process.env.META_VERIFY_TOKEN || token)) {
+    // Fail closed, and compare exactly.
+    //
+    // A previous version accepted the handshake when META_VERIFY_TOKEN was
+    // unset and also short-circuited on `|| token`, so ANY non-empty
+    // hub.verify_token completed verification. That hands the endpoint to
+    // whoever asks first. There is deliberately no built-in default secret
+    // either: an unset variable must disable verification, not weaken it.
+    if (!expectedToken) {
+      console.error('[Webhook] META_VERIFY_TOKEN is not set; refusing the verification handshake.');
+      return res.status(403).send('Forbidden');
+    }
+
+    if (mode === 'subscribe' && token && token === expectedToken) {
       return res.status(200).send(challenge);
     }
     return res.status(403).send('Forbidden');

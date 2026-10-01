@@ -315,8 +315,8 @@ function initMessages() {
   if (callBtn) {
     callBtn.addEventListener('click', () => {
       const activeItem = convList.querySelector('.conv-item.active');
-      const name = activeItem?.querySelector('.conv-name')?.textContent?.trim() || 'contact';
-      const phone = activeItem?.dataset.phone || '';
+      const name = callBtn.dataset.name || activeItem?.querySelector('.conv-name')?.textContent?.trim() || 'contact';
+      const phone = callBtn.dataset.phone || activeItem?.dataset.phone || '';
       if (typeof window.handleCallLead === 'function') {
         window.handleCallLead(name, phone);
       }
@@ -325,12 +325,18 @@ function initMessages() {
 }
 
 function renderConversation(conv) {
+  if (!conv) return;
   const messagesEl = document.getElementById('conv-messages');
   const headerName = document.getElementById('conv-chat-name');
   const headerAva  = document.getElementById('conv-chat-avatar');
+  const callBtn    = document.getElementById('btn-conv-call');
 
   if (headerName) headerName.textContent = conv.name;
   if (headerAva)  headerAva.textContent = conv.initials;
+  if (callBtn) {
+    callBtn.dataset.phone = conv.phone || conv.key || '';
+    callBtn.dataset.name = conv.name || 'contact';
+  }
 
   if (messagesEl) {
     messagesEl.innerHTML = conv.messages.map(m => {
@@ -751,11 +757,23 @@ const integrationDefinitions = {
   },
   twilio: {
     title: 'Twilio Voice Calls',
-    subtitle: 'Configure voice calling, call recording, and provider credentials.',
+    subtitle: 'Twilio credentials are read from the server environment. The fields below are a local reference only and are never sent anywhere.',
+    // Server-side deployment secrets. These cannot be set from the browser:
+    // the server reads them from the process environment, and the auth token is
+    // far too sensitive to keep in localStorage. Rendered as guidance instead
+    // of an input, and excluded from what gets persisted.
+    serverManaged: true,
+    envVars: {
+      'account-sid': 'TWILIO_ACCOUNT_SID',
+      'auth-token': 'TWILIO_AUTH_TOKEN',
+      'from-number': 'TWILIO_FROM_NUMBER'
+    },
+    setupHint:
+      'In Vercel: Settings > Environment Variables, add the names on the right for all environments, then redeploy. The status badge polls every 30s and will turn green once the server can reach your Twilio account.',
     fields: [
-      { id: 'account-sid', label: 'Twilio Account SID', placeholder: 'ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' },
-      { id: 'auth-token', label: 'Auth Token', type: 'password', placeholder: 'Your Twilio auth token' },
-      { id: 'from-number', label: 'Caller number', placeholder: '+91 98765 43210' },
+      { id: 'account-sid', label: 'Twilio Account SID', placeholder: 'ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx', serverEnv: true },
+      { id: 'auth-token', label: 'Auth Token', type: 'password', placeholder: 'Your Twilio auth token', serverEnv: true },
+      { id: 'from-number', label: 'Caller number', placeholder: '+91 98765 43210', serverEnv: true },
       { id: 'region', label: 'API region', type: 'select', options: ['US1', 'IE1', 'IN1'] }
     ]
   },
@@ -771,9 +789,34 @@ const integrationDefinitions = {
   }
 };
 
+// Credentials that must never be kept in localStorage. Earlier builds saved
+// every field of this form here, so a Twilio auth token, Meta permanent token
+// or Stripe secret key could already be sitting in a browser on disk. Strip
+// them on read and overwrite storage so the secret does not linger.
+const SECRET_FIELD_IDS = new Set(['access-token', 'auth-token', 'secret-key', 'webhook-secret']);
+
+function scrubSecretFields(settings) {
+  let removed = false;
+  for (const key of Object.keys(settings || {})) {
+    const entry = settings[key];
+    if (!entry || typeof entry !== 'object') continue;
+    for (const fieldId of Object.keys(entry)) {
+      if (SECRET_FIELD_IDS.has(fieldId) || integrationDefinitions[key]?.fields?.some(f => f.type === 'password' || f.serverEnv)) {
+        delete entry[fieldId];
+        removed = true;
+      }
+    }
+  }
+  return removed;
+}
+
 function readIntegrationSettings() {
   try {
-    return JSON.parse(localStorage.getItem('nextbright_integration_settings') || '{}') || {};
+    const raw = JSON.parse(localStorage.getItem('nextbright_integration_settings') || '{}') || {};
+    if (scrubSecretFields(raw)) {
+      try { localStorage.setItem('nextbright_integration_settings', JSON.stringify(raw)); } catch (_) { /* best effort */ }
+    }
+    return raw;
   } catch (error) {
     return {};
   }
@@ -829,6 +872,10 @@ function setIntegrationStatus(key, statusInfo = {}) {
   const latencyMs = Number(statusInfo.latencyMs);
   const latencyText = Number.isFinite(latencyMs) && latencyMs >= 0 ? ` Latency ${Math.round(latencyMs)} ms.` : '';
   const suffix = checkedAt ? ` Checked ${checkedAt}.${latencyText}` : latencyText;
+  // The server now explains where a missing secret has to be set; surface it in
+  // the card so the badge is actionable instead of just naming the variables.
+  const warnings = Array.isArray(statusInfo.warnings) ? statusInfo.warnings.filter(Boolean) : [];
+  const setupHint = statusInfo.setupHint ? ` ${statusInfo.setupHint}` : '';
   const { badge, detail, card } = getIntegrationStatusElements(key);
 
   if (badge) {
@@ -837,7 +884,7 @@ function setIntegrationStatus(key, statusInfo = {}) {
     badge.title = message;
   }
   if (detail) {
-    detail.textContent = `${message}${suffix}`;
+    detail.textContent = `${message}${warnings.length ? ` ${warnings.join(' ')}` : ''}${setupHint}${suffix}`;
     detail.title = message;
   }
   if (card) card.setAttribute('data-integration-state', status);
@@ -926,6 +973,14 @@ function openIntegrationEditor(key) {
   const fieldsWrap = document.getElementById('integration-fields');
   fieldsWrap.innerHTML = '';
 
+  if (definition.setupHint) {
+    const hint = document.createElement('div');
+    hint.className = 'integration-field-help full';
+    hint.style.marginBottom = '10px';
+    hint.textContent = definition.setupHint;
+    fieldsWrap.appendChild(hint);
+  }
+
   definition.fields.forEach(field => {
     const wrapper = document.createElement('div');
     wrapper.className = `integration-field${field.full ? ' full' : ''}`;
@@ -933,6 +988,32 @@ function openIntegrationEditor(key) {
     label.textContent = field.label;
     label.htmlFor = `integration-${field.id}`;
     wrapper.appendChild(label);
+
+    // Server-managed credentials are shown as the exact variable to set, never
+    // as a text box. A box would collect the secret and silently discard it,
+    // which is what made this status impossible to clear.
+    if (field.serverEnv) {
+      const envName = definition.envVars?.[field.id] || field.id;
+      const readOnly = document.createElement('input');
+      readOnly.type = 'text';
+      readOnly.className = 'form-input';
+      readOnly.id = `integration-${field.id}`;
+      readOnly.name = field.id;
+      readOnly.readOnly = true;
+      readOnly.tabIndex = -1;
+      readOnly.style.opacity = '0.75';
+      readOnly.style.fontFamily = 'ui-monospace, SFMono-Regular, Menlo, monospace';
+      readOnly.value = envName;
+      wrapper.appendChild(readOnly);
+
+      const help = document.createElement('span');
+      help.className = 'integration-field-help';
+      help.textContent = 'Set on the server as this environment variable. Never stored in this browser.';
+      wrapper.appendChild(help);
+
+      fieldsWrap.appendChild(wrapper);
+      return;
+    }
 
     let input;
     if (field.type === 'select') {
@@ -992,7 +1073,14 @@ function initIntegrationEditor() {
     const definition = integrationDefinitions[key];
     if (!definition || !form.reportValidity()) return;
     const values = {};
-    fieldsWrap.querySelectorAll('input, select').forEach(input => { values[input.name] = input.value.trim(); });
+    fieldsWrap.querySelectorAll('input, select').forEach(input => {
+      const field = definition.fields.find(f => f.id === input.name);
+      // Never persist a credential, and never persist a server-managed value:
+      // both would either leak a secret into localStorage or imply the server
+      // was configured when it was not.
+      if (field?.serverEnv || field?.type === 'password') return;
+      values[input.name] = input.value.trim();
+    });
     const settings = readIntegrationSettings();
     settings[key] = values;
     const saved = writeIntegrationSettings(settings);
@@ -1007,7 +1095,15 @@ function initIntegrationEditor() {
     if (typeof feather !== 'undefined') feather.replace();
     markIntegrationChecking(key);
     void fetchIntegrationStatuses([key]);
-    showToast(`${definition.title} settings saved locally. Live server status is being checked.`, 'success');
+    // Be honest about what the click did. For a server-managed integration the
+    // credentials were not sent anywhere, so claiming "saved" is what left the
+    // user believing Twilio was configured while the server still could not see it.
+    showToast(
+      definition.serverManaged
+        ? `${definition.title}: local preferences saved. Server credentials are unchanged — set the environment variables and redeploy.`
+        : `${definition.title} settings saved locally. Live server status is being checked.`,
+      definition.serverManaged ? 'error' : 'success'
+    );
   });
 
   document.getElementById('integration-test-btn')?.addEventListener('click', async event => {

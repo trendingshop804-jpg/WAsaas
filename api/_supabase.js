@@ -61,29 +61,44 @@ export async function getAuthenticatedUser(req) {
   const token = getBearerToken(req);
   const admin = createSupabaseAdminClient();
 
-  if (token && url && publishableKey) {
+  if (token) {
+    // A token was presented, so it must be the token that decides the identity.
+    // If we cannot validate it we must not substitute a different user for it.
+    if (!url || !publishableKey) {
+      return { error: 'Authentication unavailable. Please retry.', status: 503 };
+    }
     try {
       const publicClient = createClient(url, publishableKey, { auth: { persistSession: false, autoRefreshToken: false } });
       const { data, error } = await publicClient.auth.getUser(token);
       if (!error && data?.user) return { user: data.user };
+      console.warn('[getAuthenticatedUser] token rejected:', error?.message || 'no user returned');
     } catch (e) {
       console.warn('[getAuthenticatedUser] GoTrue token validation notice:', e.message);
     }
+    // An expired, forged or revoked token ends here. Falling through to any
+    // other identity would silently promote the caller to that user's access.
+    return { error: 'Authentication required. Please sign in.', status: 401 };
   }
 
-  // Fallback for local session / dev runs / UI session
-  if (token || process.env.NODE_ENV !== 'production' || admin) {
-    if (admin) {
-      const { data: firstUser } = await admin.from('organization_users').select('user_id').limit(1).maybeSingle();
-      const userId = firstUser?.user_id || 'usr-admin-01';
-      return {
-        user: {
-          id: userId,
-          email: 'admin@nextbright.ai',
-          role: 'authenticated'
-        }
-      };
+  // No token at all: the request is unauthenticated and must stay that way.
+  // The only exception is an explicit, opt-in local dev switch. It requires an
+  // env flag AND a non-production NODE_ENV, so it cannot be reached on a
+  // deployed environment no matter how the server is configured.
+  const devAuthEnabled =
+    process.env.NODE_ENV !== 'production' &&
+    String(process.env.ALLOW_DEV_AUTH || '').trim().toLowerCase() === 'true';
+
+  if (devAuthEnabled) {
+    if (!admin) {
+      return { error: 'ALLOW_DEV_AUTH is set but the Supabase service-role client is unavailable.', status: 503 };
     }
+    const { data: firstUser } = await admin.from('organization_users').select('user_id').limit(1).maybeSingle();
+    const userId = firstUser?.user_id;
+    if (userId) {
+      console.warn('[getAuthenticatedUser] ALLOW_DEV_AUTH bypass used for user', userId);
+      return { user: { id: userId, email: 'dev@local', role: 'authenticated' } };
+    }
+    return { error: 'ALLOW_DEV_AUTH is set but no organization member was found.', status: 503 };
   }
 
   return { error: 'Authentication required. Please sign in.', status: 401 };

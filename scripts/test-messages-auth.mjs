@@ -101,15 +101,37 @@ function jsonRes(body, status = 200) {
   };
 }
 
-/** Very small PostgREST emulator: honours column=eq.X filters only. */
+/**
+ * PostgREST emulator: honours column=eq.X, column=in.(a,b), order= and limit=.
+ *
+ * eq-only was not enough. The 24-hour service-window lookup filters with
+ * .in('sender_number', [...]) and orders by received_at desc limit 1, so an
+ * emulator that ignored those returned the newest inbound row for ANY contact
+ * and the window looked open for a customer last seen 40 days ago - which made
+ * the test assert the wrong thing about production behaviour.
+ */
 function fakePostgrest(url, options = {}) {
   const u = new URL(url);
   const table = u.pathname.split('/').pop();
   const filters = {};
+  const inFilters = {};
+  let orderCol = null;
+  let orderDesc = false;
+  let rowLimit = 0;
   for (const [k, v] of u.searchParams.entries()) {
     // PostgREST encodes equality filters as  ?<column>=eq.<value>
     const m = /^eq\.(.*)$/.exec(v);
-    if (m) filters[k] = m[1];
+    if (m) { filters[k] = m[1]; continue; }
+    // membership: ?<column>=in.(a,b,c)
+    const mi = /^in\.\((.*)\)$/.exec(v);
+    if (mi) { inFilters[k] = mi[1].split(','); continue; }
+    if (k === 'order') {
+      const parts = String(v).split('.');
+      orderCol = parts[0];
+      orderDesc = parts[1] === 'desc';
+      continue;
+    }
+    if (k === 'limit') { rowLimit = parseInt(v, 10) || 0; continue; }
   }
   const method = (options.method || 'GET').toUpperCase();
   let requestBody = null;
@@ -134,6 +156,23 @@ function fakePostgrest(url, options = {}) {
       // SQL semantics: col = NULL never matches, exactly like Postgres.
       out = out.filter(r => r[col] != null && String(r[col]) === String(val));
     }
+    for (const [col, list] of Object.entries(inFilters)) {
+      out = out.filter(r => r[col] != null && list.includes(String(r[col])));
+    }
+    if (orderCol) {
+      const sign = orderDesc ? -1 : 1;
+      out.sort((a, b) => {
+        const av = a[orderCol] == null, bv = b[orderCol] == null;
+        if (av && bv) return 0;
+        if (av) return 1;              // nulls last, like nullslast
+        if (bv) return -1;
+        const an = new Date(a[orderCol]).getTime();
+        const bn = new Date(b[orderCol]).getTime();
+        if (!Number.isNaN(an) && !Number.isNaN(bn)) return (an - bn) * sign;
+        return (a[orderCol] > b[orderCol] ? 1 : a[orderCol] < b[orderCol] ? -1 : 0) * sign;
+      });
+    }
+    if (rowLimit > 0) out = out.slice(0, rowLimit);
     return wrap(out, 200);
   }
   if (method === 'POST') {
