@@ -505,10 +505,62 @@ function renderFunnel() {
 // so the browser only ever calls the authenticated proxy below.
 const CALL_WEBHOOK_API = '/api/trigger-call';
 
+/**
+ * Resolve the signed-in Supabase access token from this app's own auth code.
+ *
+ * The endpoint is protected by requireOrgAccess(), so the call button has to
+ * present a real session JWT. It previously sent none, which made every call
+ * fail with 401 "Authentication required".
+ *
+ * Two auth implementations exist in this project and either page may host the
+ * call button, so both are consulted:
+ *   window.NB_AUTH.getAccessToken()      - the CRM (nextbright-crm/js/auth.js),
+ *                                          reads the live Supabase session
+ *   window.supabaseConfig.getSessionToken() - the root app
+ *                                          (js/services/supabase-config.js)
+ *
+ * No token or webhook URL is ever hard-coded here.
+ */
+async function getCallAccessToken() {
+  try {
+    if (window.NB_AUTH && typeof window.NB_AUTH.getAccessToken === 'function') {
+      const token = await window.NB_AUTH.getAccessToken();
+      if (token) return token;
+    }
+  } catch (error) {
+    console.warn('[Call Webhook] could not read the session token:', error.message);
+  }
+
+  try {
+    if (window.supabaseConfig && typeof window.supabaseConfig.getSessionToken === 'function') {
+      const token = window.supabaseConfig.getSessionToken();
+      if (token) return token;
+    }
+  } catch (error) {
+    console.warn('[Call Webhook] could not read the stored session token:', error.message);
+  }
+
+  return '';
+}
+
 async function requestServerCallWebhook(name, phone) {
+  // Fail before the network call: an unauthenticated request would only ever
+  // come back 401, and the operator deserves a "sign in" prompt instead.
+  const token = await getCallAccessToken();
+  if (!token) {
+    const error = new Error('Please sign in to place calls.');
+    error.status = 401;
+    error.noSession = true;
+    throw error;
+  }
+
   const response = await fetch(CALL_WEBHOOK_API, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      Authorization: `Bearer ${token}`
+    },
     body: JSON.stringify({ name, phone })
   });
   const payload = await response.json().catch(() => ({}));
@@ -563,7 +615,14 @@ window.handleCallLead = function(name, phone) {
     .catch(error => {
       console.error('[Call Webhook]', error);
       if (typeof showToast === 'function') {
-        showToast(`Calling ${targetName}: mobile webhook failed (${error.message})`, 'error');
+        // A missing session is not a webhook failure, so do not report it as
+        // one - say what the operator actually has to do.
+        showToast(
+          error?.noSession
+            ? `Calling ${targetName}: please sign in to place calls.`
+            : `Calling ${targetName}: mobile webhook failed (${error.message})`,
+          'error'
+        );
       }
       return { success: false, error: error.message };
     });
