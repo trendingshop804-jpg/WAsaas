@@ -225,7 +225,7 @@ const NB_AUTH = (() => {
     window.location.reload();
   }
 
-  return { getClient, getAccessToken, apiFetch, requireSession, signOut, onAuthChange: fn => listeners.add(fn) };
+  return { getClient, getAccessToken, apiFetch, requireSession, signOut, showOverlay, onAuthChange: fn => listeners.add(fn) };
 })();
 
 window.NB_AUTH = NB_AUTH;

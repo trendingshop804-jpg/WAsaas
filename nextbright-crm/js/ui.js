@@ -423,7 +423,11 @@ async function refreshLiveInbox() {
 function setInboxAuthNotice(message) {
   const el = document.getElementById('inbox-auth-notice');
   if (!el) return;
-  el.textContent = message;
+  if (/sign in/i.test(message)) {
+    el.innerHTML = `<span>⚠️ ${escapeHtml(message)}</span> <button onclick="window.NB_AUTH?.showOverlay ? window.NB_AUTH.showOverlay() : window.location.reload()" style="margin-left:10px; padding:4px 10px; background:#2563eb; color:#fff; border:none; border-radius:4px; font-weight:600; font-size:12px; cursor:pointer;">Sign In Now</button>`;
+  } else {
+    el.textContent = message;
+  }
   el.style.display = 'block';
 }
 
