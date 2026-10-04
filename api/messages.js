@@ -785,13 +785,14 @@ export default async function handler(req, res) {
     }
 
     const tenantCreds = await getTenantWhatsAppCredentials(supabase, organizationId);
-    const accessToken = tenantCreds?.accessToken
-      || process.env.WHATSAPP_ACCESS_TOKEN
-      || process.env.WA_ACCESS_TOKEN;
-    const phoneNumberId = tenantCreds?.phoneNumberId
-      || process.env.WHATSAPP_PHONE_NUMBER_ID
-      || process.env.PHONE_NUMBER_ID
-      || process.env.WA_PHONE_NUMBER_ID;
+    if (!tenantCreds) {
+      return res.status(409).json({
+        success: false,
+        error: 'No active WhatsApp connection is configured for your organization. Go to Settings > Integrations > WhatsApp to connect.',
+        code: 'NO_WHATSAPP_CONNECTION'
+      });
+    }
+    const { accessToken, phoneNumberId } = tenantCreds;
 
     if (!accessToken || !phoneNumberId) {
       return res.status(500).json({
@@ -896,6 +897,7 @@ export default async function handler(req, res) {
       is_ai: !!body.is_ai
     };
     if (conversationId) insertPayload.conversation_id = conversationId;
+    if (lead) insertPayload.lead_id = lead.id;
 
     const { data: pendingRow, error: pendingErr } = await supabase
       .from('messages')

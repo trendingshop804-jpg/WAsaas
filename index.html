@@ -242,6 +242,12 @@
           <span>WhatsApp Connect</span>
         </a>
 
+        <a href="#calls" class="nav-item" data-view="calls">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
+          <span>Call Center</span>
+          <span class="nav-pill" style="background: #7c3aed; color: white;">Live</span>
+        </a>
+
         <div class="nav-section-title">Instagram Automation</div>
 
         <a href="#instagram" class="nav-item" data-view="instagram">
@@ -2048,7 +2054,101 @@
           </div>
         </section>
 
+        <!-- CALL CENTER VIEW -->
+        <section id="view-calls" class="view-panel">
+          <div class="flex items-center justify-between" style="margin-bottom: 20px;">
+            <div>
+              <h2>📞 Call Center</h2>
+              <p style="color: var(--text-secondary); font-size: 13.5px;">Make calls, view history, and manage calling providers.</p>
+            </div>
+          </div>
+          <div style="display: grid; grid-template-columns: 340px 1fr; gap: 24px; align-items: start;">
+            <!-- Dialpad -->
+            <div class="card" style="padding: 24px;">
+              <h3 style="margin-bottom: 16px; font-size: 15px;">Dial Pad</h3>
+              <input id="dialpad-number-input" type="tel" placeholder="+91 XXXXX XXXXX" style="width: 100%; padding: 12px; font-size: 20px; text-align: center; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-secondary); color: var(--text-primary); margin-bottom: 12px; font-family: 'JetBrains Mono', monospace;">
+              <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px;">
+                <button class="dialpad-key" data-key="1" style="padding:14px;font-size:20px;border:1px solid var(--border-color);border-radius:10px;background:var(--bg-secondary);color:var(--text-primary);cursor:pointer;transition:all .15s">1</button>
+                <button class="dialpad-key" data-key="2" style="padding:14px;font-size:20px;border:1px solid var(--border-color);border-radius:10px;background:var(--bg-secondary);color:var(--text-primary);cursor:pointer;transition:all .15s">2</button>
+                <button class="dialpad-key" data-key="3" style="padding:14px;font-size:20px;border:1px solid var(--border-color);border-radius:10px;background:var(--bg-secondary);color:var(--text-primary);cursor:pointer;transition:all .15s">3</button>
+                <button class="dialpad-key" data-key="4" style="padding:14px;font-size:20px;border:1px solid var(--border-color);border-radius:10px;background:var(--bg-secondary);color:var(--text-primary);cursor:pointer;transition:all .15s">4</button>
+                <button class="dialpad-key" data-key="5" style="padding:14px;font-size:20px;border:1px solid var(--border-color);border-radius:10px;background:var(--bg-secondary);color:var(--text-primary);cursor:pointer;transition:all .15s">5</button>
+                <button class="dialpad-key" data-key="6" style="padding:14px;font-size:20px;border:1px solid var(--border-color);border-radius:10px;background:var(--bg-secondary);color:var(--text-primary);cursor:pointer;transition:all .15s">6</button>
+                <button class="dialpad-key" data-key="7" style="padding:14px;font-size:20px;border:1px solid var(--border-color);border-radius:10px;background:var(--bg-secondary);color:var(--text-primary);cursor:pointer;transition:all .15s">7</button>
+                <button class="dialpad-key" data-key="8" style="padding:14px;font-size:20px;border:1px solid var(--border-color);border-radius:10px;background:var(--bg-secondary);color:var(--text-primary);cursor:pointer;transition:all .15s">8</button>
+                <button class="dialpad-key" data-key="9" style="padding:14px;font-size:20px;border:1px solid var(--border-color);border-radius:10px;background:var(--bg-secondary);color:var(--text-primary);cursor:pointer;transition:all .15s">9</button>
+                <button class="dialpad-key" data-key="*" style="padding:14px;font-size:20px;border:1px solid var(--border-color);border-radius:10px;background:var(--bg-secondary);color:var(--text-primary);cursor:pointer;transition:all .15s">*</button>
+                <button class="dialpad-key" data-key="0" style="padding:14px;font-size:20px;border:1px solid var(--border-color);border-radius:10px;background:var(--bg-secondary);color:var(--text-primary);cursor:pointer;transition:all .15s">0</button>
+                <button class="dialpad-key" data-key="#" style="padding:14px;font-size:20px;border:1px solid var(--border-color);border-radius:10px;background:var(--bg-secondary);color:var(--text-primary);cursor:pointer;transition:all .15s">#</button>
+              </div>
+              <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+                <button id="dialpad-del-btn" class="btn btn-sm" style="flex:1">⌫ Del</button>
+                <button id="dialpad-paste-btn" class="btn btn-sm" style="flex:1">📋 Paste</button>
+                <button id="dialpad-clear-btn" class="btn btn-sm" style="flex:1">✕ Clear</button>
+              </div>
+              <button id="dialpad-call-btn" class="btn btn-primary" style="width:100%;padding:14px;font-size:16px;border-radius:12px;background:#10b981;border:none;color:white;cursor:pointer;font-weight:600">📞 Call</button>
+              <!-- Provider Status -->
+              <div style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border-color);">
+                <h4 style="font-size: 13px; color: var(--text-secondary); margin-bottom: 8px;">Providers</h4>
+                <div style="font-size: 13px; display: flex; flex-direction: column; gap: 6px;">
+                  <div style="display:flex;justify-content:space-between;"><span>📱 MacroDroid</span><span id="provider-macrodroid-status">…</span></div>
+                  <div style="display:flex;justify-content:space-between;"><span>☁️ Twilio</span><span id="provider-twilio-status">…</span></div>
+                </div>
+              </div>
+            </div>
+            <!-- Call History -->
+            <div class="card" style="padding: 24px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                <h3 style="font-size: 15px;">Call History</h3>
+                <select id="calls-filter-select" style="padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-primary); font-size: 13px;">
+                  <option value="all">All Calls</option>
+                  <option value="outbound">Outbound</option>
+                  <option value="inbound">Inbound</option>
+                </select>
+              </div>
+              <div style="overflow-x: auto;">
+                <table class="data-table" style="width:100%;">
+                  <thead>
+                    <tr>
+                      <th>Dir</th><th>Contact</th><th>Phone</th><th>Duration</th><th>Status</th><th>Provider</th><th>Time</th><th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="calls-tbody">
+                    <tr><td colspan="8" style="text-align:center;color:#6b7280;padding:32px;">Loading call history…</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
+
       </main>
+    </div>
+
+    <!-- Active Call Floating Panel -->
+    <div id="active-call-panel" style="position:fixed;bottom:24px;right:24px;z-index:9999;width:300px;background:var(--bg-card, #1a1d23);border:1px solid var(--border-color);border-radius:16px;padding:20px;box-shadow:0 8px 32px rgba(0,0,0,0.4);display:none;">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
+        <div style="width:40px;height:40px;border-radius:50%;background:#10b981;display:flex;align-items:center;justify-content:center;animation:pulse-ring 1.5s infinite;">📞</div>
+        <div>
+          <div id="active-call-contact" style="font-weight:600;font-size:14px;">Unknown</div>
+          <div id="active-call-phone" style="font-size:12px;color:var(--text-secondary);"></div>
+        </div>
+      </div>
+      <div id="active-call-timer" style="text-align:center;font-size:28px;font-weight:700;font-family:'JetBrains Mono',monospace;margin:8px 0;">00:00</div>
+      <button id="active-call-end-btn" style="width:100%;padding:10px;background:#ef4444;color:white;border:none;border-radius:10px;font-weight:600;cursor:pointer;font-size:14px;">🔴 End Call</button>
+    </div>
+
+    <!-- Incoming Call Modal -->
+    <div id="incoming-call-modal" style="position:fixed;inset:0;z-index:10000;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,0.7);backdrop-filter:blur(8px);">
+      <div style="background:var(--bg-card, #1a1d23);border-radius:20px;padding:32px;text-align:center;width:320px;box-shadow:0 16px 48px rgba(0,0,0,0.5);">
+        <div style="font-size:48px;margin-bottom:12px;animation:incoming-ring 0.6s infinite alternate;">📲</div>
+        <div id="incoming-caller-name" style="font-size:18px;font-weight:700;margin-bottom:4px;">Unknown Caller</div>
+        <div id="incoming-caller-phone" style="font-size:14px;color:var(--text-secondary);margin-bottom:24px;"></div>
+        <div style="display:flex;gap:12px;">
+          <button id="incoming-reject-btn" style="flex:1;padding:12px;background:#ef4444;color:white;border:none;border-radius:12px;font-weight:600;cursor:pointer;font-size:14px;">Reject</button>
+          <button id="incoming-accept-btn" style="flex:1;padding:12px;background:#10b981;color:white;border:none;border-radius:12px;font-weight:600;cursor:pointer;font-size:14px;">Accept</button>
+        </div>
+      </div>
     </div>
 
     <!-- Slide-Over Lead Detail Drawer -->
@@ -3110,5 +3210,18 @@
     }
   }
 </script>
+
+  <!-- Calling System CSS -->
+  <style>
+    .dialpad-key:hover { background: var(--bg-hover, #2a2d35) !important; transform: scale(1.05); }
+    .dialpad-key:active { transform: scale(0.95); background: var(--accent-primary, #6366f1) !important; color: white !important; }
+    .call-provider-badge { display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;background:var(--bg-secondary);color:var(--text-secondary); }
+    #active-call-panel.open { display: block !important; }
+    @keyframes pulse-ring { 0% { box-shadow: 0 0 0 0 rgba(16,185,129,0.4); } 100% { box-shadow: 0 0 0 12px rgba(16,185,129,0); } }
+    @keyframes incoming-ring { 0% { transform: rotate(-15deg) scale(1); } 100% { transform: rotate(15deg) scale(1.1); } }
+  </style>
+
+  <!-- Calling Manager -->
+  <script src="js/services/calling-manager.js"></script>
 </body>
 </html>

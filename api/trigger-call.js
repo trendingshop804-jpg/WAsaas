@@ -1,26 +1,33 @@
 /**
- * api/trigger-call.js — Trigger a MacroDroid webhook for a CRM call button.
+ * api/trigger-call.js — Unified Calling System Hub
  *
- * The browser posts the phone number to this server-side proxy so the webhook
- * URL is not exposed as a browser credential and cross-origin restrictions do
- * not block the request. MacroDroid receives the number in its `data` query
- * parameter.
+ * Handles all calling-related routes via query parameter routing:
+ *   POST ?action=dial       — Trigger outbound call (MacroDroid / Twilio)
+ *   POST ?action=hangup     — End active call
+ *   POST ?action=status     — Update call status (webhook from provider)
+ *   POST ?action=inbound    — Log inbound call
+ *   GET  ?action=history    — Fetch call history
+ *   GET  ?action=settings   — Fetch calling provider settings
+ *   POST (no action)        — Legacy: trigger MacroDroid call (backward compat)
  *
  * SECURITY
- *   * Requires a signed-in Supabase session that is a member of an organization.
- *   * The destination URL comes ONLY from the MACRODROID_WEBHOOK_URL server
- *     environment variable. There is no hardcoded default and the browser can
- *     never supply a destination.
- *   * The webhook URL is never returned in a response and never logged.
- *   * Fails closed when the environment variable is missing.
+ *   * Every request (except provider webhooks) requires a signed-in Supabase
+ *     session that is a member of an organization.
+ *   * The MacroDroid webhook URL comes ONLY from the MACRODROID_WEBHOOK_URL
+ *     server env var. Never exposed to the client.
+ *   * Fails closed when configuration is missing.
  */
 
-import { requireOrgAccess } from './_supabase.js';
+import { createSupabaseAdminClient, requireOrgAccess, getBearerToken } from './_supabase.js';
 
 const REQUEST_TIMEOUT_MS = 10_000;
+const DEFAULT_HISTORY_LIMIT = 50;
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
 function getWebhookUrl() {
-  // Server-side configuration only. Empty when unset -> the caller fails closed.
   return String(process.env.MACRODROID_WEBHOOK_URL || '').trim();
 }
 
@@ -41,88 +48,56 @@ function normalizePhone(value) {
   const digits = raw.replace(/\D/g, '');
   if (!digits) return '';
 
-  // India phone number normalization:
-  // 10 digits starting with 6-9: e.g. 8111986637 -> +918111986637
-  if (digits.length === 10 && /^[6-9]/.test(digits)) {
-    return '+91' + digits;
-  }
-  // 11 digits starting with 0: e.g. 08111986637 -> +918111986637
-  if (digits.length === 11 && digits.startsWith('0')) {
-    return '+91' + digits.slice(1);
-  }
-  // 12 digits starting with 91: e.g. 918111986637 -> +918111986637
-  if (digits.length === 12 && digits.startsWith('91')) {
-    return '+' + digits;
-  }
-
+  if (digits.length === 10 && /^[6-9]/.test(digits)) return '+91' + digits;
+  if (digits.length === 11 && digits.startsWith('0')) return '+91' + digits.slice(1);
+  if (digits.length === 12 && digits.startsWith('91')) return '+' + digits;
   return hasPlus ? '+' + digits : digits;
 }
 
-export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  res.setHeader('Cache-Control', 'no-store');
-
-  if (req.method === 'OPTIONS') return res.status(204).end();
-  if (req.method !== 'POST') {
-    res.setHeader('Allow', 'POST, OPTIONS');
-    return res.status(405).json({ error: 'Method Not Allowed' });
+function applyCors(req, res) {
+  const origin = String(req.headers?.origin || '');
+  const allowed = new Set([
+    'https://w-asaas.vercel.app',
+    'http://localhost:3001',
+    'http://localhost:3000',
+    'http://127.0.0.1:3001',
+    'http://127.0.0.1:3000',
+    ...(process.env.ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean)
+  ]);
+  if (origin && allowed.has(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
   }
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, apikey');
+  res.setHeader('Access-Control-Max-Age', '86400');
+}
 
-  // ── Authorization ────────────────────────────────────────────────────────
-  // A signed-in organization member is required. Runs before any outbound call.
-  const access = await requireOrgAccess(req, res);
-  if (!access) return;
-
-  const body = parseBody(req.body);
-  const query = req.query || {};
-  const phone = normalizePhone(body.phone || body.phoneNumber || query.phone);
-  const name = String(body.name || query.name || '').trim().replace(/[\r\n]/g, '').slice(0, 120);
-
-  if (!phone) {
-    return res.status(400).json({ success: false, error: 'A phone number is required.' });
-  }
-  if (phone.length > 64) {
-    return res.status(400).json({ success: false, error: 'Phone number is too long.' });
-  }
-
+// ---------------------------------------------------------------------------
+// MacroDroid Dialer (original logic preserved)
+// ---------------------------------------------------------------------------
+async function handleMacroDroidDial(phone, name, res) {
   let webhook;
   try {
     const configured = getWebhookUrl();
-    // Fail closed: no server-side configuration means no send.
     if (!configured) throw new Error('MACRODROID_WEBHOOK_URL is not configured.');
     webhook = new URL(configured);
     if (webhook.protocol !== 'https:') throw new Error('MacroDroid webhook must use HTTPS.');
-    // A pre-existing query string would be concatenated with ours, and a macro
-    // that reads the request would then dial the merged string. Clear it so the
-    // only query parameters present are the ones set below.
     webhook.search = '';
   } catch (error) {
-    // Log the reason only — never the URL itself.
     console.error('[MacroDroid Webhook Config Error]', error.message);
-    return res.status(503).json({ success: false, error: 'Call webhook is not configured on the server.' });
+    return { success: false, status: 503, error: 'Call webhook is not configured on the server.' };
   }
 
-  // The display name is attacker-influenced free text and, in this CRM, already
-  // embeds the number ("WhatsApp Contact (+91 81119 86637)"). Passing it through
-  // verbatim put a second copy of the number into the query string, so a macro
-  // reading `name` dialled the label instead of the number. Strip every digit
-  // from it: the name is a label, never a dial target.
-  const safeName = name.replace(/[0-9+()\s-]/g, '').trim().slice(0, 60);
+  const safeName = (name || '').replace(/[0-9+()\s-]/g, '').trim().slice(0, 60);
   if (safeName) webhook.searchParams.set('name', encodeURIComponent(safeName));
 
-  // MacroDroid Webhook Trigger exposes request content through query parameters.
-  // The number is published under several aliases so a macro can read whichever
-  // it was pointed at, but `data` is the canonical one.
   webhook.searchParams.set('data', phone);
   webhook.searchParams.set('phone', phone);
   webhook.searchParams.set('number', phone);
   const bareDigits = phone.replace(/\D/g, '');
   const bare10 = bareDigits.slice(-10);
-  if (bare10.length === 10) {
-    webhook.searchParams.set('bare_phone', bare10);
-  }
+  if (bare10.length === 10) webhook.searchParams.set('bare_phone', bare10);
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -136,24 +111,205 @@ export default async function handler(req, res) {
 
     if (!response.ok) {
       const detail = (await response.text().catch(() => '')).replace(/\s+/g, ' ').slice(0, 160);
-      return res.status(502).json({
-        success: false,
-        error: `MacroDroid returned HTTP ${response.status}${detail ? `: ${detail}` : '.'}`
-      });
+      return { success: false, status: 502, error: `MacroDroid returned HTTP ${response.status}${detail ? `: ${detail}` : '.'}` };
     }
 
-    return res.status(200).json({
-      success: true,
-      message: 'MacroDroid webhook triggered.'
-      // The phone number is deliberately not echoed back.
-    });
+    return { success: true, provider: 'macrodroid' };
   } catch (error) {
     const message = error?.name === 'AbortError'
       ? 'MacroDroid webhook request timed out.'
       : `MacroDroid webhook request failed: ${error.message}`;
     console.error('[MacroDroid Webhook Error]', message);
-    return res.status(502).json({ success: false, error: message });
+    return { success: false, status: 502, error: message };
   } finally {
     clearTimeout(timeout);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Call History Helpers
+// ---------------------------------------------------------------------------
+async function logCallRecord(supabase, organizationId, data) {
+  const record = {
+    organization_id: organizationId,
+    phone_number: data.phone || null,
+    contact_name: data.name || null,
+    lead_id: data.leadId || null,
+    direction: data.direction || 'outbound',
+    provider: data.provider || 'macrodroid',
+    status: data.status || 'initiated',
+    duration_seconds: data.duration || 0,
+    notes: data.notes || null,
+    started_at: new Date().toISOString(),
+  };
+
+  const { data: row, error } = await supabase
+    .from('calls')
+    .insert(record)
+    .select('id, phone_number, contact_name, direction, provider, status, started_at')
+    .single();
+
+  if (error) {
+    console.error('[Calls] Insert failed:', error.message);
+    return null;
+  }
+  return row;
+}
+
+// ---------------------------------------------------------------------------
+// Main Handler
+// ---------------------------------------------------------------------------
+export default async function handler(req, res) {
+  applyCors(req, res);
+  res.setHeader('Cache-Control', 'no-store');
+
+  if (req.method === 'OPTIONS') return res.status(204).end();
+
+  const action = String(req.query?.action || '').toLowerCase();
+  const supabase = createSupabaseAdminClient();
+
+  // ── Provider status webhook (no auth — called by Twilio/MacroDroid) ──
+  if (req.method === 'POST' && action === 'status') {
+    if (!supabase) return res.status(503).json({ error: 'Database unavailable' });
+
+    const body = parseBody(req.body);
+    const callId = body.callId || body.call_id || body.CallSid;
+    const newStatus = body.status || body.CallStatus || 'unknown';
+    const duration = parseInt(body.duration || body.CallDuration || '0', 10);
+
+    if (callId) {
+      await supabase
+        .from('calls')
+        .update({
+          status: newStatus,
+          duration_seconds: duration || undefined,
+          ended_at: ['completed', 'failed', 'no-answer', 'busy', 'canceled'].includes(newStatus)
+            ? new Date().toISOString()
+            : undefined,
+        })
+        .eq('id', callId);
+    }
+
+    return res.status(200).json({ received: true });
+  }
+
+  // ── All other actions require authentication ──
+  if (req.method !== 'GET' && req.method !== 'POST') {
+    res.setHeader('Allow', 'GET, POST, OPTIONS');
+    return res.status(405).json({ error: 'Method Not Allowed' });
+  }
+
+  const access = await requireOrgAccess(req, res);
+  if (!access) return;
+  const organizationId = access.organizationId;
+
+  // ── GET: Call History ──
+  if (req.method === 'GET' && (action === 'history' || action === '')) {
+    if (!supabase) return res.status(503).json({ error: 'Database unavailable', calls: [] });
+
+    const limit = Math.min(parseInt(req.query?.limit || DEFAULT_HISTORY_LIMIT, 10), 200);
+    const direction = req.query?.direction; // 'inbound' | 'outbound' | undefined
+
+    let query = supabase
+      .from('calls')
+      .select('*')
+      .eq('organization_id', organizationId)
+      .order('started_at', { ascending: false })
+      .limit(limit);
+
+    if (direction && ['inbound', 'outbound'].includes(direction)) {
+      query = query.eq('direction', direction);
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      console.error('[Calls] History query failed:', error.message);
+      return res.status(500).json({ error: error.message, calls: [] });
+    }
+
+    return res.status(200).json({ success: true, calls: data || [], count: (data || []).length });
+  }
+
+  // ── GET: Provider Settings ──
+  if (req.method === 'GET' && action === 'settings') {
+    return res.status(200).json({
+      success: true,
+      providers: {
+        macrodroid: {
+          configured: Boolean(getWebhookUrl()),
+          label: 'MacroDroid (Android)',
+        },
+        twilio: {
+          configured: Boolean(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN),
+          label: 'Twilio Voice',
+        }
+      }
+    });
+  }
+
+  // ── POST: Dial / Legacy ──
+  if (req.method === 'POST' && (action === 'dial' || action === '')) {
+    const body = parseBody(req.body);
+    const phone = normalizePhone(body.phone || body.phoneNumber || req.query?.phone);
+    const name = String(body.name || req.query?.name || '').trim().replace(/[\r\n]/g, '').slice(0, 120);
+    const provider = String(body.provider || 'macrodroid').toLowerCase();
+    const leadId = body.leadId || body.lead_id || null;
+
+    if (!phone) return res.status(400).json({ success: false, error: 'A phone number is required.' });
+    if (phone.length > 64) return res.status(400).json({ success: false, error: 'Phone number is too long.' });
+
+    // MacroDroid dial
+    const result = await handleMacroDroidDial(phone, name, res);
+    if (!result.success) {
+      return res.status(result.status || 502).json(result);
+    }
+
+    // Log call in DB
+    if (supabase) {
+      const callRecord = await logCallRecord(supabase, organizationId, {
+        phone, name, leadId, direction: 'outbound', provider, status: 'initiated'
+      });
+      return res.status(200).json({ success: true, message: 'Call initiated.', provider, call: callRecord });
+    }
+
+    return res.status(200).json({ success: true, message: 'MacroDroid webhook triggered.', provider });
+  }
+
+  // ── POST: Hangup ──
+  if (req.method === 'POST' && action === 'hangup') {
+    const body = parseBody(req.body);
+    const callId = body.callId || body.call_id;
+
+    if (!callId || !supabase) {
+      return res.status(400).json({ success: false, error: 'callId is required.' });
+    }
+
+    const { error } = await supabase
+      .from('calls')
+      .update({ status: 'completed', ended_at: new Date().toISOString() })
+      .eq('id', callId)
+      .eq('organization_id', organizationId);
+
+    if (error) return res.status(500).json({ success: false, error: error.message });
+    return res.status(200).json({ success: true, message: 'Call ended.' });
+  }
+
+  // ── POST: Inbound call log ──
+  if (req.method === 'POST' && action === 'inbound') {
+    const body = parseBody(req.body);
+    if (!supabase) return res.status(503).json({ error: 'Database unavailable' });
+
+    const callRecord = await logCallRecord(supabase, organizationId, {
+      phone: normalizePhone(body.phone || body.from),
+      name: body.name || body.callerName || '',
+      leadId: body.leadId || null,
+      direction: 'inbound',
+      provider: body.provider || 'unknown',
+      status: 'ringing'
+    });
+
+    return res.status(200).json({ success: true, call: callRecord });
+  }
+
+  return res.status(400).json({ error: `Unknown action: ${action}` });
 }

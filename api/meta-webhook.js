@@ -1155,10 +1155,24 @@ export default async function handler(req, res) {
               last_message: messageRecord.content,
               last_timestamp: messageRecord.received_at,
               channel: 'whatsapp',
+              unread_count: supabase.rpc ? undefined : 0, // see RPC below
             })
             .eq('id', conversationId);
 
-          if (userText && msgType === 'text' && leadId && !isOptOut(userText)) {
+          // Increment unread_count atomically
+          if (conversationId) {
+            await supabase.rpc('increment_unread', { conv_id: conversationId }).catch(() => {
+              // Fallback: direct update if RPC doesn't exist yet
+              supabase
+                .from('conversations')
+                .update({ unread_count: 1 })
+                .eq('id', conversationId)
+                .eq('unread_count', 0)
+                .then(() => {});
+            });
+          }
+
+          if (userText && msgType === 'text' && leadId && !isOptOut(userText) && decryptedToken) {
             let aiRaw = null;
             let replyText = "Hi there! I'd love to help you. Could you tell me a bit more about what you're looking for?";
             let crmData = null;
