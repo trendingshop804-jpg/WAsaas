@@ -393,7 +393,7 @@ function getMetaMediaType(messageType) {
     audio: 'audio',
     document: 'document',
     video: 'video',
-    sticker: 'image'
+    sticker: 'sticker'
   };
   return map[messageType] || 'document';
 }
@@ -633,28 +633,64 @@ export default async function handler(req, res) {
     }
   }
 
-  const isMediaSend = req.method === 'POST' && (req.query?.route === 'send-media' || req.query?.media === '1');
+  const isMediaSend = req.method === 'POST' && (
+    req.query?.route === 'send-media' ||
+    req.query?.media === '1' ||
+    req.query?.action === 'send-media' ||
+    req.query?.action === 'send_media'
+  );
 
   // ---- POST: Send Outbound Media (Consolidated /api/send-media handler) ---
   if (isMediaSend) {
     try {
       const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
-      const { messageType, text, leadId, senderNumber, caption, fileName, mimeType } = body;
+      const { messageType, text, senderNumber, caption, fileName, mimeType } = body;
+      let leadId = body.leadId || body.lead_id;
       const fileBase64 = body.fileBase64 || body.file;
 
-      if (!fileBase64 || !senderNumber || !leadId) {
-        return res.status(400).json({ error: 'fileBase64, senderNumber, and leadId are required' });
+      if (!fileBase64 || !senderNumber) {
+        return res.status(400).json({ error: 'fileBase64 and senderNumber are required' });
       }
 
-      const { data: conversation, error: conversationError } = await supabase
-        .from('conversations')
-        .select('id, organization_id')
-        .eq('lead_id', leadId)
-        .eq('organization_id', organizationId)
-        .maybeSingle();
+      // Auto-resolve or auto-create lead for unknown numbers
+      if (!leadId && senderNumber) {
+        const existingLead = await findLeadByNormalizedPhone(supabase, organizationId, senderNumber);
+        if (existingLead) {
+          leadId = existingLead.id;
+        } else {
+          const { data: newLead } = await supabase.from('leads').insert({
+            organization_id: organizationId,
+            phone: normalizePhoneForLead(senderNumber) || senderNumber,
+            name: `WhatsApp Contact (+${senderNumber})`,
+            contact_name: `WhatsApp Contact (+${senderNumber})`,
+            company: 'Inbound WhatsApp',
+            company_name: 'Inbound WhatsApp',
+            status: 'NEW',
+            source: 'WhatsApp'
+          }).select('id').single();
+          if (newLead) leadId = newLead.id;
+        }
+      }
 
-      if (conversationError || !conversation || conversation.organization_id !== organizationId) {
-        return res.status(404).json({ error: 'No conversation found for this lead.' });
+      let convId = null;
+      if (leadId) {
+        const { data: conversation } = await supabase
+          .from('conversations')
+          .select('id, organization_id')
+          .eq('lead_id', leadId)
+          .eq('organization_id', organizationId)
+          .maybeSingle();
+
+        if (conversation) {
+          convId = conversation.id;
+        } else {
+          const { data: newConv } = await supabase.from('conversations').insert({
+            organization_id: organizationId,
+            lead_id: leadId,
+            channel: 'whatsapp'
+          }).select('id').single();
+          convId = newConv?.id;
+        }
       }
 
       const creds = await getTenantWhatsAppCredentials(supabase, organizationId);
@@ -705,7 +741,8 @@ export default async function handler(req, res) {
         const bodyText = text || caption || fileName || 'Media message';
         const messageRecord = {
           organization_id: organizationId,
-          conversation_id: conversation.id,
+          lead_id: leadId || null,
+          conversation_id: convId || null,
           wa_message_id: waMessageId,
           sender_number: senderNumber,
           sender: 'user',

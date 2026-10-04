@@ -572,9 +572,42 @@
               <div class="conv-messages" id="conv-messages">
                 <!-- JS rendered -->
               </div>
-              <div class="conv-composer">
-                <input type="text" class="composer-input" placeholder="Type a message…" id="msg-composer-input">
-                <button class="btn btn-primary" id="msg-send-btn"><i data-feather="send"></i></button>
+              <div class="conv-composer" style="position:relative; display:flex; align-items:center; gap:8px;">
+                <!-- Hidden file input for all media types -->
+                <input type="file" id="msg-file-input" style="display:none;" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.webp">
+                
+                <!-- Attachment Button (Images, Audio, Video, Documents) -->
+                <button type="button" class="btn btn-secondary btn-icon" id="msg-attach-btn" title="Send Image, Audio, Video, or Document" style="padding: 8px 10px; border-radius: 8px; flex-shrink: 0;">
+                  <i data-feather="paperclip"></i>
+                </button>
+
+                <!-- Sticker Button -->
+                <button type="button" class="btn btn-secondary btn-icon" id="msg-sticker-btn" title="Send Sticker / Reaction" style="padding: 8px 10px; border-radius: 8px; font-size: 15px; flex-shrink: 0; line-height: 1;">
+                  🎨
+                </button>
+
+                <!-- Sticker Popover -->
+                <div id="sticker-picker-popover" style="display:none; position:absolute; bottom:56px; left:10px; background:#1e2330; border:1px solid #374151; border-radius:12px; padding:12px; box-shadow:0 12px 30px rgba(0,0,0,0.5); z-index:100; width:280px;">
+                  <div style="font-size:12px; font-weight:600; color:#9ca3af; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;">
+                    <span>Quick Stickers & Reactions</span>
+                    <button type="button" id="close-sticker-picker" style="background:none; border:none; color:#9ca3af; cursor:pointer; font-size:14px;">✕</button>
+                  </div>
+                  <div style="display:grid; grid-template-columns:repeat(5, 1fr); gap:6px; font-size:24px; text-align:center;">
+                    <span class="sticker-opt" style="cursor:pointer; padding:6px; border-radius:6px; transition:background 0.2s;" data-emoji="👍">👍</span>
+                    <span class="sticker-opt" style="cursor:pointer; padding:6px; border-radius:6px; transition:background 0.2s;" data-emoji="❤️">❤️</span>
+                    <span class="sticker-opt" style="cursor:pointer; padding:6px; border-radius:6px; transition:background 0.2s;" data-emoji="🔥">🔥</span>
+                    <span class="sticker-opt" style="cursor:pointer; padding:6px; border-radius:6px; transition:background 0.2s;" data-emoji="🎉">🎉</span>
+                    <span class="sticker-opt" style="cursor:pointer; padding:6px; border-radius:6px; transition:background 0.2s;" data-emoji="👏">👏</span>
+                    <span class="sticker-opt" style="cursor:pointer; padding:6px; border-radius:6px; transition:background 0.2s;" data-emoji="🚀">🚀</span>
+                    <span class="sticker-opt" style="cursor:pointer; padding:6px; border-radius:6px; transition:background 0.2s;" data-emoji="💯">💯</span>
+                    <span class="sticker-opt" style="cursor:pointer; padding:6px; border-radius:6px; transition:background 0.2s;" data-emoji="🤝">🤝</span>
+                    <span class="sticker-opt" style="cursor:pointer; padding:6px; border-radius:6px; transition:background 0.2s;" data-emoji="✅">✅</span>
+                    <span class="sticker-opt" style="cursor:pointer; padding:6px; border-radius:6px; transition:background 0.2s;" data-emoji="⭐">⭐</span>
+                  </div>
+                </div>
+
+                <input type="text" class="composer-input" placeholder="Type a message…" id="msg-composer-input" style="flex:1;">
+                <button class="btn btn-primary" id="msg-send-btn" style="flex-shrink:0;"><i data-feather="send"></i></button>
               </div>
             </div>
 

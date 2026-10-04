@@ -291,7 +291,28 @@ async function findOrCreateLead(organizationId, phoneNumber, contactName = '', s
     .single();
 
   if (error) {
-    console.error('Lead creation error:', error);
+    console.error('Lead creation error:', error.message);
+    // Retry finding lead in case of concurrent insert
+    const { data: existingLeads } = await supabase
+      .from('leads')
+      .select('id')
+      .eq('organization_id', organizationId)
+      .eq('phone', phoneNumber)
+      .limit(1);
+    if (existingLeads && existingLeads[0]) return existingLeads[0].id;
+
+    // Retry with minimal columns
+    const { data: fallbackLead } = await supabase
+      .from('leads')
+      .insert({
+        organization_id: organizationId,
+        name: defaultName,
+        phone: phoneNumber || null,
+        status: 'NEW'
+      })
+      .select('id')
+      .single();
+    if (fallbackLead) return fallbackLead.id;
     throw new Error(`Failed to create lead: ${error.message}`);
   }
 

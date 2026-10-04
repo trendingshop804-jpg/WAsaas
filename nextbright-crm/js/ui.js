@@ -322,6 +322,8 @@ function initMessages() {
       }
     });
   }
+
+  if (typeof feather !== 'undefined') feather.replace();
 }
 
 function renderConversation(conv) {
@@ -346,9 +348,40 @@ function renderConversation(conv) {
       const stateChip = isOut && state
         ? `<div style="font-size:0.625rem;margin-top:3px;opacity:0.85;">${state}</div>`
         : '';
+
+      const msgType = String(m.messageType || m.message_type || 'text').toLowerCase();
+      const mediaUrl = m.mediaUrl || m.media_url || '';
+
+      let bodyContent = '';
+      if (mediaUrl) {
+        if (msgType === 'image') {
+          bodyContent = `<div style="margin-bottom:4px;"><a href="${escapeHtml(mediaUrl)}" target="_blank" rel="noopener"><img src="${escapeHtml(mediaUrl)}" alt="Image" style="max-width:240px; max-height:240px; border-radius:8px; display:block; object-fit:cover;" loading="lazy"></a></div>`;
+          if (m.text && !m.text.startsWith('📎') && !m.text.startsWith('http')) {
+            bodyContent += `<div>${escapeHtml(m.text)}</div>`;
+          }
+        } else if (msgType === 'sticker') {
+          bodyContent = `<div style="margin-bottom:4px;"><img src="${escapeHtml(mediaUrl)}" alt="Sticker" style="width:120px; height:120px; object-fit:contain; display:block;"></div>`;
+        } else if (msgType === 'audio' || msgType === 'voice') {
+          bodyContent = `<div style="margin-bottom:4px;"><audio controls src="${escapeHtml(mediaUrl)}" style="max-width:220px; height:34px; display:block;"></audio></div>`;
+          if (m.text && !m.text.includes('Voice message') && !m.text.startsWith('📎')) {
+            bodyContent += `<div style="font-size:0.75rem; opacity:0.85;">${escapeHtml(m.text)}</div>`;
+          }
+        } else if (msgType === 'video') {
+          bodyContent = `<div style="margin-bottom:4px;"><video controls src="${escapeHtml(mediaUrl)}" style="max-width:240px; max-height:180px; border-radius:8px; display:block;"></video></div>`;
+          if (m.text && !m.text.startsWith('📎') && !m.text.startsWith('http')) {
+            bodyContent += `<div>${escapeHtml(m.text)}</div>`;
+          }
+        } else {
+          const label = m.fileName || m.file_name || m.text || 'Download File';
+          bodyContent = `<div style="margin-bottom:4px;"><a href="${escapeHtml(mediaUrl)}" target="_blank" rel="noopener" download style="display:inline-flex; align-items:center; gap:6px; padding:6px 10px; background:rgba(255,255,255,0.15); border-radius:6px; text-decoration:none; color:inherit; font-size:12px; font-weight:500;">📎 <span>${escapeHtml(label)}</span> ⬇️</a></div>`;
+        }
+      } else {
+        bodyContent = escapeHtml(m.text || '');
+      }
+
       return `
       <div style="margin-bottom: 8px;" data-msg-state="${state || 'received'}">
-        <div class="msg-bubble ${m.dir}" style="${failed ? 'border:1px solid var(--status-danger);' : ''}">${escapeHtml(m.text)}${stateChip}</div>
+        <div class="msg-bubble ${m.dir}" style="${failed ? 'border:1px solid var(--status-danger);' : ''}">${bodyContent}${stateChip}</div>
         <div class="msg-time" style="text-align:${isOut ? 'right' : 'left'}; padding: 2px 4px; font-size: 0.6875rem; color: var(--text-muted);">${formatMessageTime(m.time)}</div>
       </div>`;
     }).join('');
@@ -484,7 +517,135 @@ window.initMessageFilters = initMessageFilters;
 function initMessageComposer() {
   const input  = document.getElementById('msg-composer-input');
   const sendBtn= document.getElementById('msg-send-btn');
+  const attachBtn = document.getElementById('msg-attach-btn');
+  const fileInput = document.getElementById('msg-file-input');
+  const stickerBtn = document.getElementById('msg-sticker-btn');
+  const stickerPopover = document.getElementById('sticker-picker-popover');
+  const closeStickerBtn = document.getElementById('close-sticker-picker');
   if (!input || !sendBtn) return;
+
+  // Toggle Sticker Picker Popover
+  if (stickerBtn && stickerPopover) {
+    stickerBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      stickerPopover.style.display = stickerPopover.style.display === 'none' ? 'block' : 'none';
+    });
+    if (closeStickerBtn) {
+      closeStickerBtn.addEventListener('click', () => {
+        stickerPopover.style.display = 'none';
+      });
+    }
+    document.addEventListener('click', (e) => {
+      if (stickerPopover && !stickerPopover.contains(e.target) && e.target !== stickerBtn) {
+        stickerPopover.style.display = 'none';
+      }
+    });
+
+    stickerPopover.querySelectorAll('.sticker-opt').forEach(opt => {
+      opt.addEventListener('click', () => {
+        const emoji = opt.dataset.emoji || opt.textContent;
+        input.value += emoji;
+        input.focus();
+        stickerPopover.style.display = 'none';
+      });
+    });
+  }
+
+  // File / Media Attachment Handler
+  if (attachBtn && fileInput) {
+    attachBtn.addEventListener('click', () => fileInput.click());
+
+    fileInput.addEventListener('change', async () => {
+      const file = fileInput.files?.[0];
+      if (!file) return;
+      fileInput.value = ''; // reset for next upload
+
+      const activeItem = document.querySelector('.conv-item.active');
+      const activeName = activeItem ? activeItem.querySelector('.conv-name').textContent : '';
+      const activePhone = activeItem?.dataset.phone || '';
+      const conv = window.NB?.conversations?.find(c => c.name === activeName) || window.NB?.conversations?.[0];
+
+      if (!conv || !activePhone) {
+        showToast('Please select a conversation to send media.', 'error');
+        return;
+      }
+
+      const mimeType = file.type || 'application/octet-stream';
+      let messageType = 'document';
+      if (mimeType.startsWith('image/')) {
+        messageType = file.name.endsWith('.webp') ? 'sticker' : 'image';
+      } else if (mimeType.startsWith('audio/')) {
+        messageType = 'audio';
+      } else if (mimeType.startsWith('video/')) {
+        messageType = 'video';
+      }
+
+      showToast(`Uploading and sending ${messageType}…`, 'default');
+
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const base64Data = String(reader.result).split(',')[1];
+        const optimisticUrl = URL.createObjectURL(file);
+        const now = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+
+        const optimistic = {
+          dir: 'out',
+          text: file.name,
+          time: now,
+          status: 'sending',
+          messageType,
+          mediaUrl: optimisticUrl
+        };
+        conv.messages.push(optimistic);
+        renderConversation(conv);
+
+        try {
+          const token = window.NB_AUTH ? await window.NB_AUTH.getAccessToken() : null;
+          if (!token) throw new Error('Sign in to send media attachments.');
+
+          const payloadBody = {
+            senderNumber: activePhone,
+            fileBase64: base64Data,
+            fileName: file.name,
+            mimeType: mimeType,
+            messageType: messageType,
+            caption: input.value.trim() || ''
+          };
+          input.value = '';
+
+          const response = window.NB_AUTH?.apiFetch
+            ? await window.NB_AUTH.apiFetch('/api/messages?action=send-media', {
+                method: 'POST',
+                body: JSON.stringify(payloadBody)
+              })
+            : await fetch('/api/messages?action=send-media', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify(payloadBody)
+              });
+
+          const resData = await response.json().catch(() => ({}));
+          if (!response.ok || resData.success === false) {
+            optimistic.status = 'failed';
+            renderConversation(conv);
+            showToast(resData.error || `Media upload failed (HTTP ${response.status})`, 'error');
+            return;
+          }
+
+          optimistic.status = 'sent';
+          if (resData.mediaPublicUrl) optimistic.mediaUrl = resData.mediaPublicUrl;
+          renderConversation(conv);
+          showToast(`${messageType.charAt(0).toUpperCase() + messageType.slice(1)} sent successfully!`, 'success');
+          refreshLiveInbox();
+        } catch (err) {
+          optimistic.status = 'failed';
+          renderConversation(conv);
+          showToast(`Media send failed: ${err.message}`, 'error');
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+  }
 
   const send = async () => {
     const text = input.value.trim();
