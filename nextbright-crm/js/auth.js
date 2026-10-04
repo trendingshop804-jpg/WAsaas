@@ -20,16 +20,30 @@ const NB_AUTH = (() => {
     listeners.forEach(fn => { try { fn(session, user); } catch (_) { /* ignore */ } });
   }
 
+  const FALLBACK_PROJECT_URL = 'https://mdrxnycolkuuvszzzwqi.supabase.co';
+  const FALLBACK_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1kcnhueWNvbGt1dXZzenp6d3FpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcyMzkwNTcsImV4cCI6MjEwMjgxNTA1N30.hEl52V14VF47U1hQF6uzJGuMSQ05XLVsBq3x6fcimTI';
+
   async function getClient() {
     if (client) return client;
     if (!initPromise) {
       initPromise = (async () => {
-        const res = await fetch('/api/public-config', { cache: 'no-store' });
-        if (!res.ok) throw new Error('Could not load Supabase public configuration.');
-        const cfg = await res.json();
-        if (!cfg.projectUrl || !cfg.anonKey) throw new Error('Supabase is not configured on the server.');
+        let projectUrl = null;
+        let anonKey = null;
+        try {
+          const res = await fetch('/api/public-config', { cache: 'no-store' });
+          if (res.ok) {
+            const cfg = await res.json();
+            projectUrl = cfg.projectUrl;
+            anonKey = cfg.anonKey;
+          }
+        } catch (_) { /* fallback below */ }
+
+        projectUrl = projectUrl || window.supabaseConfig?.projectUrl || FALLBACK_PROJECT_URL;
+        anonKey = anonKey || window.supabaseConfig?.anonKey || FALLBACK_ANON_KEY;
+
+        if (!projectUrl || !anonKey) throw new Error('Supabase is not configured on the server.');
         if (!window.supabase?.createClient) throw new Error('Supabase JS SDK failed to load.');
-        client = window.supabase.createClient(cfg.projectUrl, cfg.anonKey, {
+        client = window.supabase.createClient(projectUrl, anonKey, {
           auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
         });
         return client;
