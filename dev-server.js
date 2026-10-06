@@ -14,6 +14,9 @@ const PORT = 3001;
 
 const API_REWRITES = {
   'test-connection': { target: 'integration-status', query: { route: 'test-connection' } },
+  'trigger-call': { target: 'integration-status', query: { route: 'trigger-call' } },
+  'send-whatsapp-followup': { target: 'daily-followup', query: { route: 'send-whatsapp-followup' } },
+  'update-whatsapp-profile': { target: 'meta-oauth-exchange', query: { route: 'update-whatsapp-profile' } },
   'admin-companies': { target: 'admin', query: { resource: 'companies' } },
   'admin-system': { target: 'admin', query: { resource: 'system' } },
   'send-media': { target: 'messages', query: { route: 'send-media' } }

@@ -87,6 +87,11 @@ async function generateAiFollowup({ contactName, company, service, stage, lastMe
 }
 
 export default async function handler(req, res) {
+  if (req.query?.route === 'send-whatsapp-followup' || req.query?.action === 'send-followup') {
+    const { default: sendFollowup } = await import('./_send-whatsapp-followup.js');
+    return sendFollowup(req, res);
+  }
+
   // ── 1. Authorization check ───────────────────────────────────────────────
   if (!(await authorizeCron(req, res))) return;
   if (!['GET', 'POST'].includes(req.method)) {

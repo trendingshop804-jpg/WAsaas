@@ -48,18 +48,16 @@ export async function verifyOrganizationAccess(req, organizationId) {
 
 /** Extract the bearer token, or '' when absent. */
 export function getBearerToken(req) {
+  const apiKeyHeader = req.headers?.['x-api-key'] || req.headers?.['X-API-Key'] || req.headers?.['x-api-token'];
+  if (apiKeyHeader) return String(apiKeyHeader).trim();
   const raw = req.headers?.authorization || req.headers?.Authorization || '';
   return String(raw).replace(/^Bearer\s+/i, '').trim();
 }
 
 /**
- * Validate the bearer JWT with the ANON client (network call to GoTrue).
+ * Validate the bearer JWT with the ANON client (network call to GoTrue)
+ * OR validate an organization API key (nl_live_... / nb_live_...) against organization_api_keys.
  * Returns { user } on success, or { error, status } on failure.
- */
-/**
- * Short, safe description of an authentication outcome for server logs.
- * Records WHETHER a credential was presented and whether it verified. The
- * token itself is never included, and no header value is ever logged.
  */
 function authLogFields(req) {
   const present = Boolean(getBearerToken(req));
@@ -72,8 +70,56 @@ export async function getAuthenticatedUser(req) {
   const admin = createSupabaseAdminClient();
 
   if (token) {
-    // A token was presented, so it must be the token that decides the identity.
-    // If we cannot validate it we must not substitute a different user for it.
+    // 1. Check if token is an Organization API Key (e.g. nl_live_..., nb_live_..., or passed via x-api-key)
+    const isLikelyApiKey = token.startsWith('nl_') || token.startsWith('nb_') || Boolean(req.headers?.['x-api-key']);
+    if (isLikelyApiKey && admin) {
+      try {
+        const { createHash } = await import('node:crypto');
+        const keyHash = createHash('sha256').update(token).digest('hex');
+        const { data: keyRow, error: keyError } = await admin
+          .from('organization_api_keys')
+          .select('id, organization_id, name, key_prefix, created_by, revoked_at')
+          .eq('key_hash', keyHash)
+          .is('revoked_at', null)
+          .maybeSingle();
+
+        if (!keyError && keyRow) {
+          // Update last_used_at asynchronously
+          admin.from('organization_api_keys')
+            .update({ last_used_at: new Date().toISOString() })
+            .eq('id', keyRow.id)
+            .then(() => {}).catch(() => {});
+
+          console.log('[getAuthenticatedUser] API key verified', {
+            keyPrefix: keyRow.key_prefix,
+            organizationId: keyRow.organization_id
+          });
+
+          return {
+            user: {
+              id: keyRow.created_by || keyRow.id,
+              email: `apikey-${keyRow.name.replace(/[^a-z0-9]/gi, '_')}@integration`,
+              role: 'api_key'
+            },
+            organizationId: keyRow.organization_id,
+            isApiKey: true,
+            apiKeyName: keyRow.name
+          };
+        } else {
+          console.warn('[getAuthenticatedUser] API key rejected or revoked');
+          return {
+            error: 'Unauthorized',
+            message: 'Invalid or revoked API key.',
+            status: 401,
+            code: 'INVALID_API_KEY'
+          };
+        }
+      } catch (err) {
+        console.warn('[getAuthenticatedUser] API key verification error:', err.message);
+      }
+    }
+
+    // 2. Validate Supabase Auth JWT
     if (!url || !publishableKey) {
       console.warn('[getAuthenticatedUser] verification unavailable', authLogFields(req));
       return { error: 'Authentication unavailable. Please retry.', status: 503 };
@@ -82,7 +128,6 @@ export async function getAuthenticatedUser(req) {
       const publicClient = createClient(url, publishableKey, { auth: { persistSession: false, autoRefreshToken: false } });
       const { data, error } = await publicClient.auth.getUser(token);
       if (!error && data?.user) {
-        // userId only. Never the token, never the header value.
         console.log('[getAuthenticatedUser] token verified', {
           ...authLogFields(req),
           verified: true,
@@ -98,22 +143,16 @@ export async function getAuthenticatedUser(req) {
     } catch (e) {
       console.warn('[getAuthenticatedUser] GoTrue token validation notice:', e.message);
     }
-    // An expired, forged or revoked token ends here. Falling through to any
-    // other identity would silently promote the caller to that user's access.
-    // The client distinguishes "expired, sign in again" from "never signed in".
     return {
       error: 'Unauthorized',
-      message: 'Your session has expired. Please sign in again.',
+      message: 'Your session has expired or the token is invalid. Please sign in again.',
       status: 401,
       code: 'UNAUTHORIZED'
     };
   }
 
-  // No token at all: the request is unauthenticated and must stay that way.
+  // No token presented
   console.warn('[getAuthenticatedUser] no credential presented', authLogFields(req));
-  // The only exception is an explicit, opt-in local dev switch. It requires an
-  // env flag AND a non-production NODE_ENV, so it cannot be reached on a
-  // deployed environment no matter how the server is configured.
   const devAuthEnabled =
     process.env.NODE_ENV !== 'production' &&
     String(process.env.ALLOW_DEV_AUTH || '').trim().toLowerCase() === 'true';
@@ -122,18 +161,21 @@ export async function getAuthenticatedUser(req) {
     if (!admin) {
       return { error: 'ALLOW_DEV_AUTH is set but the Supabase service-role client is unavailable.', status: 503 };
     }
-    const { data: firstUser } = await admin.from('organization_users').select('user_id').limit(1).maybeSingle();
+    const { data: firstUser } = await admin.from('organization_users').select('user_id, organization_id').limit(1).maybeSingle();
     const userId = firstUser?.user_id;
     if (userId) {
       console.warn('[getAuthenticatedUser] ALLOW_DEV_AUTH bypass used for user', userId);
-      return { user: { id: userId, email: 'dev@local', role: 'authenticated' } };
+      return {
+        user: { id: userId, email: 'dev@local', role: 'authenticated' },
+        organizationId: firstUser?.organization_id
+      };
     }
     return { error: 'ALLOW_DEV_AUTH is set but no organization member was found.', status: 503 };
   }
 
   return {
     error: 'Unauthorized',
-    message: 'A valid signed-in session is required.',
+    message: 'A valid signed-in session or API key is required.',
     status: 401,
     code: 'AUTH_REQUIRED'
   };
@@ -180,18 +222,36 @@ export async function getUserOrganizationIds(userId) {
  * after having written the error response.
  */
 export async function requireOrgAccess(req, res, requestedOrganizationId) {
-  const { user, error, status, code, message } = await getAuthenticatedUser(req);
-  if (!user) {
-    // `message` distinguishes "no session" from "session expired" for the
-    // client. `code` is stable and machine-readable. Neither leaks anything.
-    res.status(status || 401).json({
-      error: error || 'Unauthorized',
-      message: message || 'A valid signed-in session is required.',
-      code: code || 'AUTH_REQUIRED'
+  const authResult = await getAuthenticatedUser(req);
+  if (!authResult.user) {
+    res.status(authResult.status || 401).json({
+      error: authResult.error || 'Unauthorized',
+      message: authResult.message || 'A valid signed-in session or API key is required.',
+      code: authResult.code || 'AUTH_REQUIRED'
     });
     return null;
   }
 
+  if (authResult.isApiKey) {
+    if (requestedOrganizationId && requestedOrganizationId !== authResult.organizationId) {
+      res.status(403).json({
+        error: 'Forbidden',
+        message: 'This API key does not have access to the requested organization.',
+        code: 'CROSS_TENANT_DENIED'
+      });
+      return null;
+    }
+    return {
+      user: authResult.user,
+      organizationId: authResult.organizationId,
+      organizationIds: [authResult.organizationId],
+      role: 'ADMIN',
+      isApiKey: true,
+      apiKeyName: authResult.apiKeyName
+    };
+  }
+
+  const { user } = authResult;
   const { rows: memberships, error: membershipError } = await getUserOrganizationIds(user.id);
   if (membershipError) {
     // Deliberately NOT a 403: the caller may well be a valid member, and a

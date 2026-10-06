@@ -763,7 +763,9 @@
               <a class="settings-nav-item active" data-settings-tab="profile">Profile</a>
               <a class="settings-nav-item" data-settings-tab="workspace">Workspace</a>
               <a class="settings-nav-item" data-settings-tab="team">Team & Roles</a>
-              <a class="settings-nav-item" data-settings-tab="integrations">Integrations</a>
+              <a class="settings-nav-item" data-settings-tab="integrations">Channels</a>
+              <a class="settings-nav-item" data-settings-tab="api-keys"><i data-feather="key" style="width:13px;height:13px;margin-right:4px;"></i>API Keys & Webhooks</a>
+              <a class="settings-nav-item" data-settings-tab="external-crms"><i data-feather="link" style="width:13px;height:13px;margin-right:4px;"></i>Softwares & CRMs</a>
               <a class="settings-nav-item" data-settings-tab="notifications">Notifications</a>
               <a class="settings-nav-item" data-settings-tab="billing">Billing</a>
             </nav>
@@ -867,11 +869,12 @@
                 </table>
               </div>
 
-              <!-- TAB 4: INTEGRATIONS -->
+              <!-- TAB 4: INTEGRATIONS (CHANNELS) -->
               <div class="settings-tab-panel" id="settings-tab-integrations">
-                <div class="card-title" style="margin-bottom:4px;">Communication Channels & APIs</div>
-                 <p style="font-size:0.75rem;color:var(--text-muted);margin:0 0 16px;">Status is checked live against the server and refreshed every 30 seconds.</p>
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px;">
+                <div class="card-title" style="margin-bottom:4px;">Communication Channels & Gateway APIs</div>
+                <p style="font-size:0.75rem;color:var(--text-muted);margin:0 0 16px;">Status is checked live against the server and refreshed every 30 seconds.</p>
+                
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-bottom: 24px;">
                   <div style="padding: 14px; border: 1px solid var(--border-light); border-radius: 8px; background: var(--navy-50);">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                       <strong style="font-size: 0.875rem;">WhatsApp Cloud API</strong>
@@ -908,7 +911,34 @@
                     <button class="btn btn-secondary btn-sm w-full" data-integration="stripe">Configure</button>
                   </div>
                 </div>
+
+                <!-- Fast Links to API Keys & CRM tabs -->
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; border-top: 1px solid var(--border-subtle); padding-top: 18px;">
+                  <div style="padding: 16px; border: 1px solid rgba(59, 130, 246, 0.2); background: rgba(59, 130, 246, 0.04); border-radius: 8px;">
+                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+                      <span style="font-size: 18px;">🔑</span>
+                      <strong style="font-size: 0.875rem; color: var(--text-primary);">SaaS API Keys & Webhooks</strong>
+                    </div>
+                    <p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 12px;">Generate secret API keys for Make, Zapier, custom scripts, and external webhook integrations.</p>
+                    <button class="btn btn-primary btn-sm" onclick="document.querySelector('[data-settings-tab=api-keys]').click()">Manage Platform API Keys →</button>
+                  </div>
+
+                  <div style="padding: 16px; border: 1px solid rgba(16, 185, 129, 0.2); background: rgba(16, 185, 129, 0.04); border-radius: 8px;">
+                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+                      <span style="font-size: 18px;">🔌</span>
+                      <strong style="font-size: 0.875rem; color: var(--text-primary);">Other Softwares & CRMs</strong>
+                    </div>
+                    <p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 12px;">Connect and encrypt API keys for HubSpot, Salesforce, Zoho, Pipedrive, Shopify, and custom ERPs.</p>
+                    <button class="btn btn-secondary btn-sm" onclick="document.querySelector('[data-settings-tab=external-crms]').click()">Connect External Softwares →</button>
+                  </div>
+                </div>
               </div>
+
+              <!-- TAB 5: SAAS API KEYS & WEBHOOKS -->
+              <div class="settings-tab-panel" id="settings-tab-api-keys"></div>
+
+              <!-- TAB 6: CONNECTED SOFTWARES & CRMS -->
+              <div class="settings-tab-panel" id="settings-tab-external-crms"></div>
 
               <!-- TAB 5: NOTIFICATIONS -->
               <div class="settings-tab-panel" id="settings-tab-notifications">
@@ -1269,5 +1299,6 @@
   <script src="js/ui.js?v=20260926-secure-api"></script>
   <script src="js/charts.js"></script>
   <script src="js/app.js?v=20260925-call-webhook-call"></script>
+  <script src="js/components/integrations-manager.js"></script>
 </body>
 </html>

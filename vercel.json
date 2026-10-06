@@ -19,6 +19,18 @@
       "destination": "/api/integration-status?route=test-connection"
     },
     {
+      "source": "/api/trigger-call",
+      "destination": "/api/integration-status?route=trigger-call"
+    },
+    {
+      "source": "/api/send-whatsapp-followup",
+      "destination": "/api/daily-followup?route=send-whatsapp-followup"
+    },
+    {
+      "source": "/api/update-whatsapp-profile",
+      "destination": "/api/meta-oauth-exchange?route=update-whatsapp-profile"
+    },
+    {
       "source": "/api/admin-companies",
       "destination": "/api/admin?resource=companies"
     },

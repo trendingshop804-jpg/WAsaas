@@ -142,6 +142,12 @@ async function saveCredentials(req, res) {
 }
 
 export default async function handler(req, res) {
+  const query = req.query || {};
+  if (query.route === 'trigger-call') {
+    const { default: triggerCall } = await import('./_trigger-call.js');
+    return triggerCall(req, res);
+  }
+
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
@@ -149,7 +155,6 @@ export default async function handler(req, res) {
 
   if (req.method === 'OPTIONS') return res.status(204).end();
 
-  const query = req.query || {};
   const isTestConnection = query.route === 'test-connection';
 
   // ── Route: save provider credentials ─────────────────────────────────────

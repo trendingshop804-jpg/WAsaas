@@ -96,6 +96,11 @@ async function discoverAccounts(longLivedToken) {
 }
 
 export default async function handler(req, res) {
+  if (req.query?.route === 'update-whatsapp-profile' || req.query?.route === 'update-profile') {
+    const { default: updateProfile } = await import('./_update-whatsapp-profile.js');
+    return updateProfile(req, res);
+  }
+
   res.setHeader('Access-Control-Allow-Origin', ['https://yourdomain.com', 'https://app.yourdomain.com', 'http://localhost:3000']);
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, apikey');
