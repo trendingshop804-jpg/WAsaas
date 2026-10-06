@@ -935,10 +935,212 @@
               </div>
 
               <!-- TAB 5: SAAS API KEYS & WEBHOOKS -->
-              <div class="settings-tab-panel" id="settings-tab-api-keys"></div>
+              <div class="settings-tab-panel" id="settings-tab-api-keys">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
+                  <div>
+                    <div class="card-title" style="margin-bottom: 4px;">SaaS Platform API Keys</div>
+                    <p style="font-size: 0.8125rem; color: var(--text-muted); margin: 0;">
+                      Generate secret API keys for external applications (Make.com, Zapier, custom scripts, website forms) to authenticate and interact with your CRM & WhatsApp platform.
+                    </p>
+                  </div>
+                  <button id="btn-open-generate-key-inline" class="btn btn-primary btn-sm" style="display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;">
+                    <i data-feather="plus" style="width:14px;height:14px;"></i> Generate New API Key
+                  </button>
+                </div>
+
+                <!-- Generate API Key Inline Form (Collapsible) -->
+                <div id="inline-generate-key-form-container" style="display: none; background: var(--navy-50); border: 1px solid var(--border-light); border-radius: 8px; padding: 18px; margin-bottom: 20px;">
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                    <strong style="font-size: 0.9375rem; color: var(--text-primary);">🔑 Create Secret API Key</strong>
+                    <button type="button" id="btn-close-generate-key-inline" style="background: none; border: none; font-size: 18px; cursor: pointer; color: var(--text-muted);">&times;</button>
+                  </div>
+                  <form id="form-inline-generate-key" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; align-items: end;">
+                    <div class="form-group" style="margin: 0;">
+                      <label class="form-label" style="font-size: 0.78rem;">Key Name / Purpose *</label>
+                      <input type="text" id="inline-gen-key-name" class="form-input" required placeholder="e.g. Make.com Production Webhook" maxlength="80">
+                    </div>
+                    <div class="form-group" style="margin: 0;">
+                      <label class="form-label" style="font-size: 0.78rem;">Scope / Permissions</label>
+                      <select id="inline-gen-key-scope" class="form-input">
+                        <option value="full">Full Access (Leads, Messages, Automation)</option>
+                        <option value="leads_write">Leads Ingestion & Sync</option>
+                        <option value="messages_write">Messaging Only (WhatsApp)</option>
+                        <option value="read_only">Read-Only Access</option>
+                      </select>
+                    </div>
+                    <div style="display: flex; gap: 8px;">
+                      <button type="submit" id="btn-inline-gen-submit" class="btn btn-primary btn-sm" style="height: 38px; flex: 1;">Generate Key</button>
+                      <button type="button" id="btn-inline-gen-cancel" class="btn btn-secondary btn-sm" style="height: 38px;">Cancel</button>
+                    </div>
+                  </form>
+                </div>
+
+                <!-- Reveal Dialog Container -->
+                <div id="new-key-reveal-container" style="display: none; margin-bottom: 20px;"></div>
+
+                <!-- Active API Keys Table -->
+                <div style="margin-bottom: 28px;">
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+                    <div style="font-size: 0.875rem; font-weight: 700; color: var(--text-primary);">Active API Keys</div>
+                    <button id="btn-refresh-api-keys" class="btn btn-secondary btn-sm" style="font-size: 0.75rem; padding: 4px 10px;">Refresh Keys</button>
+                  </div>
+                  <div class="table-wrap" style="border: 1px solid var(--border-light); border-radius: 8px; overflow-x: auto; -webkit-overflow-scrolling: touch; background: #fff;">
+                    <table class="data-table" style="margin: 0; width: 100%; min-width: 580px;">
+                      <thead>
+                        <tr>
+                          <th>Key Name</th>
+                          <th>Key Prefix</th>
+                          <th>Created</th>
+                          <th>Last Used</th>
+                          <th>Status</th>
+                          <th style="text-align: right;">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody id="api-keys-table-body">
+                        <tr>
+                          <td colspan="6" style="text-align: center; padding: 24px; color: var(--text-muted);">Loading active API keys…</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <!-- Developer API Quickstart -->
+                <div style="border: 1px solid var(--border-light); border-radius: 8px; padding: 18px; background: var(--navy-50);">
+                  <div style="font-size: 0.9375rem; font-weight: 700; color: var(--text-primary); margin-bottom: 6px; display: flex; align-items: center; gap: 8px;">
+                    <span>⚡</span> Developer API Quickstart & Code Examples
+                  </div>
+                  <p style="font-size: 0.8125rem; color: var(--text-muted); margin-bottom: 14px;">
+                    Include your generated key in the <code style="background: rgba(0,0,0,0.06); padding: 2px 6px; border-radius: 4px;">Authorization: Bearer nl_live_...</code> or <code style="background: rgba(0,0,0,0.06); padding: 2px 6px; border-radius: 4px;">X-API-Key: nl_live_...</code> header.
+                  </p>
+
+                  <div style="display: flex; gap: 8px; margin-bottom: 12px; border-bottom: 1px solid var(--border-light); padding-bottom: 8px; overflow-x: auto;">
+                    <button type="button" class="api-doc-tab active" data-doc="curl" style="background: var(--brand-primary); color: #fff; border: none; border-radius: 4px; padding: 4px 12px; font-size: 0.75rem; font-weight: 600; cursor: pointer;">cURL</button>
+                    <button type="button" class="api-doc-tab" data-doc="js" style="background: transparent; color: var(--text-secondary); border: none; border-radius: 4px; padding: 4px 12px; font-size: 0.75rem; font-weight: 600; cursor: pointer;">JavaScript (Node)</button>
+                    <button type="button" class="api-doc-tab" data-doc="python" style="background: transparent; color: var(--text-secondary); border: none; border-radius: 4px; padding: 4px 12px; font-size: 0.75rem; font-weight: 600; cursor: pointer;">Python</button>
+                    <button type="button" class="api-doc-tab" data-doc="make" style="background: transparent; color: var(--text-secondary); border: none; border-radius: 4px; padding: 4px 12px; font-size: 0.75rem; font-weight: 600; cursor: pointer;">Make / Zapier</button>
+                  </div>
+
+                  <div id="api-doc-code-block" style="background: #0f172a; color: #f8fafc; border-radius: 6px; padding: 14px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 0.78rem; line-height: 1.5; overflow-x: auto; position: relative;">
+                    <button type="button" id="btn-copy-doc-code" style="position: absolute; top: 10px; right: 10px; background: rgba(255,255,255,0.15); color: #fff; border: none; border-radius: 4px; padding: 3px 8px; font-size: 0.7rem; cursor: pointer;">Copy Code</button>
+                    <pre id="api-doc-pre" style="margin: 0; overflow-x: auto; white-space: pre-wrap; word-break: break-word;"># 1. Create a new Lead via REST API
+curl -X POST https://your-domain.com/api/leads \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contactName": "Rahul Sharma",
+    "phone": "+919876543210",
+    "email": "rahul@example.com",
+    "companyName": "Sharma Healthcare",
+    "status": "New",
+    "score": 85
+  }'</pre>
+                  </div>
+                </div>
+              </div>
 
               <!-- TAB 6: CONNECTED SOFTWARES & CRMS -->
-              <div class="settings-tab-panel" id="settings-tab-external-crms"></div>
+              <div class="settings-tab-panel" id="settings-tab-external-crms">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
+                  <div>
+                    <div class="card-title" style="margin-bottom: 4px;">Connected Softwares & Third-Party CRMs</div>
+                    <p style="font-size: 0.8125rem; color: var(--text-muted); margin: 0;">
+                      Connect external CRM (HubSpot, Salesforce, Zoho, Pipedrive), e-commerce platforms, or custom software API keys. All credentials are encrypted server-side with AES-256-GCM.
+                    </p>
+                  </div>
+                  <button id="btn-open-add-crm-inline" class="btn btn-primary btn-sm" style="display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;">
+                    <i data-feather="plus" style="width:14px;height:14px;"></i> Connect New Software
+                  </button>
+                </div>
+
+                <!-- Connect Software Inline Form (Collapsible) -->
+                <div id="inline-add-crm-form-container" style="display: none; background: var(--navy-50); border: 1px solid var(--border-light); border-radius: 8px; padding: 18px; margin-bottom: 20px;">
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                    <strong style="font-size: 0.9375rem; color: var(--text-primary);">🔌 Save Software / CRM Credentials</strong>
+                    <button type="button" id="btn-close-add-crm-inline" style="background: none; border: none; font-size: 18px; cursor: pointer; color: var(--text-muted);">&times;</button>
+                  </div>
+                  <form id="form-inline-save-crm" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; align-items: end;">
+                    <div class="form-group" style="margin: 0;">
+                      <label class="form-label" style="font-size: 0.78rem;">Software / CRM Name *</label>
+                      <input type="text" id="inline-crm-name" class="form-input" required placeholder="e.g. HubSpot CRM" maxlength="80">
+                    </div>
+                    <div class="form-group" style="margin: 0;">
+                      <label class="form-label" style="font-size: 0.78rem;">HTTPS Base URL (Optional)</label>
+                      <input type="url" id="inline-crm-url" class="form-input" placeholder="https://api.hubapi.com">
+                    </div>
+                    <div class="form-group" style="margin: 0;">
+                      <label class="form-label" style="font-size: 0.78rem;">API Key / Private Access Token *</label>
+                      <input type="password" id="inline-crm-secret" class="form-input" required placeholder="Paste secret API key" autocomplete="new-password">
+                    </div>
+                    <div style="display: flex; gap: 8px;">
+                      <button type="submit" id="btn-inline-crm-submit" class="btn btn-primary btn-sm" style="height: 38px; flex: 1;">Save Connection</button>
+                      <button type="button" id="btn-inline-crm-cancel" class="btn btn-secondary btn-sm" style="height: 38px;">Cancel</button>
+                    </div>
+                  </form>
+                </div>
+
+                <!-- Quick Presets -->
+                <div style="margin-bottom: 24px;">
+                  <div style="font-size: 0.75rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 10px; letter-spacing: 0.5px;">Quick Connect Presets</div>
+                  <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px;">
+                    <button type="button" class="crm-preset-card" data-preset="hubspot" data-name="HubSpot CRM" data-url="https://api.hubapi.com" data-ph="pat-na1-xxxxxxxx" style="background: var(--navy-50, #f8fafc); border: 1px solid var(--border-light, #e2e8f0); border-radius: 8px; padding: 10px 12px; text-align: left; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 10px;">
+                      <span style="font-size: 20px;">🟠</span>
+                      <div>
+                        <div style="font-size: 0.8125rem; font-weight: 600; color: var(--text-primary);">HubSpot</div>
+                        <div style="font-size: 0.7rem; color: var(--text-muted);">Connect Key →</div>
+                      </div>
+                    </button>
+                    <button type="button" class="crm-preset-card" data-preset="salesforce" data-name="Salesforce" data-url="https://yourinstance.salesforce.com" data-ph="OAuth / API Token" style="background: var(--navy-50, #f8fafc); border: 1px solid var(--border-light, #e2e8f0); border-radius: 8px; padding: 10px 12px; text-align: left; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 10px;">
+                      <span style="font-size: 20px;">☁️</span>
+                      <div>
+                        <div style="font-size: 0.8125rem; font-weight: 600; color: var(--text-primary);">Salesforce</div>
+                        <div style="font-size: 0.7rem; color: var(--text-muted);">Connect Key →</div>
+                      </div>
+                    </button>
+                    <button type="button" class="crm-preset-card" data-preset="zoho" data-name="Zoho CRM" data-url="https://www.zohoapis.com/crm/v2" data-ph="Zoho Auth Token" style="background: var(--navy-50, #f8fafc); border: 1px solid var(--border-light, #e2e8f0); border-radius: 8px; padding: 10px 12px; text-align: left; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 10px;">
+                      <span style="font-size: 20px;">💼</span>
+                      <div>
+                        <div style="font-size: 0.8125rem; font-weight: 600; color: var(--text-primary);">Zoho CRM</div>
+                        <div style="font-size: 0.7rem; color: var(--text-muted);">Connect Key →</div>
+                      </div>
+                    </button>
+                    <button type="button" class="crm-preset-card" data-preset="pipedrive" data-name="Pipedrive" data-url="https://api.pipedrive.com/v1" data-ph="Personal API Token" style="background: var(--navy-50, #f8fafc); border: 1px solid var(--border-light, #e2e8f0); border-radius: 8px; padding: 10px 12px; text-align: left; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 10px;">
+                      <span style="font-size: 20px;">🟢</span>
+                      <div>
+                        <div style="font-size: 0.8125rem; font-weight: 600; color: var(--text-primary);">Pipedrive</div>
+                        <div style="font-size: 0.7rem; color: var(--text-muted);">Connect Key →</div>
+                      </div>
+                    </button>
+                    <button type="button" class="crm-preset-card" data-preset="shopify" data-name="Shopify" data-url="https://your-shop.myshopify.com/admin/api/2024-01" data-ph="shpat_xxxxxxxx" style="background: var(--navy-50, #f8fafc); border: 1px solid var(--border-light, #e2e8f0); border-radius: 8px; padding: 10px 12px; text-align: left; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 10px;">
+                      <span style="font-size: 20px;">🛍️</span>
+                      <div>
+                        <div style="font-size: 0.8125rem; font-weight: 600; color: var(--text-primary);">Shopify</div>
+                        <div style="font-size: 0.7rem; color: var(--text-muted);">Connect Key →</div>
+                      </div>
+                    </button>
+                    <button type="button" class="crm-preset-card" data-preset="make_zapier" data-name="Make / Zapier Webhook" data-url="" data-ph="Webhook Secret or URL" style="background: var(--navy-50, #f8fafc); border: 1px solid var(--border-light, #e2e8f0); border-radius: 8px; padding: 10px 12px; text-align: left; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 10px;">
+                      <span style="font-size: 20px;">⚡</span>
+                      <div>
+                        <div style="font-size: 0.8125rem; font-weight: 600; color: var(--text-primary);">Make / Zapier</div>
+                        <div style="font-size: 0.7rem; color: var(--text-muted);">Connect Key →</div>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Active Saved Connections -->
+                <div>
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+                    <div style="font-size: 0.875rem; font-weight: 700; color: var(--text-primary);">Active Software Connections</div>
+                    <button id="btn-refresh-crms" class="btn btn-secondary btn-sm" style="font-size: 0.75rem; padding: 4px 10px;">Refresh Status</button>
+                  </div>
+                  <div id="crms-connections-list" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px;">
+                    <div style="padding: 24px; text-align: center; color: var(--text-muted); background: var(--navy-50); border-radius: 8px; border: 1px dashed var(--border-light); grid-column: 1 / -1;">
+                      Loading saved connections…
+                    </div>
+                  </div>
+                </div>
+              </div>
 
               <!-- TAB 5: NOTIFICATIONS -->
               <div class="settings-tab-panel" id="settings-tab-notifications">

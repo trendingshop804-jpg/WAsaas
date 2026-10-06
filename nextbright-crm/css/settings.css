@@ -698,11 +698,49 @@
 .wa-step-content strong { color: var(--text-primary); }
 
 /* ── Responsive ──────────────────────────────────────────────────────── */
+.crm-preset-card:hover {
+  border-color: var(--brand-primary, #3b82f6) !important;
+  background: rgba(59, 130, 246, 0.06) !important;
+  transform: translateY(-1px);
+}
+
+.table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
 @media (max-width: 900px) {
   .integrations-grid { grid-template-columns: 1fr; }
 }
 
-@media (max-width: 600px) {
+@media (max-width: 768px) {
+  .settings-layout { grid-template-columns: 1fr; }
+  .settings-nav {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border-light);
+    margin-bottom: 16px;
+  }
+  .settings-nav-item {
+    white-space: nowrap;
+    padding: 8px 14px;
+    flex-shrink: 0;
+  }
   #view-settings .settings-tabs { flex-wrap: wrap; }
   .integration-card-footer { flex-direction: column; align-items: stretch; }
+}
+
+@media (max-width: 480px) {
+  #inline-generate-key-form-container,
+  #inline-add-crm-form-container {
+    padding: 12px !important;
+  }
+  .data-table th, .data-table td {
+    padding: 8px 10px;
+    font-size: 0.75rem;
+  }
 }
