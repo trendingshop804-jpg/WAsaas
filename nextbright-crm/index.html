@@ -143,6 +143,15 @@
         <a class="nav-item" data-view="social-integrations" href="#social-integrations">
           <i data-feather="link"></i><span>Social Integrations</span>
         </a>
+
+        <div class="nav-label" style="margin-top:8px;">AI Automation</div>
+        <a class="nav-item" data-view="ai-agents" href="#ai-agents">
+          <i data-feather="cpu"></i><span>AI Reply Agents</span>
+          <span class="nav-badge-new">NEW</span>
+        </a>
+        <a class="nav-item" data-view="knowledge-base" href="#knowledge-base">
+          <i data-feather="book-open"></i><span>Knowledge Base</span>
+        </a>
       </nav>
 
       <!-- Sidebar Footer -->
@@ -1808,6 +1817,79 @@ curl -X POST https://your-domain.com/api/leads \
           </div>
         </section>
 
+        <!-- ====================================================================
+             AI REPLY AGENTS VIEW
+             ==================================================================== -->
+        <section class="view-panel" id="view-ai-agents">
+          <div class="social-page-hero">
+            <div class="social-page-hero-info">
+              <div class="social-page-hero-title" style="color:var(--brand-primary,#2563eb);">
+                <i data-feather="cpu"></i> AI Reply Agents
+              </div>
+              <div class="social-page-hero-sub">Multi-tenant AI customer support, sales lead qualifier & 24/7 auto-reply for Instagram & WhatsApp</div>
+            </div>
+            <div class="social-page-hero-actions">
+              <button class="btn btn-primary btn-sm" id="btn-create-ai-agent"><i data-feather="plus"></i> New AI Agent</button>
+            </div>
+          </div>
+
+          <div class="ai-agents-grid" id="ai-agents-grid" style="display:grid;grid-template-columns:repeat(auto-fill, minmax(320px, 1fr));gap:16px;margin-bottom:24px;"></div>
+
+          <div class="card" style="padding:20px;margin-top:20px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+              <strong style="font-size:1rem;">Recent AI Auto-Reply Audit Logs</strong>
+              <button class="btn btn-secondary btn-sm" onclick="window.NextBrightAIAgents?.init()"><i data-feather="refresh-cw"></i> Refresh</button>
+            </div>
+            <div class="table-responsive">
+              <table class="table" style="width:100%;font-size:0.875rem;">
+                <thead>
+                  <tr>
+                    <th>Channel</th>
+                    <th>Customer Inquiry</th>
+                    <th>AI Response / Handover</th>
+                    <th>Status</th>
+                    <th>Time</th>
+                  </tr>
+                </thead>
+                <tbody id="ai-logs-table-body">
+                  <tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text-muted);">Loading reply logs...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ====================================================================
+             KNOWLEDGE BASE VIEW
+             ==================================================================== -->
+        <section class="view-panel" id="view-knowledge-base">
+          <div class="social-page-hero">
+            <div class="social-page-hero-info">
+              <div class="social-page-hero-title" style="color:#8b5cf6;">
+                <i data-feather="book-open"></i> AI Knowledge Base
+              </div>
+              <div class="social-page-hero-sub">Manage company info, product pricing, FAQs and policies to ground AI auto-replies accurately</div>
+            </div>
+            <div class="social-page-hero-actions">
+              <button class="btn btn-primary btn-sm" id="btn-add-kb-entry"><i data-feather="plus"></i> Add Knowledge Entry</button>
+            </div>
+          </div>
+
+          <div class="social-nav-tabs" id="kb-category-tabs" style="display:flex;gap:8px;margin-bottom:16px;overflow-x:auto;">
+            <button class="tab-item active" data-kb-category="all">All Entries</button>
+            <button class="tab-item" data-kb-category="company">Company Info</button>
+            <button class="tab-item" data-kb-category="pricing">Pricing & Packages</button>
+            <button class="tab-item" data-kb-category="faq">FAQs</button>
+            <button class="tab-item" data-kb-category="booking">Booking / Demo</button>
+          </div>
+
+          <div style="margin-bottom:16px;max-width:360px;">
+            <input type="text" id="kb-search-input" class="form-control" placeholder="Search knowledge entries...">
+          </div>
+
+          <div class="kb-entries-grid" id="kb-entries-grid" style="display:grid;grid-template-columns:repeat(auto-fill, minmax(320px, 1fr));gap:16px;"></div>
+        </section>
+
       </main>
 
     </div><!-- .main-area -->
@@ -2101,6 +2183,77 @@ curl -X POST https://your-domain.com/api/leads \
     </div>
   </div>
 
+  <!-- AI AGENT MODAL -->
+  <div class="modal-backdrop" id="modal-create-ai-agent" style="display:none;align-items:center;justify-content:center;z-index:2000;">
+    <div class="card" style="width:100%;max-width:540px;padding:24px;box-shadow:var(--shadow-xl);max-height:90vh;overflow-y:auto;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <strong style="font-size:1.1rem;">Configure AI Reply Agent</strong>
+        <button class="icon-btn" onclick="window.NextBrightAIAgents?.closeModal()"><i data-feather="x"></i></button>
+      </div>
+      <form id="form-create-ai-agent">
+        <div style="margin-bottom:12px;">
+          <label class="form-label" style="font-size:0.85rem;font-weight:600;">Agent Name</label>
+          <input type="text" id="agent-name-input" class="form-control" placeholder="e.g. Inbound Sales Rep" required>
+        </div>
+        <div style="margin-bottom:12px;">
+          <label class="form-label" style="font-size:0.85rem;font-weight:600;">Business Name</label>
+          <input type="text" id="agent-biz-name" class="form-control" value="NextBright CRM" required>
+        </div>
+        <div style="margin-bottom:12px;">
+          <label class="form-label" style="font-size:0.85rem;font-weight:600;">Conversation Tone</label>
+          <select id="agent-tone-select" class="form-control">
+            <option value="Professional">Professional & Courteous</option>
+            <option value="Friendly">Friendly & Enthusiastic</option>
+            <option value="Sales-focused">Sales-focused & Persuasive</option>
+            <option value="Casual">Casual & Direct</option>
+          </select>
+        </div>
+        <div style="margin-bottom:16px;">
+          <label class="form-label" style="font-size:0.85rem;font-weight:600;">System Instructions & Goals</label>
+          <textarea id="agent-instructions-input" class="form-control" rows="4" placeholder="Describe the agent's goals, how it should answer inquiries, pricing guidance, and when to book appointments..."></textarea>
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:10px;">
+          <button type="button" class="btn btn-secondary" onclick="window.NextBrightAIAgents?.closeModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary"><i data-feather="check"></i> Save Agent</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- KNOWLEDGE BASE ENTRY MODAL -->
+  <div class="modal-backdrop" id="modal-create-kb-entry" style="display:none;align-items:center;justify-content:center;z-index:2000;">
+    <div class="card" style="width:100%;max-width:540px;padding:24px;box-shadow:var(--shadow-xl);max-height:90vh;overflow-y:auto;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <strong style="font-size:1.1rem;">Add Knowledge Base Entry</strong>
+        <button class="icon-btn" onclick="window.NextBrightKB?.closeModal()"><i data-feather="x"></i></button>
+      </div>
+      <form id="form-create-kb-entry">
+        <div style="margin-bottom:12px;">
+          <label class="form-label" style="font-size:0.85rem;font-weight:600;">Entry Title</label>
+          <input type="text" id="kb-title-input" class="form-control" placeholder="e.g. Enterprise Plan Pricing" required>
+        </div>
+        <div style="margin-bottom:12px;">
+          <label class="form-label" style="font-size:0.85rem;font-weight:600;">Category</label>
+          <select id="kb-category-select" class="form-control">
+            <option value="company">Company Info</option>
+            <option value="pricing">Pricing & Packages</option>
+            <option value="faq">FAQ</option>
+            <option value="booking">Booking / Demo Instructions</option>
+            <option value="policy">Policy / Terms</option>
+          </select>
+        </div>
+        <div style="margin-bottom:16px;">
+          <label class="form-label" style="font-size:0.85rem;font-weight:600;">Knowledge Content</label>
+          <textarea id="kb-content-input" class="form-control" rows="5" placeholder="Enter clear, accurate details the AI can use to ground answers..." required></textarea>
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:10px;">
+          <button type="button" class="btn btn-secondary" onclick="window.NextBrightKB?.closeModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary"><i data-feather="check"></i> Save Entry</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- TOAST -->
   <div class="toast-container" id="toast-container"></div>
 
@@ -2125,5 +2278,8 @@ curl -X POST https://your-domain.com/api/leads \
   <script src="js/wa-channels.js"></script>
   <script src="js/campaign-analytics.js"></script>
   <script src="js/social-integrations.js"></script>
+  <!-- AI Reply Agent & Knowledge Base Modules -->
+  <script src="js/ai-agents.js"></script>
+  <script src="js/knowledge-base.js"></script>
 </body>
 </html>

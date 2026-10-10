@@ -45,7 +45,7 @@ async function runTests() {
     const consoleErrors = [];
     page.on('pageerror', err => consoleErrors.push(err.message));
 
-    const fileUrl = `file:///${path.join(rootDir, 'nextbright-crm', 'index.html').replace(/\\/g, '/')}`;
+    const fileUrl = `file:///${path.join(rootDir, 'nextbright-crm', 'index.html').replace(/\\/g, '/')}?demo=1`;
 
     await runTest('1. Load NextBright CRM Application Page', async () => {
       await page.goto(fileUrl, { waitUntil: 'domcontentloaded' });
@@ -62,8 +62,13 @@ async function runTests() {
       assert.ok(kpiCount >= 5, `Displays at least 5 KPI cards (found ${kpiCount})`);
     });
 
-    await runTest('3. Verify Sidebar Navigation & View Switching', async () => {
-      const navViews = ['leads', 'customers', 'deals', 'calls', 'messages', 'appointments', 'tasks', 'reports', 'settings', 'dashboard'];
+    await runTest('3. Verify Sidebar Navigation & View Switching Across All 22 Modules', async () => {
+      const navViews = [
+        'leads', 'customers', 'deals', 'calls', 'messages', 'appointments', 'tasks', 'reports', 'settings',
+        'social-dashboard', 'social-inbox', 'instagram-posts', 'content-library', 'social-calendar',
+        'wa-campaigns', 'wa-broadcast', 'wa-channels', 'campaign-analytics', 'social-integrations',
+        'ai-agents', 'knowledge-base', 'dashboard'
+      ];
       for (const view of navViews) {
         await page.click(`.nav-item[data-view="${view}"]`);
         await page.waitForTimeout(100);

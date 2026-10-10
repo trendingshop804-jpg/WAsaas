@@ -49,6 +49,14 @@
     {
       "source": "/api/wa-campaigns",
       "destination": "/api/messages?action=wa_campaigns"
+    },
+    {
+      "source": "/api/ai-agents",
+      "destination": "/api/ai-chat?route=ai_agents"
+    },
+    {
+      "source": "/api/knowledge-base",
+      "destination": "/api/ai-chat?route=knowledge_base"
     }
   ]
 }

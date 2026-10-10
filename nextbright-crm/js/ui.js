@@ -11,7 +11,9 @@ const VALID_VIEWS = [
   'social-dashboard', 'social-inbox', 'instagram-posts',
   'content-library', 'social-calendar',
   'wa-campaigns', 'wa-broadcast', 'wa-channels',
-  'campaign-analytics', 'social-integrations'
+  'campaign-analytics', 'social-integrations',
+  // AI Reply Agents & Knowledge Base
+  'ai-agents', 'knowledge-base'
 ];
 
 /* ---- SPA Router & Navigation ---- */

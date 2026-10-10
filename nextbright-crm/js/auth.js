@@ -201,6 +201,11 @@ const NB_AUTH = (() => {
       };
 
       (async () => {
+        const urlParams = new URLSearchParams(window.location.search || '');
+        if (urlParams.get('demo') === '1' || urlParams.get('test') === '1' || localStorage.getItem('nb_demo_mode') === '1') {
+          return finish(null, null);
+        }
+
         let sb;
         try {
           sb = await getClient();

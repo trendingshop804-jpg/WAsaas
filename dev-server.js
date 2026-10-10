@@ -21,7 +21,9 @@ const API_REWRITES = {
   'admin-system': { target: 'admin', query: { resource: 'system' } },
   'send-media': { target: 'messages', query: { route: 'send-media' } },
   'social-conversations': { target: 'instagram', query: { action: 'social_conversations' } },
-  'wa-campaigns': { target: 'messages', query: { action: 'wa_campaigns' } }
+  'wa-campaigns': { target: 'messages', query: { action: 'wa_campaigns' } },
+  'ai-agents': { target: 'ai-chat', query: { route: 'ai_agents' } },
+  'knowledge-base': { target: 'ai-chat', query: { route: 'knowledge_base' } }
 };
 
 function loadDotEnv() {
