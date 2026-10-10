@@ -455,13 +455,21 @@ class WhatsAppService {
   }
 
   getErrorMessage(error, fallback) {
-    const value = error?.error ?? error?.message ?? error;
-    if (typeof value === 'string' && value.trim()) return value.trim();
-    if (value && typeof value === 'object') {
-      const nested = value.message ?? value.error?.message ?? value.details;
-      if (typeof nested === 'string' && nested.trim()) return nested.trim();
-    }
-    return fallback;
+    const seen = new Set();
+    const findMessage = (value) => {
+      if (typeof value === 'string') {
+        const text = value.trim();
+        return text && text !== '[object Object]' ? text : '';
+      }
+      if (!value || typeof value !== 'object' || seen.has(value)) return '';
+      seen.add(value);
+      return findMessage(value.message)
+        || findMessage(value.error)
+        || findMessage(value.details)
+        || findMessage(value.description)
+        || findMessage(value.reason);
+    };
+    return findMessage(error) || fallback;
   }
   // Receive Simulated Incoming Inbound Message from Prospect
   receiveSimulatedInbound({ leadId, text }) {

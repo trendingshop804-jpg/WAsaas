@@ -681,7 +681,9 @@ function showToast(msg, type = 'default') {
     : (msg?.message || msg?.error?.message || msg?.error || 'Something went wrong.');
   toast.innerHTML = icon;
   const label = document.createElement('span');
-  label.textContent = typeof message === 'string' ? message : 'Something went wrong.';
+  label.textContent = typeof message === 'string' && message !== '[object Object]'
+    ? message
+    : 'Something went wrong.';
   toast.appendChild(label);
   container.appendChild(toast);
   setTimeout(() => {

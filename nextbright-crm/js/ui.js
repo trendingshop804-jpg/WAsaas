@@ -4,8 +4,14 @@
 'use strict';
 
 const VALID_VIEWS = [
+  // Core CRM
   'dashboard', 'leads', 'customers', 'deals', 'calls',
-  'messages', 'appointments', 'tasks', 'reports', 'settings'
+  'messages', 'appointments', 'tasks', 'reports', 'settings',
+  // Social Media & WhatsApp
+  'social-dashboard', 'social-inbox', 'instagram-posts',
+  'content-library', 'social-calendar',
+  'wa-campaigns', 'wa-broadcast', 'wa-channels',
+  'campaign-analytics', 'social-integrations'
 ];
 
 /* ---- SPA Router & Navigation ---- */

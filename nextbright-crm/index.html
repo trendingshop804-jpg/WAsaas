@@ -28,6 +28,7 @@
   <link rel="stylesheet" href="css/deals.css">
   <link rel="stylesheet" href="css/messages.css">
   <link rel="stylesheet" href="css/responsive.css">
+  <link rel="stylesheet" href="css/social.css">
   <link rel="stylesheet" href="css/reference-theme.css">
 </head>
 <body>
@@ -104,6 +105,43 @@
         </a>
         <a class="nav-item" data-view="settings" href="#settings">
           <i data-feather="settings"></i><span>Settings</span>
+        </a>
+
+        <!-- ===== SOCIAL MEDIA & WHATSAPP ===== -->
+        <div class="nav-label" style="margin-top:8px;">Social &amp; Messaging</div>
+        <a class="nav-item" data-view="social-dashboard" href="#social-dashboard">
+          <i data-feather="activity"></i><span>Social Dashboard</span>
+        </a>
+        <a class="nav-item" data-view="social-inbox" href="#social-inbox" id="nav-social-inbox">
+          <i data-feather="instagram"></i><span>Social Inbox</span>
+          <span class="nav-badge-count" id="social-inbox-badge" style="display:none;">0</span>
+        </a>
+        <a class="nav-item" data-view="instagram-posts" href="#instagram-posts">
+          <i data-feather="image"></i><span>Instagram Posts</span>
+        </a>
+        <a class="nav-item" data-view="content-library" href="#content-library">
+          <i data-feather="folder"></i><span>Content Library</span>
+        </a>
+        <a class="nav-item" data-view="social-calendar" href="#social-calendar">
+          <i data-feather="calendar"></i><span>Social Calendar</span>
+        </a>
+
+        <div class="nav-label" style="margin-top:8px;">WhatsApp</div>
+        <a class="nav-item" data-view="wa-campaigns" href="#wa-campaigns">
+          <i data-feather="send"></i><span>WA Campaigns</span>
+          <span class="nav-badge-new">NEW</span>
+        </a>
+        <a class="nav-item" data-view="wa-broadcast" href="#wa-broadcast">
+          <i data-feather="radio"></i><span>WA Broadcast</span>
+        </a>
+        <a class="nav-item" data-view="wa-channels" href="#wa-channels">
+          <i data-feather="hash"></i><span>WA Channels</span>
+        </a>
+        <a class="nav-item" data-view="campaign-analytics" href="#campaign-analytics">
+          <i data-feather="trending-up"></i><span>Campaign Analytics</span>
+        </a>
+        <a class="nav-item" data-view="social-integrations" href="#social-integrations">
+          <i data-feather="link"></i><span>Social Integrations</span>
         </a>
       </nav>
 
@@ -1197,7 +1235,581 @@ curl -X POST https://your-domain.com/api/leads \
           </div>
         </section>
 
+        <!-- ====================================================================
+             SOCIAL DASHBOARD VIEW
+             ==================================================================== -->
+        <section class="view-panel" id="view-social-dashboard">
+          <div id="social-dashboard-root" style="padding:20px;">
+            <!-- Rendered by js/social-dashboard.js -->
+            <div class="social-page-hero" style="padding:0 0 16px;">
+              <div class="social-page-hero-info">
+                <div class="social-page-hero-title">
+                  <span class="platform-dot"></span>
+                  Social &amp; Messaging Dashboard
+                </div>
+                <div class="social-page-hero-sub">Connected accounts, scheduled posts and campaign overview</div>
+              </div>
+              <div class="social-page-hero-actions">
+                <button class="btn btn-secondary btn-sm" id="social-dash-refresh-btn"><i data-feather="refresh-cw"></i> Refresh</button>
+                <button class="btn btn-primary btn-sm" onclick="window.switchView('instagram-posts')"><i data-feather="plus"></i> New Post</button>
+              </div>
+            </div>
+            <div id="social-dashboard-content">
+              <!-- JS-rendered dashboard cards -->
+            </div>
+          </div>
+        </section>
+
+        <!-- ====================================================================
+             SOCIAL INBOX VIEW (Instagram DM)
+             ==================================================================== -->
+        <section class="view-panel" id="view-social-inbox">
+          <div class="social-inbox-layout" id="social-inbox-root">
+            <!-- Left: Conversation List -->
+            <div class="social-conv-list-panel" id="social-conv-list-panel">
+              <div class="social-page-hero" style="padding:12px 16px;">
+                <div class="social-page-hero-title" style="font-size:0.9375rem;">
+                  <span class="platform-dot"></span> Social Inbox
+                </div>
+                <button class="btn btn-primary btn-sm btn-icon" id="social-inbox-compose-btn" title="New message"><i data-feather="edit-2"></i></button>
+              </div>
+              <div class="social-conv-search">
+                <div class="search-wrap sm">
+                  <i data-feather="search" class="search-icon"></i>
+                  <input type="text" class="search-input" id="social-conv-search" placeholder="Search conversations…">
+                </div>
+              </div>
+              <div class="social-conv-filters" id="social-conv-filters">
+                <button class="social-filter-chip active" data-filter="all">All</button>
+                <button class="social-filter-chip" data-filter="unread">Unread</button>
+                <button class="social-filter-chip" data-filter="open">Open</button>
+                <button class="social-filter-chip" data-filter="closed">Closed</button>
+                <button class="social-filter-chip" data-filter="assigned">Assigned</button>
+              </div>
+              <div class="social-conv-list" id="social-conv-list">
+                <!-- JS-rendered conversation list -->
+              </div>
+            </div>
+
+            <!-- Center: Chat Window -->
+            <div class="social-chat-panel" id="social-chat-panel">
+              <div class="social-inbox-empty" id="social-inbox-empty-state">
+                <div class="social-inbox-empty-icon">📨</div>
+                <div style="font-weight:600;color:var(--text-primary)">Select a conversation</div>
+                <div style="font-size:0.8125rem;">Choose a conversation from the list to view messages</div>
+                <button class="btn btn-primary btn-sm" id="social-inbox-connect-ig-btn">Connect Instagram</button>
+              </div>
+              <!-- JS renders active chat here -->
+              <div id="social-chat-active" style="display:none; flex-direction:column; height:100%;">
+                <div class="social-chat-header" id="social-chat-header"></div>
+                <div class="social-messaging-policy-banner" id="social-policy-banner"></div>
+                <div class="social-messages-area" id="social-messages-area"></div>
+                <div class="social-input-area" id="social-input-area">
+                  <div class="social-input-row">
+                    <button class="btn btn-secondary btn-icon btn-sm" id="social-attach-btn" title="Attach image"><i data-feather="image"></i></button>
+                    <textarea class="social-input-box" id="social-input-box" placeholder="Type a message…" rows="1"></textarea>
+                    <button class="btn btn-primary btn-icon" id="social-send-btn" title="Send"><i data-feather="send"></i></button>
+                  </div>
+                  <div style="font-size:0.7rem;color:var(--text-muted);">
+                    📋 Replies are subject to Instagram's messaging policy. <span id="social-window-notice"></span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Right: Contact Info -->
+            <div class="social-contact-panel" id="social-contact-panel">
+              <div id="social-contact-info">
+                <!-- JS-rendered contact info -->
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ====================================================================
+             INSTAGRAM POSTS (Post Scheduler)
+             ==================================================================== -->
+        <section class="view-panel" id="view-instagram-posts">
+          <div class="social-page-hero">
+            <div class="social-page-hero-info">
+              <div class="social-page-hero-title"><span class="platform-dot"></span> Instagram Posts</div>
+              <div class="social-page-hero-sub">Schedule, draft and publish Instagram feed posts, Reels and carousels</div>
+            </div>
+            <div class="social-page-hero-actions">
+              <div class="scheduler-view-toggle">
+                <button class="scheduler-view-btn active" id="post-view-calendar-btn" data-post-view="calendar"><i data-feather="calendar" style="width:13px;height:13px;"></i> Calendar</button>
+                <button class="scheduler-view-btn" id="post-view-list-btn" data-post-view="list"><i data-feather="list" style="width:13px;height:13px;"></i> List</button>
+              </div>
+              <button class="btn btn-primary btn-sm" id="create-post-btn"><i data-feather="plus"></i> Create Post</button>
+            </div>
+          </div>
+          <div id="instagram-posts-root">
+            <!-- Calendar toolbar -->
+            <div class="scheduler-toolbar" id="posts-cal-toolbar">
+              <button class="btn btn-secondary btn-sm btn-icon" id="cal-prev-btn"><i data-feather="chevron-left"></i></button>
+              <span id="cal-month-label" style="font-weight:700;font-size:0.9375rem;min-width:140px;text-align:center;"></span>
+              <button class="btn btn-secondary btn-sm btn-icon" id="cal-next-btn"><i data-feather="chevron-right"></i></button>
+              <div style="margin-left:auto;display:flex;gap:8px;align-items:center;">
+                <span style="font-size:0.78rem;color:var(--text-muted);">Filter:</span>
+                <select class="filter-sel" id="post-status-filter" style="height:32px;font-size:0.78rem;">
+                  <option value="">All</option>
+                  <option value="draft">Drafts</option>
+                  <option value="scheduled">Scheduled</option>
+                  <option value="published">Published</option>
+                  <option value="failed">Failed</option>
+                </select>
+              </div>
+            </div>
+            <!-- Calendar Grid -->
+            <div class="scheduler-calendar" id="posts-calendar-view">
+              <div class="cal-grid" id="posts-cal-grid">
+                <!-- JS-rendered calendar -->
+              </div>
+            </div>
+            <!-- List View -->
+            <div id="posts-list-view" style="display:none; flex:1; overflow-y:auto;">
+              <div id="posts-list-container"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ====================================================================
+             CONTENT LIBRARY (Media Library)
+             ==================================================================== -->
+        <section class="view-panel" id="view-content-library">
+          <div class="social-page-hero">
+            <div class="social-page-hero-info">
+              <div class="social-page-hero-title"><i data-feather="folder" style="width:18px;height:18px;"></i> Content Library</div>
+              <div class="social-page-hero-sub">Upload, organize and reuse approved images and videos</div>
+            </div>
+            <div class="social-page-hero-actions">
+              <button class="btn btn-secondary btn-sm" id="new-folder-btn"><i data-feather="folder-plus"></i> New Folder</button>
+              <button class="btn btn-primary btn-sm" id="upload-media-btn"><i data-feather="upload"></i> Upload</button>
+            </div>
+          </div>
+          <div class="media-lib-layout" id="media-lib-root">
+            <!-- Sidebar Folders -->
+            <div class="media-lib-sidebar" id="media-lib-sidebar">
+              <div class="media-lib-folder-item active" data-folder-id="">
+                <i data-feather="grid" style="width:14px;height:14px;"></i> All Media
+              </div>
+              <div class="media-lib-folder-item" data-folder-id="__images">
+                <i data-feather="image" style="width:14px;height:14px;"></i> Images
+              </div>
+              <div class="media-lib-folder-item" data-folder-id="__videos">
+                <i data-feather="video" style="width:14px;height:14px;"></i> Videos
+              </div>
+              <div id="media-lib-folders-list">
+                <!-- JS-rendered folder list -->
+              </div>
+            </div>
+            <!-- Main Content -->
+            <div class="media-lib-main">
+              <div class="media-lib-toolbar">
+                <div class="search-wrap sm" style="flex:1;max-width:300px;">
+                  <i data-feather="search" class="search-icon"></i>
+                  <input type="text" class="search-input" id="media-search" placeholder="Search media…">
+                </div>
+                <select class="filter-sel" id="media-type-filter" style="height:36px;">
+                  <option value="">All Types</option>
+                  <option value="image">Images</option>
+                  <option value="video">Videos</option>
+                </select>
+                <select class="filter-sel" id="media-sort" style="height:36px;">
+                  <option value="newest">Newest First</option>
+                  <option value="oldest">Oldest First</option>
+                  <option value="name">Name A-Z</option>
+                  <option value="size">Largest</option>
+                </select>
+              </div>
+              <!-- Drop Zone (shown when empty / drag) -->
+              <div id="media-drop-overlay" class="media-drop-zone" style="display:none;margin:20px;position:relative;">
+                <div class="media-drop-icon">📂</div>
+                <div class="media-drop-text">Drop files here to upload</div>
+                <div class="media-drop-sub">or click the Upload button above</div>
+                <div class="media-drop-limits">Images: JPG, PNG, WebP — max 8 MB · Videos: MP4 — max 100 MB</div>
+              </div>
+              <div class="media-lib-grid" id="media-lib-grid">
+                <!-- JS-rendered media cards -->
+              </div>
+            </div>
+          </div>
+          <!-- Hidden file input -->
+          <input type="file" id="media-upload-input" accept="image/*,video/mp4" multiple style="display:none;">
+        </section>
+
+        <!-- ====================================================================
+             SOCIAL CALENDAR (All Platforms View)
+             ==================================================================== -->
+        <section class="view-panel" id="view-social-calendar">
+          <div class="social-page-hero">
+            <div class="social-page-hero-info">
+              <div class="social-page-hero-title"><i data-feather="calendar" style="width:18px;height:18px;"></i> Social Calendar</div>
+              <div class="social-page-hero-sub">Full calendar of scheduled and published posts across all platforms</div>
+            </div>
+            <div class="social-page-hero-actions">
+              <button class="btn btn-primary btn-sm" onclick="window.switchView('instagram-posts')"><i data-feather="plus"></i> Schedule Post</button>
+            </div>
+          </div>
+          <div id="social-calendar-root" style="padding:0 20px 20px;">
+            <div class="scheduler-toolbar" id="social-cal-toolbar">
+              <button class="btn btn-secondary btn-sm btn-icon" id="social-cal-prev"><i data-feather="chevron-left"></i></button>
+              <span id="social-cal-month" style="font-weight:700;font-size:0.9375rem;min-width:140px;text-align:center;"></span>
+              <button class="btn btn-secondary btn-sm btn-icon" id="social-cal-next"><i data-feather="chevron-right"></i></button>
+              <div style="margin-left:auto;display:flex;gap:6px;">
+                <span class="cal-post-pill published" style="pointer-events:none;">Published</span>
+                <span class="cal-post-pill scheduled" style="pointer-events:none;">Scheduled</span>
+                <span class="cal-post-pill draft" style="pointer-events:none;">Draft</span>
+                <span class="cal-post-pill failed" style="pointer-events:none;">Failed</span>
+              </div>
+            </div>
+            <div class="cal-grid" id="social-cal-grid" style="margin-top:12px;">
+              <!-- JS-rendered calendar -->
+            </div>
+          </div>
+        </section>
+
+        <!-- ====================================================================
+             WHATSAPP CAMPAIGNS
+             ==================================================================== -->
+        <section class="view-panel" id="view-wa-campaigns">
+          <div class="social-page-hero">
+            <div class="social-page-hero-info">
+              <div class="social-page-hero-title" style="color:#25d366;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="#25d366"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                WhatsApp Campaigns
+              </div>
+              <div class="social-page-hero-sub">Send approved message templates to your contacts using the official WhatsApp Business API</div>
+            </div>
+            <div class="social-page-hero-actions">
+              <button class="btn btn-secondary btn-sm" id="campaign-import-csv-btn"><i data-feather="upload"></i> Import CSV</button>
+              <button class="btn btn-primary btn-sm" id="create-campaign-btn"><i data-feather="plus"></i> New Campaign</button>
+            </div>
+          </div>
+
+          <!-- Stats Bar -->
+          <div class="campaign-stats-bar" id="campaign-stats-bar">
+            <div class="campaign-stat-item">
+              <div class="campaign-stat-val" id="camp-stat-total">0</div>
+              <div class="campaign-stat-label">Campaigns</div>
+            </div>
+            <div class="campaign-stat-item sent">
+              <div class="campaign-stat-val" id="camp-stat-sent">0</div>
+              <div class="campaign-stat-label">Total Sent</div>
+            </div>
+            <div class="campaign-stat-item delivered">
+              <div class="campaign-stat-val" id="camp-stat-delivered">0</div>
+              <div class="campaign-stat-label">Delivered</div>
+            </div>
+            <div class="campaign-stat-item read">
+              <div class="campaign-stat-val" id="camp-stat-read">0</div>
+              <div class="campaign-stat-label">Read</div>
+            </div>
+            <div class="campaign-stat-item failed">
+              <div class="campaign-stat-val" id="camp-stat-failed">0</div>
+              <div class="campaign-stat-label">Failed</div>
+            </div>
+          </div>
+
+          <!-- Campaigns List -->
+          <div class="campaign-table-wrap">
+            <div id="campaigns-list-container">
+              <!-- JS-rendered campaign cards -->
+            </div>
+          </div>
+
+          <!-- CSV Import input (hidden) -->
+          <input type="file" id="campaign-csv-input" accept=".csv" style="display:none;">
+        </section>
+
+        <!-- ====================================================================
+             WHATSAPP BROADCAST & AUDIENCE SEGMENTS
+             ==================================================================== -->
+        <section class="view-panel" id="view-wa-broadcast">
+          <div class="social-page-hero">
+            <div class="social-page-hero-info">
+              <div class="social-page-hero-title" style="color:#25d366;">
+                <i data-feather="radio"></i> WA Broadcast
+              </div>
+              <div class="social-page-hero-sub">Reusable audience segments and scheduled broadcast campaigns</div>
+            </div>
+            <div class="social-page-hero-actions">
+              <button class="btn btn-secondary btn-sm" id="create-segment-btn"><i data-feather="filter"></i> New Segment</button>
+              <button class="btn btn-primary btn-sm" id="create-broadcast-btn"><i data-feather="send"></i> New Broadcast</button>
+            </div>
+          </div>
+          <div style="padding:20px;" id="broadcast-root">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+              <!-- Segments Panel -->
+              <div>
+                <div class="card-title" style="margin-bottom:12px;">Audience Segments</div>
+                <div id="segments-list" style="display:flex;flex-direction:column;gap:8px;">
+                  <!-- JS-rendered segments -->
+                </div>
+              </div>
+              <!-- Broadcasts Panel -->
+              <div>
+                <div class="card-title" style="margin-bottom:12px;">Broadcast History</div>
+                <div id="broadcasts-list" style="display:flex;flex-direction:column;gap:8px;">
+                  <!-- JS-rendered broadcasts -->
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ====================================================================
+             WHATSAPP CHANNELS INFO
+             ==================================================================== -->
+        <section class="view-panel" id="view-wa-channels">
+          <div class="social-page-hero">
+            <div class="social-page-hero-info">
+              <div class="social-page-hero-title"><i data-feather="hash"></i> WhatsApp Channels</div>
+              <div class="social-page-hero-sub">Information about WhatsApp Channels and what your business account supports</div>
+            </div>
+          </div>
+          <div style="padding:20px;max-width:720px;" id="wa-channels-root">
+            <div class="wa-channel-info-card">
+              <div class="wa-channel-logo">📢</div>
+              <h2 style="font-size:1.125rem;font-weight:700;margin-bottom:8px;">WhatsApp Channels</h2>
+              <p style="font-size:0.875rem;color:var(--text-secondary);line-height:1.6;margin-bottom:12px;">
+                WhatsApp Channels is a one-way broadcast feature available directly inside the WhatsApp app. It is a <strong>separate product</strong> from the WhatsApp Business Platform (API). Channel creation, management and publishing are done through the WhatsApp app itself, <strong>not</strong> through the Business API your CRM uses.
+              </p>
+              <div class="channel-limitation-notice">
+                <span class="notice-icon">⚠️</span>
+                <div>
+                  <strong>Important API Limitation:</strong> The WhatsApp Business Platform API used by this CRM does not support WhatsApp Channel creation or publishing. Your WABA (WhatsApp Business Account) credentials control messaging to individual contacts using approved templates — they do not grant Channel access.
+                </div>
+              </div>
+              <div style="margin-top:20px;">
+                <div class="card-title" style="margin-bottom:10px;">What IS supported via this CRM:</div>
+                <ul style="font-size:0.8375rem;color:var(--text-secondary);line-height:2;padding-left:20px;">
+                  <li>✅ Sending approved template messages to individual contacts</li>
+                  <li>✅ WhatsApp Campaigns to segmented audiences</li>
+                  <li>✅ Two-way messaging within the 24-hour service window</li>
+                  <li>✅ Delivery, read and reply status tracking</li>
+                </ul>
+              </div>
+              <div style="margin-top:20px;">
+                <div class="card-title" style="margin-bottom:10px;">To use WhatsApp Channels:</div>
+                <ul style="font-size:0.8375rem;color:var(--text-secondary);line-height:2;padding-left:20px;">
+                  <li>Open the WhatsApp app on your phone</li>
+                  <li>Go to Updates → + (plus icon)</li>
+                  <li>Select "New channel" and follow the setup wizard</li>
+                </ul>
+                <a href="https://faq.whatsapp.com/1072646130356612" target="_blank" rel="noopener" class="btn btn-secondary" style="margin-top:12px;display:inline-flex;align-items:center;gap:6px;">
+                  <i data-feather="external-link" style="width:14px;height:14px;"></i> WhatsApp Channels Help
+                </a>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ====================================================================
+             CAMPAIGN ANALYTICS
+             ==================================================================== -->
+        <section class="view-panel" id="view-campaign-analytics">
+          <div class="social-page-hero">
+            <div class="social-page-hero-info">
+              <div class="social-page-hero-title"><i data-feather="trending-up"></i> Campaign Analytics</div>
+              <div class="social-page-hero-sub">Detailed delivery and engagement analytics for all campaigns</div>
+            </div>
+            <div class="social-page-hero-actions">
+              <button class="btn btn-secondary btn-sm" id="analytics-export-btn"><i data-feather="download"></i> Export</button>
+            </div>
+          </div>
+          <div id="campaign-analytics-root">
+            <div class="analytics-filters-bar">
+              <select class="filter-sel" id="analytics-campaign-filter">
+                <option value="">All Campaigns</option>
+              </select>
+              <select class="filter-sel" id="analytics-date-filter">
+                <option value="7d">Last 7 Days</option>
+                <option value="30d" selected>Last 30 Days</option>
+                <option value="90d">Last 90 Days</option>
+                <option value="all">All Time</option>
+              </select>
+            </div>
+            <div class="analytics-kpi-grid" id="analytics-kpis">
+              <!-- JS-rendered KPI cards -->
+            </div>
+            <div style="padding:0 20px 20px;display:grid;grid-template-columns:1fr 1fr;gap:16px;" id="analytics-charts-area">
+              <div class="card">
+                <div class="card-header"><div class="card-title">Delivery Funnel</div></div>
+                <div style="padding:16px;"><canvas id="analytics-funnel-chart" height="200"></canvas></div>
+              </div>
+              <div class="card">
+                <div class="card-header"><div class="card-title">Campaign Status Breakdown</div></div>
+                <div style="padding:16px;"><canvas id="analytics-status-chart" height="200"></canvas></div>
+              </div>
+            </div>
+            <div style="padding:0 20px 20px;">
+              <div class="card">
+                <div class="card-header">
+                  <div class="card-title">Campaign Performance Table</div>
+                </div>
+                <div class="table-wrap">
+                  <table class="data-table" id="analytics-perf-table">
+                    <thead>
+                      <tr>
+                        <th>Campaign</th>
+                        <th>Date</th>
+                        <th>Recipients</th>
+                        <th>Sent</th>
+                        <th>Delivered</th>
+                        <th>Read</th>
+                        <th>Failed</th>
+                        <th>Read Rate</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody id="analytics-perf-tbody">
+                      <!-- JS-rendered rows -->
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ====================================================================
+             SOCIAL INTEGRATIONS (Setup & Status)
+             ==================================================================== -->
+        <section class="view-panel" id="view-social-integrations">
+          <div class="social-page-hero">
+            <div class="social-page-hero-info">
+              <div class="social-page-hero-title"><i data-feather="link"></i> Social Integrations</div>
+              <div class="social-page-hero-sub">Connect Instagram, WhatsApp and configure webhooks</div>
+            </div>
+          </div>
+          <div class="integrations-grid" id="social-integrations-root">
+            <!-- ===== Instagram / Meta Card ===== -->
+            <div class="integration-card" id="ig-integration-card">
+              <div class="integration-card-header">
+                <div class="integration-logo instagram">📸</div>
+                <div>
+                  <div class="integration-card-title">Instagram / Meta</div>
+                  <div class="integration-card-desc">Instagram DM Inbox + Post Scheduler</div>
+                </div>
+                <div class="integration-status-badge not-connected" id="ig-status-badge">Not Connected</div>
+              </div>
+              <div class="integration-card-body">
+                <div class="integration-permissions">
+                  <span class="permission-tag">instagram_basic</span>
+                  <span class="permission-tag">instagram_manage_messages</span>
+                  <span class="permission-tag">instagram_content_publish</span>
+                  <span class="permission-tag">pages_read_engagement</span>
+                </div>
+                <div class="integration-meta" id="ig-integration-meta">
+                  Connect an Instagram Professional account via Meta OAuth. Requires a Facebook Page linked to the account.
+                </div>
+                <div class="setup-guide-steps" id="ig-setup-guide">
+                  <div class="setup-guide-step">Go to <strong>Meta for Developers</strong> and create or open your app</div>
+                  <div class="setup-guide-step">Add the <strong>Instagram Graph API</strong> product and configure OAuth redirect URI to: <code id="ig-oauth-redirect-uri" style="font-size:0.72rem;background:var(--navy-50);padding:1px 4px;border-radius:3px;"></code></div>
+                  <div class="setup-guide-step">Request permissions: <code>instagram_basic</code>, <code>instagram_manage_messages</code>, <code>instagram_content_publish</code></div>
+                  <div class="setup-guide-step">Click <strong>Connect with Meta</strong> below to start the OAuth flow</div>
+                </div>
+              </div>
+              <div class="integration-card-footer">
+                <button class="btn btn-primary btn-sm" id="ig-connect-btn"><i data-feather="link"></i> Connect with Meta</button>
+                <button class="btn btn-secondary btn-sm" id="ig-disconnect-btn" style="display:none;"><i data-feather="unlink"></i> Disconnect</button>
+                <button class="btn btn-secondary btn-sm" id="ig-test-btn" style="display:none;"><i data-feather="zap"></i> Test</button>
+              </div>
+            </div>
+
+            <!-- ===== WhatsApp Business Platform Card ===== -->
+            <div class="integration-card" id="wa-integration-card">
+              <div class="integration-card-header">
+                <div class="integration-logo whatsapp">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                </div>
+                <div>
+                  <div class="integration-card-title">WhatsApp Business Platform</div>
+                  <div class="integration-card-desc">Campaigns, templates and inbox</div>
+                </div>
+                <div class="integration-status-badge not-connected" id="wa-status-badge">Not Connected</div>
+              </div>
+              <div class="integration-card-body">
+                <div class="integration-permissions">
+                  <span class="permission-tag">WABA ID</span>
+                  <span class="permission-tag">Phone Number ID</span>
+                  <span class="permission-tag">Access Token</span>
+                  <span class="permission-tag">Webhook</span>
+                </div>
+                <div class="integration-meta" id="wa-integration-meta">
+                  Connect via your existing WhatsApp Business API credentials from the Meta Developer Portal.
+                </div>
+                <div class="setup-guide-steps">
+                  <div class="setup-guide-step">Create a <strong>WhatsApp Business Account (WABA)</strong> at Meta for Developers</div>
+                  <div class="setup-guide-step">Add a phone number and get your <strong>Phone Number ID</strong> and <strong>WABA ID</strong></div>
+                  <div class="setup-guide-step">Generate a <strong>Permanent System User Access Token</strong></div>
+                  <div class="setup-guide-step">Configure the webhook URL in your Meta app to point to your deployment</div>
+                </div>
+              </div>
+              <div class="integration-card-footer">
+                <button class="btn btn-primary btn-sm" id="wa-connect-btn"><i data-feather="settings"></i> Configure</button>
+                <button class="btn btn-secondary btn-sm" id="wa-test-btn"><i data-feather="zap"></i> Test</button>
+                <button class="btn btn-secondary btn-sm" id="wa-disconnect-btn" style="display:none;"><i data-feather="unlink"></i> Disconnect</button>
+              </div>
+            </div>
+
+            <!-- ===== Webhooks Card ===== -->
+            <div class="integration-card">
+              <div class="integration-card-header">
+                <div class="integration-logo webhook">🔗</div>
+                <div>
+                  <div class="integration-card-title">Webhooks</div>
+                  <div class="integration-card-desc">Inbound event receiver for Meta platforms</div>
+                </div>
+                <div class="integration-status-badge setup-required" id="webhook-status-badge">Setup Required</div>
+              </div>
+              <div class="integration-card-body">
+                <div class="integration-meta">
+                  Configure these endpoints in the Meta Developer Portal to receive real-time events:
+                </div>
+                <div style="font-size:0.8rem;margin-top:8px;display:flex;flex-direction:column;gap:6px;">
+                  <div style="background:var(--navy-50);border-radius:6px;padding:8px 12px;">
+                    <div style="font-size:0.7rem;color:var(--text-muted);font-weight:700;text-transform:uppercase;margin-bottom:2px;">WhatsApp Webhook URL</div>
+                    <code id="wa-webhook-url" style="word-break:break-all;font-size:0.78rem;"></code>
+                  </div>
+                  <div style="background:var(--navy-50);border-radius:6px;padding:8px 12px;">
+                    <div style="font-size:0.7rem;color:var(--text-muted);font-weight:700;text-transform:uppercase;margin-bottom:2px;">Instagram Webhook URL</div>
+                    <code id="ig-webhook-url" style="word-break:break-all;font-size:0.78rem;"></code>
+                  </div>
+                  <div style="background:var(--navy-50);border-radius:6px;padding:8px 12px;">
+                    <div style="font-size:0.7rem;color:var(--text-muted);font-weight:700;text-transform:uppercase;margin-bottom:2px;">Verify Token</div>
+                    <code id="webhook-verify-token" style="font-size:0.78rem;">Wasaas@2026</code>
+                  </div>
+                </div>
+              </div>
+              <div class="integration-card-footer">
+                <a href="https://developers.facebook.com/docs/graph-api/webhooks" target="_blank" rel="noopener" class="btn btn-secondary btn-sm"><i data-feather="external-link"></i> Meta Webhooks Docs</a>
+                <button class="btn btn-secondary btn-sm" onclick="showToast('Webhook URL copied!','success');navigator.clipboard.writeText(document.getElementById('wa-webhook-url').textContent)"><i data-feather="copy"></i> Copy WA URL</button>
+              </div>
+            </div>
+
+            <!-- ===== CRM Integrations Card ===== -->
+            <div class="integration-card">
+              <div class="integration-card-header">
+                <div class="integration-logo" style="background:var(--navy-100,#e2e8f0);font-size:22px;">🔌</div>
+                <div>
+                  <div class="integration-card-title">CRM &amp; External APIs</div>
+                  <div class="integration-card-desc">HubSpot, Salesforce, Zoho, Pipedrive &amp; more</div>
+                </div>
+              </div>
+              <div class="integration-card-body">
+                <div class="integration-meta">Manage external CRM connections and platform API keys from the Settings page.</div>
+              </div>
+              <div class="integration-card-footer">
+                <button class="btn btn-primary btn-sm" onclick="window.switchView('settings')"><i data-feather="settings"></i> Open Settings</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
       </main>
+
     </div><!-- .main-area -->
 
     <!-- Mobile quick navigation -->
@@ -1502,5 +2114,16 @@ curl -X POST https://your-domain.com/api/leads \
   <script src="js/charts.js"></script>
   <script src="js/app.js?v=20260925-call-webhook-call"></script>
   <script src="js/components/integrations-manager.js"></script>
+  <!-- Social Media & WhatsApp Modules -->
+  <script src="js/social-dashboard.js"></script>
+  <script src="js/social-inbox.js"></script>
+  <script src="js/instagram-posts.js"></script>
+  <script src="js/content-library.js"></script>
+  <script src="js/social-calendar.js"></script>
+  <script src="js/wa-campaigns.js"></script>
+  <script src="js/wa-broadcast.js"></script>
+  <script src="js/wa-channels.js"></script>
+  <script src="js/campaign-analytics.js"></script>
+  <script src="js/social-integrations.js"></script>
 </body>
 </html>
