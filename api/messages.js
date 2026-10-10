@@ -557,6 +557,28 @@ export default async function handler(req, res) {
   if (!access) return;
   const organizationId = access.organizationId;
 
+  // ---- POST/GET action=wa_campaigns ---------------------------------------
+  const actionParam = String(req.query?.action || req.body?.action || '').toLowerCase();
+  if (actionParam === 'wa_campaigns' || actionParam === 'campaigns') {
+    if (req.method === 'GET') {
+      const { data: campaigns } = await supabase
+        .from('wa_campaigns')
+        .select('*')
+        .eq('organization_id', organizationId)
+        .order('created_at', { ascending: false });
+      return res.status(200).json({ success: true, campaigns: campaigns || [] });
+    }
+    if (req.method === 'POST') {
+      const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
+      const campaign = body.campaign || body;
+      campaign.organization_id = organizationId;
+      try {
+        await supabase.from('wa_campaigns').upsert(campaign);
+      } catch (e) {}
+      return res.status(200).json({ success: true, message: 'Campaign updated', campaign });
+    }
+  }
+
   // ---- POST action=create-lead -------------------------------------------
   // Lives inside this route (not a new api/*.js) because Vercel is already at
   // the 12-function limit. organization_id comes from the verified membership

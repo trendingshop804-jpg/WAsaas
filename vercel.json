@@ -41,6 +41,14 @@
     {
       "source": "/api/send-media",
       "destination": "/api/messages?route=send-media"
+    },
+    {
+      "source": "/api/social-conversations",
+      "destination": "/api/instagram?action=social_conversations"
+    },
+    {
+      "source": "/api/wa-campaigns",
+      "destination": "/api/messages?action=wa_campaigns"
     }
   ]
 }

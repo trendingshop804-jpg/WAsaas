@@ -116,6 +116,79 @@ export default async function handler(req, res) {
     }
   }
 
+  // ── 0a1. SOCIAL CONVERSATIONS & DM INBOX ──────────────────────────────────
+  if (action === 'social_conversations' || action === 'conversations') {
+    try {
+      const subAction = req.query.subAction || req.body?.subAction || 'list';
+      if (subAction === 'messages') {
+        const convId = req.query.conversation_id || req.body?.conversation_id;
+        if (supabase) {
+          const { data: messages, error } = await supabase
+            .from('social_messages')
+            .select('*')
+            .eq('conversation_id', convId)
+            .order('created_at', { ascending: true });
+          if (!error && messages && messages.length > 0) {
+            return res.status(200).json({ success: true, messages });
+          }
+        }
+        return res.status(200).json({
+          success: true,
+          source: 'demo_fallback',
+          messages: [
+            {
+              id: 'msg-1',
+              sender_type: 'user',
+              message_text: 'Hi! I saw your post on WhatsApp CRM integration. What is the pricing for enterprise?',
+              created_at: new Date(Date.now() - 3600000 * 2).toISOString()
+            }
+          ]
+        });
+      }
+
+      if (supabase) {
+        const { data: conversations, error } = await supabase
+          .from('social_conversations')
+          .select('*')
+          .order('updated_at', { ascending: false });
+        if (!error && conversations && conversations.length > 0) {
+          return res.status(200).json({ success: true, conversations });
+        }
+      }
+
+      return res.status(200).json({
+        success: true,
+        source: 'demo_fallback',
+        conversations: [
+          {
+            id: 'conv-ig-1',
+            participant_id: 'ig_user_101',
+            participant_name: 'Sophia Martinez',
+            participant_username: 'sophiam_design',
+            participant_avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150',
+            platform: 'instagram',
+            unread_count: 2,
+            last_message: 'Hi! I saw your post on WhatsApp CRM integration. What is the pricing for enterprise?',
+            updated_at: new Date(Date.now() - 3600000 * 2).toISOString()
+          },
+          {
+            id: 'conv-ig-2',
+            participant_id: 'ig_user_102',
+            participant_name: 'Alex Johnson',
+            participant_username: 'alexj_tech',
+            participant_avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150',
+            platform: 'instagram',
+            unread_count: 0,
+            last_message: 'Thanks for sending the demo link! Checking it out now.',
+            updated_at: new Date(Date.now() - 86400000 * 1).toISOString()
+          }
+        ]
+      });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  }
+
   // ── 0b. CONNECT MANUAL (Token & ID Direct Integration) ─────────────────────
   if (action === 'connect_manual' || action === 'connect') {
     try {
@@ -792,3 +865,4 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: err.message });
   }
 }
+

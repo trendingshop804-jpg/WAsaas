@@ -19,7 +19,9 @@ const API_REWRITES = {
   'update-whatsapp-profile': { target: 'meta-oauth-exchange', query: { route: 'update-whatsapp-profile' } },
   'admin-companies': { target: 'admin', query: { resource: 'companies' } },
   'admin-system': { target: 'admin', query: { resource: 'system' } },
-  'send-media': { target: 'messages', query: { route: 'send-media' } }
+  'send-media': { target: 'messages', query: { route: 'send-media' } },
+  'social-conversations': { target: 'instagram', query: { action: 'social_conversations' } },
+  'wa-campaigns': { target: 'messages', query: { action: 'wa_campaigns' } }
 };
 
 function loadDotEnv() {
