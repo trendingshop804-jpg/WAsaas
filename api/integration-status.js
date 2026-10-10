@@ -38,10 +38,10 @@ async function saveCredentials(req, res) {
   const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
   const integration = normalizeIntegrationKey(body.integration || body.key || '');
 
-  if (integration !== 'twilio') {
+  if (!['twilio', 'whatsapp', 'instagram'].includes(integration)) {
     return res.status(400).json({
-      error: 'Only the twilio integration can be saved through this endpoint.',
-      supported: ['twilio']
+      error: 'Unsupported integration for credentials save.',
+      supported: ['twilio', 'whatsapp', 'instagram']
     });
   }
 
@@ -57,88 +57,186 @@ async function saveCredentials(req, res) {
     return res.status(503).json({ error: 'Server database configuration is unavailable.' });
   }
 
-  // The form posts its field ids verbatim (kebab-case); accept camel/snake too.
-  const accountSid = String(body.accountSid || body.account_sid || body['account-sid'] || '').trim();
-  if (!accountSid) {
-    return res.status(400).json({ error: 'Twilio Account SID is required.' });
-  }
-  if (!TWILIO_SID_PATTERN.test(accountSid)) {
-    return res.status(400).json({ error: 'Twilio Account SID must be "AC" followed by 32 hex characters.' });
-  }
-
-  const fromNumberRaw = String(body.fromNumber || body.from_number || body['from-number'] || '').trim();
-  if (fromNumberRaw && !/^\+?[0-9]{7,15}$/.test(fromNumberRaw.replace(/[\s()-]/g, ''))) {
-    return res.status(400).json({ error: 'Caller number must be a valid phone number, e.g. +15551234567.' });
-  }
-  const fromNumber = fromNumberRaw ? `+${fromNumberRaw.replace(/[^0-9]/g, '')}` : null;
-
-  const region = String(body.region || 'US1').trim().toUpperCase();
-  if (!ALLOWED_TWILIO_REGIONS.has(region)) {
-    return res.status(400).json({ error: `Unsupported region. Use one of: ${[...ALLOWED_TWILIO_REGIONS].join(', ')}.` });
-  }
-
-  // Look up the existing row so the token can be preserved when the operator
-  // leaves the field blank. Re-sending a stored token is not possible: it is
-  // never returned to a browser, only its ciphertext.
-  const { data: existing, error: lookupError } = await admin
-    .from('twilio_connections')
-    .select('id, auth_token_encrypted')
-    .eq('organization_id', access.organizationId)
-    .eq('account_sid', accountSid)
-    .maybeSingle();
-
-  if (lookupError) {
-    console.error('[integration-status] twilio lookup failed:', lookupError.message);
-    return res.status(503).json({ error: 'Could not read the stored Twilio connection. Please retry.' });
-  }
-
-  const authTokenRaw = String(body.authToken || body.auth_token || body['auth-token'] || '').trim();
-  let authTokenEncrypted = existing?.auth_token_encrypted || null;
-
-  if (authTokenRaw) {
-    try {
-      authTokenEncrypted = await encryptToken(authTokenRaw);
-    } catch (error) {
-      console.error('[integration-status] twilio encrypt failed:', error.message);
-      return res.status(500).json({ error: 'Could not secure the auth token. Check the server encryption secret.' });
+  // ── 1. TWILIO VOICE SAVE ──────────────────────────────────────────────────
+  if (integration === 'twilio') {
+    const accountSid = String(body.accountSid || body.account_sid || body['account-sid'] || '').trim();
+    if (!accountSid) {
+      return res.status(400).json({ error: 'Twilio Account SID is required.' });
     }
+    if (!TWILIO_SID_PATTERN.test(accountSid)) {
+      return res.status(400).json({ error: 'Twilio Account SID must be "AC" followed by 32 hex characters.' });
+    }
+
+    const fromNumberRaw = String(body.fromNumber || body.from_number || body['from-number'] || '').trim();
+    if (fromNumberRaw && !/^\+?[0-9]{7,15}$/.test(fromNumberRaw.replace(/[\s()-]/g, ''))) {
+      return res.status(400).json({ error: 'Caller number must be a valid phone number, e.g. +15551234567.' });
+    }
+    const fromNumber = fromNumberRaw ? `+${fromNumberRaw.replace(/[^0-9]/g, '')}` : null;
+
+    const region = String(body.region || 'US1').trim().toUpperCase();
+    if (!ALLOWED_TWILIO_REGIONS.has(region)) {
+      return res.status(400).json({ error: `Unsupported region. Use one of: ${[...ALLOWED_TWILIO_REGIONS].join(', ')}.` });
+    }
+
+    const { data: existing } = await admin
+      .from('twilio_connections')
+      .select('id, auth_token_encrypted')
+      .eq('organization_id', access.organizationId)
+      .eq('account_sid', accountSid)
+      .maybeSingle();
+
+    const authTokenRaw = String(body.authToken || body.auth_token || body['auth-token'] || '').trim();
+    let authTokenEncrypted = existing?.auth_token_encrypted || null;
+
+    if (authTokenRaw) {
+      try {
+        authTokenEncrypted = await encryptToken(authTokenRaw);
+      } catch (error) {
+        return res.status(500).json({ error: 'Could not secure the auth token. Check server encryption secret.' });
+      }
+    }
+
+    if (!authTokenEncrypted) {
+      return res.status(400).json({ error: 'Auth token is required for a new Twilio connection.' });
+    }
+
+    const row = {
+      organization_id: access.organizationId,
+      account_sid: accountSid,
+      auth_token_encrypted: authTokenEncrypted,
+      from_number: fromNumber,
+      region,
+      is_active: true,
+      updated_at: new Date().toISOString()
+    };
+
+    const { data: saved, error: saveError } = await admin
+      .from('twilio_connections')
+      .upsert(row, { onConflict: 'organization_id,account_sid' })
+      .select('id, account_sid, from_number, region, is_active, updated_at')
+      .single();
+
+    if (saveError) {
+      return res.status(500).json({ error: `Could not save Twilio connection: ${saveError.message}` });
+    }
+
+    const status = await getIntegrationStatus('twilio', { organizationId: access.organizationId });
+    return res.status(200).json({ success: true, connection: saved, status });
   }
 
-  if (!authTokenEncrypted) {
-    return res.status(400).json({ error: 'Auth token is required for a new Twilio connection.' });
+  // ── 2. WHATSAPP CLOUD API SAVE ───────────────────────────────────────────
+  if (integration === 'whatsapp') {
+    const phoneNumberId = String(body.phoneNumberId || body.phone_number_id || body['phone-number-id'] || '').trim();
+    if (!phoneNumberId) {
+      return res.status(400).json({ error: 'WhatsApp Phone Number ID is required.' });
+    }
+
+    const accessTokenRaw = String(body.accessToken || body.access_token || body.system_token || '').trim();
+    const wabaId = String(body.wabaId || body.waba_id || body['waba-id'] || '').trim() || null;
+    const phoneNumber = String(body.phoneNumber || body.phone_number || '').trim() || null;
+    const displayName = String(body.displayName || body.display_name || '').trim() || null;
+
+    const { data: existing } = await admin
+      .from('whatsapp_connections')
+      .select('id, access_token_encrypted')
+      .eq('organization_id', access.organizationId)
+      .eq('phone_number_id', phoneNumberId)
+      .maybeSingle();
+
+    let accessTokenEncrypted = existing?.access_token_encrypted || null;
+
+    if (accessTokenRaw) {
+      try {
+        accessTokenEncrypted = await encryptToken(accessTokenRaw);
+      } catch (error) {
+        return res.status(500).json({ error: 'Could not secure WhatsApp token.' });
+      }
+    }
+
+    if (!accessTokenEncrypted) {
+      return res.status(400).json({ error: 'WhatsApp Permanent Access Token is required.' });
+    }
+
+    const row = {
+      organization_id: access.organizationId,
+      phone_number_id: phoneNumberId,
+      waba_id: wabaId,
+      phone_number: phoneNumber,
+      display_name: displayName,
+      access_token_encrypted: accessTokenEncrypted,
+      is_active: true,
+      updated_at: new Date().toISOString()
+    };
+
+    const { data: saved, error: saveError } = await admin
+      .from('whatsapp_connections')
+      .upsert(row, { onConflict: 'organization_id,phone_number_id' })
+      .select('id, phone_number_id, waba_id, phone_number, display_name, is_active, updated_at')
+      .single();
+
+    if (saveError) {
+      return res.status(500).json({ error: `Could not save WhatsApp connection: ${saveError.message}` });
+    }
+
+    const status = await getIntegrationStatus('whatsapp', { organizationId: access.organizationId });
+    return res.status(200).json({ success: true, connection: saved, status });
   }
 
-  const row = {
-    organization_id: access.organizationId,
-    account_sid: accountSid,
-    auth_token_encrypted: authTokenEncrypted,
-    from_number: fromNumber,
-    region,
-    is_active: true,
-    connected_by: access.user?.id || null,
-    updated_at: new Date().toISOString()
-  };
+  // ── 3. INSTAGRAM GRAPH API SAVE ──────────────────────────────────────────
+  if (integration === 'instagram') {
+    const instagramBusinessId = String(body.instagramBusinessId || body.ig_account_id || body.accountId || '').trim();
+    if (!instagramBusinessId) {
+      return res.status(400).json({ error: 'Instagram Business Account ID is required.' });
+    }
 
-  const { data: saved, error: saveError } = await admin
-    .from('twilio_connections')
-    .upsert(row, { onConflict: 'organization_id,account_sid' })
-    .select('id, account_sid, from_number, region, is_active, updated_at')
-    .single();
+    const accessTokenRaw = String(body.accessToken || body.page_access_token || '').trim();
+    const username = String(body.username || '').replace(/^@/, '').trim() || null;
+    const pageId = String(body.pageId || body.page_id || '').trim() || null;
 
-  if (saveError) {
-    console.error('[integration-status] twilio save failed:', saveError.message);
-    return res.status(500).json({ error: `Could not save the Twilio connection: ${saveError.message}` });
+    const { data: existing } = await admin
+      .from('instagram_connections')
+      .select('id, access_token_encrypted')
+      .eq('organization_id', access.organizationId)
+      .eq('instagram_business_id', instagramBusinessId)
+      .maybeSingle();
+
+    let accessTokenEncrypted = existing?.access_token_encrypted || null;
+
+    if (accessTokenRaw) {
+      try {
+        accessTokenEncrypted = await encryptToken(accessTokenRaw);
+      } catch (error) {
+        return res.status(500).json({ error: 'Could not secure Instagram token.' });
+      }
+    }
+
+    if (!accessTokenEncrypted) {
+      return res.status(400).json({ error: 'Instagram Access Token is required.' });
+    }
+
+    const row = {
+      organization_id: access.organizationId,
+      instagram_business_id: instagramBusinessId,
+      instagram_username: username,
+      page_id: pageId,
+      access_token_encrypted: accessTokenEncrypted,
+      is_active: true,
+      updated_at: new Date().toISOString()
+    };
+
+    const { data: saved, error: saveError } = await admin
+      .from('instagram_connections')
+      .upsert(row, { onConflict: 'organization_id,instagram_business_id' })
+      .select('id, instagram_business_id, instagram_username, page_id, is_active, updated_at')
+      .single();
+
+    if (saveError) {
+      return res.status(500).json({ error: `Could not save Instagram connection: ${saveError.message}` });
+    }
+
+    const status = await getIntegrationStatus('instagram', { organizationId: access.organizationId });
+    return res.status(200).json({ success: true, connection: saved, status });
   }
-
-  // Verified live so the badge reflects reality, not optimism.
-  const status = await getIntegrationStatus('twilio', { organizationId: access.organizationId });
-
-  return res.status(200).json({
-    success: true,
-    // auth_token_encrypted is deliberately absent from every response.
-    connection: saved,
-    status
-  });
 }
 
 export default async function handler(req, res) {
@@ -216,6 +314,15 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
+  let organizationId = null;
+  try {
+    const { getBearerToken, verifyOrgAccess } = await import('./_supabase.js');
+    if (getBearerToken(req)) {
+      const access = await verifyOrgAccess(req);
+      if (access?.organizationId) organizationId = access.organizationId;
+    }
+  } catch (e) {}
+
   const requested = query.integration || new URL(req.url || '/api/integration-status', 'http://localhost').searchParams.get('integration');
   let keys = INTEGRATION_KEYS;
   let normalized = null;
@@ -232,7 +339,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const integrations = await getIntegrationStatuses(keys);
+    const integrations = await getIntegrationStatuses(keys, { organizationId });
     return res.status(200).json({
       success: true,
       integrations,

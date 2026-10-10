@@ -85,9 +85,51 @@ async function requestJson(url, options = {}) {
   }
 }
 
+async function getWhatsAppTenantConfig(organizationId) {
+  if (!organizationId || !supabase) return null;
+
+  const { data, error } = await supabase
+    .from('whatsapp_connections')
+    .select('phone_number_id, access_token_encrypted, waba_id, display_name, phone_number, is_active')
+    .eq('organization_id', organizationId)
+    .eq('is_active', true)
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    console.error('[integration-status] WhatsApp connection lookup failed:', error.message);
+    return null;
+  }
+
+  if (!data?.access_token_encrypted || !data?.phone_number_id) {
+    return null;
+  }
+
+  let accessToken = null;
+  try {
+    accessToken = await decryptToken(data.access_token_encrypted);
+  } catch (err) {
+    console.error('[integration-status] WhatsApp token decrypt failed:', err.message);
+    return null;
+  }
+
+  if (!accessToken) return null;
+
+  return {
+    accessToken,
+    phoneNumberId: data.phone_number_id,
+    wabaId: data.waba_id || null,
+    displayName: data.display_name || data.phone_number || null
+  };
+}
+
 async function checkWhatsApp(customConfig = {}) {
+  const tenantConfig = await getWhatsAppTenantConfig(customConfig.organizationId);
+
   const accessToken =
     customConfig.accessToken ||
+    tenantConfig?.accessToken ||
     firstEnv(
       'WHATSAPP_ACCESS_TOKEN',
       'WA_ACCESS_TOKEN',
@@ -96,6 +138,7 @@ async function checkWhatsApp(customConfig = {}) {
 
   const phoneNumberId =
     customConfig.phoneNumberId ||
+    tenantConfig?.phoneNumberId ||
     firstEnv(
       'WHATSAPP_PHONE_NUMBER_ID',
       'PHONE_NUMBER_ID',
