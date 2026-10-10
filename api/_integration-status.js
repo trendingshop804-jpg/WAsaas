@@ -124,38 +124,61 @@ async function getWhatsAppTenantConfig(organizationId) {
   };
 }
 
-async function checkWhatsApp(customConfig = {}) {
-  const tenantConfig = await getWhatsAppTenantConfig(customConfig.organizationId);
+function isPlaceholderOrBlank(val) {
+  if (!val || typeof val !== 'string') return true;
+  const clean = val.trim().toLowerCase();
+  if (!clean) return true;
+  const placeholders = [
+    'your_access_token', 'your_token', 'access_token_here', 'token_here',
+    'your_phone_number_id', 'phone_number_id_here', 'your_waba_id', 'waba_id_here',
+    '123456789', '1234567890', '12345', '123456', 'fake_token', 'test_token',
+    'eaab...placeholder', 'eaag...placeholder', 'placeholder', 'dummy', 'test'
+  ];
+  return placeholders.some(p => clean === p || clean.includes('placeholder'));
+}
 
-  const accessToken =
-    customConfig.accessToken ||
-    tenantConfig?.accessToken ||
-    firstEnv(
+function safeLog(stage, info) {
+  const safeInfo = { ...info };
+  if (safeInfo.accessToken) safeInfo.accessToken = safeInfo.accessToken.slice(0, 6) + '...';
+  if (safeInfo.authToken) safeInfo.authToken = '***';
+  console.log(`[WhatsApp Test][${stage}]`, JSON.stringify(safeInfo));
+}
+
+async function checkWhatsApp(customConfig = {}) {
+  const isCandidateTest = customConfig.testingCandidate || Boolean(customConfig.accessToken || customConfig.phoneNumberId);
+
+  let accessToken = customConfig.accessToken ? String(customConfig.accessToken).trim() : '';
+  let phoneNumberId = customConfig.phoneNumberId ? String(customConfig.phoneNumberId).trim() : '';
+
+  if (!isCandidateTest) {
+    const tenantConfig = await getWhatsAppTenantConfig(customConfig.organizationId);
+    accessToken = accessToken || tenantConfig?.accessToken || firstEnv(
       'WHATSAPP_ACCESS_TOKEN',
       'WA_ACCESS_TOKEN',
       'META_ACCESS_TOKEN'
     );
-
-  const phoneNumberId =
-    customConfig.phoneNumberId ||
-    tenantConfig?.phoneNumberId ||
-    firstEnv(
+    phoneNumberId = phoneNumberId || tenantConfig?.phoneNumberId || firstEnv(
       'WHATSAPP_PHONE_NUMBER_ID',
       'PHONE_NUMBER_ID',
       'WA_PHONE_NUMBER_ID'
     );
+  }
 
-  const missing = [];
+  safeLog('Validation', {
+    isCandidateTest,
+    hasToken: !isPlaceholderOrBlank(accessToken),
+    hasPhoneId: !isPlaceholderOrBlank(phoneNumberId),
+    phoneIdHint: phoneNumberId ? phoneNumberId.slice(0, 4) + '***' : 'none'
+  });
 
-  if (!accessToken) missing.push('WHATSAPP_ACCESS_TOKEN');
-  if (!phoneNumberId) missing.push('WHATSAPP_PHONE_NUMBER_ID');
-
-  if (missing.length) {
-    return notConfigured('WhatsApp Cloud API', missing);
+  if (isPlaceholderOrBlank(accessToken) || isPlaceholderOrBlank(phoneNumberId)) {
+    return result('not_configured', 'Enter the WhatsApp access token and Phone Number ID.', {
+      code: 'MISSING_CREDENTIALS',
+      message: 'Enter the WhatsApp access token and Phone Number ID.'
+    });
   }
 
   const startedAt = Date.now();
-
   const url =
     `https://graph.facebook.com/${META_GRAPH_VERSION}/` +
     `${encodeURIComponent(phoneNumberId)}` +
@@ -170,42 +193,49 @@ async function checkWhatsApp(customConfig = {}) {
 
     const latencyMs = Date.now() - startedAt;
 
+    safeLog('ProviderResponse', {
+      httpStatus: response.status,
+      errorCode: payload?.error?.code,
+      latencyMs
+    });
+
     if (!response.ok || payload?.error) {
       const errCode = payload?.error?.code;
       const errMsg = errorMessage(payload, response);
 
-      if (errCode === 190) {
+      if (response.status === 401 || errCode === 190) {
         return result(
           'token_expired',
-          'WhatsApp connection failed: Meta Access Token has expired or been invalidated.',
-          { latencyMs, code: 190 }
+          'Invalid or expired access token',
+          { latencyMs, code: 'INVALID_CREDENTIALS', httpStatus: response.status }
         );
       }
 
-      if (errCode === 100 || errCode === 200 || errCode === 10) {
+      if (response.status === 403 || errCode === 100 || errCode === 200 || errCode === 10) {
         return result(
           'permission_missing',
-          `WhatsApp connection failed: Messaging permission or Phone ID configuration missing (${errMsg}).`,
-          { latencyMs, code: errCode }
+          'Required permissions are missing or invalid Phone Number ID.',
+          { latencyMs, code: 'PERMISSION_ERROR', httpStatus: response.status }
         );
       }
 
       return result(
         'error',
         `WhatsApp connection failed: ${errMsg}`,
-        { latencyMs, code: errCode || response.status }
+        { latencyMs, code: 'INVALID_CREDENTIALS', httpStatus: response.status }
       );
     }
 
     const verifiedName =
       payload.verified_name ||
       payload.display_phone_number ||
-      null;
+      'Meta WhatsApp Cloud API Verified';
 
     return result(
       'connected',
-      'WhatsApp Cloud API responded successfully.',
+      'Connection verified successfully',
       {
+        code: 'SUCCESS',
         latencyMs,
         provider: 'Meta WhatsApp Cloud API',
         displayName: verifiedName,
@@ -215,12 +245,12 @@ async function checkWhatsApp(customConfig = {}) {
       }
     );
   } catch (error) {
+    const latencyMs = Date.now() - startedAt;
+    safeLog('ProviderError', { error: error.message, code: error?.code, latencyMs });
     return result(
       error?.code === 'TIMEOUT' ? 'unavailable' : 'error',
-      `WhatsApp connection unavailable: ${error.message}`,
-      {
-        latencyMs: Date.now() - startedAt
-      }
+      'Connection failed. Please try again',
+      { latencyMs, code: 'CONNECTION_ERROR' }
     );
   }
 }
@@ -710,3 +740,5 @@ export async function getIntegrationStatus(
 
   return checker(customConfig);
 }
+
+export { checkWhatsApp, checkInstagram, checkTwilio };

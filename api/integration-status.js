@@ -2,7 +2,10 @@ import {
   getIntegrationStatus,
   getIntegrationStatuses,
   normalizeIntegrationKey,
-  INTEGRATION_KEYS
+  INTEGRATION_KEYS,
+  checkWhatsApp,
+  checkInstagram,
+  checkTwilio
 } from './_integration-status.js';
 import { createSupabaseAdminClient, requireOrgAccess } from './_supabase.js';
 import { encryptToken } from './_crypto.js';
@@ -268,40 +271,90 @@ export default async function handler(req, res) {
     }
 
     try {
-      const waResult = await getIntegrationStatus('whatsapp');
+      const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
+      const requestedIntegration = body.integration || query.integration || 'whatsapp';
+      const normalizedKey = normalizeIntegrationKey(requestedIntegration);
 
-      if (!waResult) {
+      const accessToken = body.accessToken || body.access_token || body.system_token || query.accessToken || '';
+      const phoneNumberId = body.phoneNumberId || body.phone_number_id || query.phoneNumberId || '';
+      const wabaId = body.wabaId || body.waba_id || query.wabaId || '';
+
+      const isCandidateTest = Boolean(accessToken || phoneNumberId || req.method === 'POST');
+
+      let result = null;
+      if (normalizedKey === 'whatsapp') {
+        result = await checkWhatsApp({
+          accessToken,
+          phoneNumberId,
+          wabaId,
+          testingCandidate: isCandidateTest,
+          organizationId: null
+        });
+      } else if (normalizedKey === 'instagram') {
+        result = await checkInstagram({
+          accessToken: body.accessToken || body.page_access_token || query.accessToken || '',
+          accountId: body.instagramBusinessId || body.ig_account_id || body.accountId || query.accountId || '',
+          testingCandidate: isCandidateTest,
+          organizationId: null
+        });
+      } else if (normalizedKey === 'twilio') {
+        result = await checkTwilio({
+          accountSid: body.accountSid || body.account_sid || query.accountSid || '',
+          authToken: body.authToken || body.auth_token || query.authToken || '',
+          testingCandidate: isCandidateTest,
+          organizationId: null
+        });
+      } else {
+        result = await getIntegrationStatus(normalizedKey);
+      }
+
+      if (!result) {
         return res.status(500).json({
-          connected: false,
+          success: false,
+          code: 'CONNECTION_ERROR',
           status: 'Error',
-          message: 'WhatsApp status checker unavailable.'
+          message: 'Status checker unavailable.'
         });
       }
 
-      const isConnected = Boolean(waResult.connected);
-      const statusLabel = isConnected
-        ? 'Connected'
-        : waResult.status === 'not_configured'
-          ? 'Not Configured'
-          : 'Error';
+      const isConnected = Boolean(result.connected);
+      let statusCode = 200;
+      let code = result.code || (isConnected ? 'SUCCESS' : 'ERROR');
 
-      const verifiedName = waResult.verifiedName || waResult.displayName || 'Meta WhatsApp Cloud API Verified';
+      if (!isConnected) {
+        if (result.code === 'MISSING_CREDENTIALS' || result.status === 'not_configured') {
+          statusCode = 400;
+          code = 'MISSING_CREDENTIALS';
+        } else if (result.code === 'INVALID_CREDENTIALS' || result.status === 'token_expired') {
+          statusCode = 401;
+          code = 'INVALID_CREDENTIALS';
+        } else if (result.code === 'PERMISSION_ERROR' || result.status === 'permission_missing') {
+          statusCode = 403;
+          code = 'PERMISSION_ERROR';
+        } else if (result.code === 'CONNECTION_ERROR' || result.status === 'unavailable') {
+          statusCode = 504;
+          code = 'CONNECTION_ERROR';
+        } else {
+          statusCode = 400;
+        }
+      }
 
-      return res.status(200).json({
+      return res.status(statusCode).json({
+        success: isConnected,
+        code,
+        status: isConnected ? 'connected' : (result.status || 'error'),
         connected: isConnected,
-        status: statusLabel,
-        message: isConnected
-          ? '✓ WhatsApp Cloud API connection successful'
-          : waResult.message || 'WhatsApp connection failed.',
-        verifiedName,
-        displayName: waResult.displayName || null,
-        checkedAt: waResult.checkedAt || new Date().toISOString(),
-        latencyMs: waResult.latencyMs ?? null
+        message: result.message || (isConnected ? 'Connection verified successfully' : 'WhatsApp connection failed.'),
+        verifiedName: result.verifiedName || result.displayName || null,
+        displayName: result.displayName || null,
+        checkedAt: result.checkedAt || new Date().toISOString(),
+        latencyMs: result.latencyMs ?? null
       });
     } catch (err) {
       console.error('[Test Connection Error]', err);
       return res.status(500).json({
-        connected: false,
+        success: false,
+        code: 'CONNECTION_ERROR',
         status: 'Error',
         message: `WhatsApp connection failed: ${err.message}`
       });

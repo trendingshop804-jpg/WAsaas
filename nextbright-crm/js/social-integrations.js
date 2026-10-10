@@ -123,15 +123,34 @@
     }
 
     // Test Instagram Connection
-    const testIgBtn = document.getElementById('btn-test-ig-conn');
+    const testIgBtn = document.getElementById('ig-test-btn') || document.getElementById('btn-test-ig-conn');
     if (testIgBtn) {
       testIgBtn.addEventListener('click', testInstagramConnection);
     }
 
     // Test WhatsApp Connection
-    const testWaBtn = document.getElementById('btn-test-wa-conn');
+    const testWaBtn = document.getElementById('wa-test-btn') || document.getElementById('btn-test-wa-conn');
     if (testWaBtn) {
       testWaBtn.addEventListener('click', testWhatsAppConnection);
+    }
+
+    // Configure Buttons (Open Modal)
+    const connectWaBtn = document.getElementById('wa-connect-btn');
+    if (connectWaBtn) {
+      connectWaBtn.addEventListener('click', () => {
+        if (typeof window.openIntegrationEditor === 'function') {
+          window.openIntegrationEditor('whatsapp');
+        }
+      });
+    }
+
+    const connectIgBtn = document.getElementById('ig-connect-btn');
+    if (connectIgBtn) {
+      connectIgBtn.addEventListener('click', () => {
+        if (typeof window.openIntegrationEditor === 'function') {
+          window.openIntegrationEditor('instagram');
+        }
+      });
     }
 
     // Copy Webhook URL
@@ -268,24 +287,38 @@
   }
 
   async function testWhatsAppConnection() {
-    if (window.showToast) window.showToast('Testing Meta WhatsApp Cloud API connection...', 'info');
+    const btn = document.getElementById('wa-test-btn') || document.getElementById('btn-test-wa-conn');
+    const originalText = btn ? btn.innerHTML : '';
+    if (btn) {
+      if (btn.disabled) return;
+      btn.disabled = true;
+      btn.innerHTML = '<i data-feather="loader"></i> Testing connection...';
+      if (typeof feather !== 'undefined') feather.replace();
+    }
 
     try {
-      const headers = {};
-      const sbToken = window.supabaseConfig?.accessToken || localStorage.getItem('sb-access-token') || '';
-      if (sbToken) headers['Authorization'] = `Bearer ${sbToken}`;
-
-      const resp = await fetch('/api/integration-status?integration=whatsapp', { headers });
-      const res = await resp.json();
-      if (res.success && res.integrations?.whatsapp?.connected) {
-        setConnectionBadge('wa-status-badge', true, `Connected (${res.integrations.whatsapp.displayName || 'WhatsApp'})`);
-        if (window.showToast) window.showToast('WhatsApp Cloud API Connection Verified!', 'success');
+      if (typeof window.testIntegrationConnection === 'function') {
+        await window.testIntegrationConnection('whatsapp');
       } else {
-        const msg = res.integrations?.whatsapp?.message || 'Check credentials';
-        if (window.showToast) window.showToast(`WhatsApp API: ${msg}`, 'info');
+        const headers = { 'Content-Type': 'application/json', Accept: 'application/json' };
+        const sbToken = window.supabaseConfig?.accessToken || localStorage.getItem('sb-access-token') || '';
+        if (sbToken) headers['Authorization'] = `Bearer ${sbToken}`;
+
+        const resp = await fetch('/api/integration-status?route=test-connection', { method: 'POST', headers });
+        const res = await resp.json().catch(() => ({}));
+        const isConnected = resp.ok && (res.success || res.connected);
+        const msg = res.message || (isConnected ? 'Connection verified successfully' : 'WhatsApp connection failed.');
+        if (window.showToast) window.showToast(`WhatsApp API: ${msg}`, isConnected ? 'success' : 'error');
+        if (isConnected) setConnectionBadge('wa-status-badge', true, `Connected (${res.verifiedName || 'WhatsApp'})`);
       }
     } catch (err) {
-      if (window.showToast) window.showToast('WhatsApp Cloud API connection checked', 'info');
+      if (window.showToast) window.showToast(`WhatsApp connection failed: ${err.message}`, 'error');
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = originalText || '<i data-feather="zap"></i> Test';
+        if (typeof feather !== 'undefined') feather.replace();
+      }
     }
   }
 

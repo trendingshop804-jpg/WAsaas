@@ -912,33 +912,30 @@ window.initSectionControls = initSectionControls;
 const integrationDefinitions = {
   whatsapp: {
     title: 'WhatsApp Cloud API',
-    subtitle: 'Configure the Meta business connection used for outbound messages and inbound webhooks.',
+    subtitle: 'Configure the Meta business connection used for outbound messages and inbound webhooks. Credentials are encrypted on the server.',
+    serverManaged: true,
+    saveEndpoint: '/api/integration-status',
     fields: [
-      { id: 'business-id', label: 'Meta Business ID', placeholder: '123456789012345' },
-      { id: 'phone-number-id', label: 'WhatsApp Phone Number ID', placeholder: '104829104829104' },
-      { id: 'waba-id', label: 'WhatsApp Business Account ID', placeholder: 'WABA_1016931798166599' },
-      { id: 'display-phone', label: 'Display phone number', placeholder: '+91 98401 23456' },
-      { id: 'access-token', label: 'Permanent access token', type: 'password', placeholder: 'EAAG...', help: 'Use a Meta System User token in production.' },
-      { id: 'verify-token', label: 'Webhook verify token', placeholder: 'Choose a private verification string' },
-      { id: 'messaging-mode', label: 'Messaging mode', type: 'select', options: ['Cloud API', 'QR Gateway'] }
+      { id: 'phone-number-id', label: 'WhatsApp Phone Number ID', placeholder: '104829104829104', help: 'From Meta Developer Dashboard > WhatsApp > API Setup' },
+      { id: 'waba-id', label: 'WhatsApp Business Account (WABA) ID', placeholder: '1016931798166599' },
+      { id: 'display-phone', label: 'Display Phone Number', placeholder: '+91 98401 23456' },
+      { id: 'access-token', label: 'Permanent System User Access Token', type: 'password', placeholder: 'EAAG...', help: 'Encrypted before storing. Leave blank to keep saved token.' }
     ]
   },
   instagram: {
     title: 'Instagram DMs',
     subtitle: 'Connect a professional Instagram account for comment-to-DM and inbox automations.',
+    serverManaged: true,
+    saveEndpoint: '/api/integration-status',
     fields: [
-      { id: 'username', label: 'Instagram username', placeholder: 'nextbright_solutions' },
       { id: 'business-id', label: 'Instagram Business Account ID', placeholder: '17841405728287316' },
-      { id: 'page-id', label: 'Linked Facebook Page ID', placeholder: '102938475612345' },
-      { id: 'access-token', label: 'Permanent access token', type: 'password', placeholder: 'EAAG...' },
-      { id: 'verify-token', label: 'Webhook verify token', placeholder: 'Choose a private verification string' }
+      { id: 'username', label: 'Instagram Username', placeholder: 'nextbright_solutions' },
+      { id: 'access-token', label: 'Permanent / Page Access Token', type: 'password', placeholder: 'EAAG...' }
     ]
   },
   twilio: {
     title: 'Twilio Voice Calls',
     subtitle: 'Connect your Twilio account to enable voice calling. Credentials are encrypted on the server and scoped to your organization.',
-    // Credentials are POSTed to the server, which encrypts them before storing
-    // them. The browser never keeps the auth token, and no read path returns it.
     serverManaged: true,
     saveEndpoint: '/api/integration-status',
     envVars: {
@@ -1048,8 +1045,6 @@ function setIntegrationStatus(key, statusInfo = {}) {
   const latencyMs = Number(statusInfo.latencyMs);
   const latencyText = Number.isFinite(latencyMs) && latencyMs >= 0 ? ` Latency ${Math.round(latencyMs)} ms.` : '';
   const suffix = checkedAt ? ` Checked ${checkedAt}.${latencyText}` : latencyText;
-  // The server now explains where a missing secret has to be set; surface it in
-  // the card so the badge is actionable instead of just naming the variables.
   const warnings = Array.isArray(statusInfo.warnings) ? statusInfo.warnings.filter(Boolean) : [];
   const setupHint = statusInfo.setupHint ? ` ${statusInfo.setupHint}` : '';
   const { badge, detail, card } = getIntegrationStatusElements(key);
@@ -1109,17 +1104,83 @@ async function fetchIntegrationStatuses(keys = INTEGRATION_STATUS_KEYS, options 
   return integrationStatusPromise;
 }
 
-async function testIntegrationConnection(key) {
+async function testIntegrationConnection(key, candidateValues = null) {
   const definition = integrationDefinitions[key];
   if (!definition) return null;
-  const payload = await fetchIntegrationStatuses([key]);
-  const statusInfo = payload?.integrations?.[key];
-  if (!statusInfo) {
-    showToast(`${definition.title}: live status API is unavailable.`, 'error');
-    return null;
+
+  const bodyPayload = {
+    integration: key
+  };
+
+  if (candidateValues) {
+    if (key === 'whatsapp') {
+      bodyPayload.accessToken = candidateValues['access-token'] || candidateValues['system_token'] || '';
+      bodyPayload.phoneNumberId = candidateValues['phone-number-id'] || candidateValues['phone_number_id'] || '';
+      bodyPayload.wabaId = candidateValues['waba-id'] || candidateValues['waba_id'] || '';
+    } else if (key === 'instagram') {
+      bodyPayload.accessToken = candidateValues['access-token'] || candidateValues['page_access_token'] || '';
+      bodyPayload.instagramBusinessId = candidateValues['business-id'] || candidateValues['ig_account_id'] || '';
+    } else if (key === 'twilio') {
+      bodyPayload.accountSid = candidateValues['account-sid'] || candidateValues['account_sid'] || '';
+      bodyPayload.authToken = candidateValues['auth-token'] || candidateValues['auth_token'] || '';
+    }
   }
-  showToast(`${definition.title}: ${statusInfo.message}`, statusInfo.status === 'connected' ? 'success' : 'error');
-  return statusInfo;
+
+  const isPlaceholderOrBlank = (v) => {
+    if (!v || typeof v !== 'string') return true;
+    const clean = v.trim().toLowerCase();
+    if (!clean) return true;
+    const placeholders = [
+      'your_access_token', 'your_token', 'access_token_here', 'token_here',
+      'your_phone_number_id', 'phone_number_id_here', 'your_waba_id', 'waba_id_here',
+      '123456789', '1234567890', '12345', '123456', 'fake_token', 'test_token',
+      'eaab...placeholder', 'eaag...placeholder', 'placeholder', 'dummy', 'test'
+    ];
+    return placeholders.some(p => clean === p || clean.includes('placeholder'));
+  };
+
+  if (key === 'whatsapp' && candidateValues) {
+    if (isPlaceholderOrBlank(bodyPayload.accessToken) || isPlaceholderOrBlank(bodyPayload.phoneNumberId)) {
+      showToast('Enter the WhatsApp access token and Phone Number ID.', 'error');
+      return { success: false, code: 'MISSING_CREDENTIALS', message: 'Enter the WhatsApp access token and Phone Number ID.' };
+    }
+  }
+
+  try {
+    const headers = { 'Content-Type': 'application/json', Accept: 'application/json' };
+    const token = window.supabaseConfig?.accessToken || localStorage.getItem('sb-access-token') || '';
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const res = await fetch('/api/integration-status?route=test-connection', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(bodyPayload)
+    });
+
+    const data = await res.json().catch(() => ({}));
+    const isSuccess = res.ok && (data.success || data.connected);
+    const message = data.message || (isSuccess ? 'Connection verified successfully' : 'Connection failed. Please try again');
+
+    showToast(`${definition.title}: ${message}`, isSuccess ? 'success' : 'error');
+
+    if (isSuccess && data.verifiedName) {
+      setIntegrationStatus(key, {
+        status: 'connected',
+        message: `Connected (${data.verifiedName})`,
+        checkedAt: new Date().toISOString()
+      });
+    }
+
+    return {
+      success: isSuccess,
+      code: data.code || (isSuccess ? 'SUCCESS' : 'ERROR'),
+      message,
+      data
+    };
+  } catch (err) {
+    showToast(`${definition.title}: Connection failed. Please try again`, 'error');
+    return { success: false, code: 'CONNECTION_ERROR', message: 'Connection failed. Please try again' };
+  }
 }
 
 function initIntegrationStatus() {
@@ -1314,12 +1375,20 @@ function initIntegrationEditor() {
 
   document.getElementById('integration-test-btn')?.addEventListener('click', async event => {
     const button = event.currentTarget;
+    if (button.disabled) return;
     const original = button.innerHTML;
     button.disabled = true;
-    button.innerHTML = '<i data-feather="loader"></i> Testing...';
+    button.innerHTML = '<i data-feather="loader"></i> Testing connection...';
     if (typeof feather !== 'undefined') feather.replace();
+
+    const key = keyInput.value;
+    const values = {};
+    fieldsWrap.querySelectorAll('input, select').forEach(input => {
+      values[input.name] = input.value.trim();
+    });
+
     try {
-      await testIntegrationConnection(keyInput.value);
+      await testIntegrationConnection(key, values);
     } finally {
       button.disabled = false;
       button.innerHTML = original;
