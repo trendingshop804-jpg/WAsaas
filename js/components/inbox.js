@@ -554,7 +554,10 @@ class InboxComponent {
     } else {
       window.whatsappService.sendMessage({ leadId: conv.leadId, text }).catch(error => {
         console.error('Inbox message send failed:', error);
-        alert(error.message || 'Unable to send message.');
+        const message = window.whatsappService?.getErrorMessage?.(error, 'Unable to send message.')
+          || 'Unable to send message.';
+        if (typeof window.showToast === 'function') window.showToast(message, 'error');
+        else alert(message);
       });
     }
 

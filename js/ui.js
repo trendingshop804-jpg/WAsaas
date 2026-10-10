@@ -670,14 +670,19 @@ function showToast(msg, type = 'default') {
 
   const toast = document.createElement('div');
   toast.className = `toast ${type}`;
-  toast.innerHTML = `
+  const icon = `
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
       ${type === 'success' ? '<polyline points="20 6 9 17 4 12"/>'
       : type === 'error' ? '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>'
       : '<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="8"/>'}
-    </svg>
-    <span>${msg}</span>
-  `;
+    </svg>`;
+  const message = typeof msg === 'string'
+    ? msg
+    : (msg?.message || msg?.error?.message || msg?.error || 'Something went wrong.');
+  toast.innerHTML = icon;
+  const label = document.createElement('span');
+  label.textContent = typeof message === 'string' ? message : 'Something went wrong.';
+  toast.appendChild(label);
   container.appendChild(toast);
   setTimeout(() => {
     toast.style.opacity = '0';

@@ -365,22 +365,37 @@ class WhatsAppService {
       conv.leadId = lead.id;
     }
 
-    // Meta acceptance is the commit point for real sends: rejected sends are not persisted.
-    let metaMessageId = null;
-    if (org.whatsappToken && org.phoneId && lead?.phone) {
-      const cleanPhone = lead.phone.replace(/[^0-9]/g, '');
-      const metaRes = await fetch(`https://graph.facebook.com/v18.0/${org.phoneId}/messages`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${org.whatsappToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messaging_product: 'whatsapp', recipient_type: 'individual', to: cleanPhone, type: 'text', text: { preview_url: false, body: text } })
-      });
-      const metaData = await metaRes.json();
-      if (!metaRes.ok || !metaData.messages?.[0]?.id) {
-        throw new Error(metaData.error?.message || 'WhatsApp did not accept the message.');
-      }
-      metaMessageId = metaData.messages[0].id;
+    if (!lead?.phone) {
+      throw new Error('This contact does not have a valid WhatsApp phone number.');
     }
 
+    // Send through the authenticated server endpoint so tenant validation,
+    // service-window/template checks and the real Meta dispatch happen once.
+    if (!window.apiClient?.authenticatedFetch) {
+      throw new Error('Your session is not ready. Please refresh the page and sign in again.');
+    }
+
+    let sendResponse;
+    try {
+      sendResponse = await window.apiClient.authenticatedFetch('/api/messages', {
+        method: 'POST',
+        body: JSON.stringify({
+          phone: lead.phone,
+          text,
+          is_ai: isAI,
+          conversation_id: conv?.id || null,
+          clientMessageId: `inbox:${leadId}:${Date.now()}`
+        })
+      });
+    } catch (err) {
+      throw new Error(this.getErrorMessage(err, 'Unable to send the WhatsApp message.'));
+    }
+
+    const sendBody = await sendResponse.json().catch(() => ({}));
+    if (!sendResponse.ok || !sendBody?.success) {
+      throw new Error(this.getErrorMessage(sendBody, `Unable to send the WhatsApp message (HTTP ${sendResponse.status}).`));
+    }
+    const metaMessageId = sendBody.messageId || sendBody.message?.wa_message_id || null;
     const now = new Date();
     const nowISO = now.toISOString();
     const newMsg = {
@@ -426,42 +441,6 @@ class WhatsAppService {
     // Deduct usage credit
     org.creditsUsed = (org.creditsUsed || 0) + 1;
 
-    // Persist outbound message for CRM visibility.
-    // SECURITY: the browser must never write to the database directly.
-    // Persistence goes through the authenticated /api/messages endpoint,
-    // which validates the session, resolves the organization server-side and
-    // only then uses the service-role client.
-    const sessionHeaders = window.supabaseConfig?.getSessionHeaders?.() || null;
-    if ((sessionHeaders || window.apiClient) && leadId) {
-      try {
-        // Central helper so the token is live/refreshed, same as the inbox read.
-        const response = window.apiClient
-          ? await window.apiClient.authenticatedFetch('/api/messages', {
-            method: 'POST',
-            body: JSON.stringify({
-              phone: lead?.phone || '',
-              text,
-              clientMessageId: `legacy:${leadId}:${Date.now()}`
-            })
-          })
-          : await fetch('/api/messages', {
-            method: 'POST',
-            headers: sessionHeaders,
-            body: JSON.stringify({
-              phone: lead?.phone || '',
-              text,
-              clientMessageId: `legacy:${leadId}:${Date.now()}`
-            })
-          });
-        if (!response.ok) {
-          const body = await response.json().catch(() => ({}));
-          throw new Error(body.error || `HTTP ${response.status}`);
-        }
-      } catch (err) {
-        console.warn('[WhatsAppService] Outbound persist failed:', err.message);
-      }
-    }
-
     window.appState.saveState();
     window.appState.emit('messageSent', { message: newMsg, leadId });
 
@@ -475,6 +454,15 @@ class WhatsAppService {
     return newMsg;
   }
 
+  getErrorMessage(error, fallback) {
+    const value = error?.error ?? error?.message ?? error;
+    if (typeof value === 'string' && value.trim()) return value.trim();
+    if (value && typeof value === 'object') {
+      const nested = value.message ?? value.error?.message ?? value.details;
+      if (typeof nested === 'string' && nested.trim()) return nested.trim();
+    }
+    return fallback;
+  }
   // Receive Simulated Incoming Inbound Message from Prospect
   receiveSimulatedInbound({ leadId, text }) {
     const org = window.appState.getCurrentOrg();
