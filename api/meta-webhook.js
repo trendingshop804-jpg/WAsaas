@@ -1182,15 +1182,22 @@ export default async function handler(req, res) {
 
           // Increment unread_count atomically
           if (conversationId) {
-            await supabase.rpc('increment_unread', { conv_id: conversationId }).catch(() => {
-              // Fallback: direct update if RPC doesn't exist yet
-              supabase
-                .from('conversations')
-                .update({ unread_count: 1 })
-                .eq('id', conversationId)
-                .eq('unread_count', 0)
-                .then(() => {});
-            });
+            try {
+              if (typeof supabase?.rpc === 'function') {
+                const rpcRes = supabase.rpc('increment_unread', { conv_id: conversationId });
+                if (rpcRes && typeof rpcRes.then === 'function') {
+                  await rpcRes;
+                }
+              }
+            } catch (_) {
+              try {
+                await supabase
+                  .from('conversations')
+                  .update({ unread_count: 1 })
+                  .eq('id', conversationId)
+                  .eq('unread_count', 0);
+              } catch (_) {}
+            }
           }
 
           if (userText && msgType === 'text' && leadId && !isOptOut(userText) && decryptedToken) {

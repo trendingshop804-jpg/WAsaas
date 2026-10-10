@@ -105,7 +105,7 @@
             return { success: true, apiKey: rawKey, record: row };
           }
           if (body.action === 'test-connection') {
-            return { success: true, status: 'connected', message: '✓ Connection ping test completed successfully.' };
+            return { success: false, status: 'error', message: 'Live server connection required to test integrations.' };
           }
         }
         if (req.method === 'DELETE') {

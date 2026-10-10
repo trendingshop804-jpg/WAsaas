@@ -9,7 +9,7 @@
     "build": "vite build",
     "serve": "npx serve . -p 3000",
     "start": "node index.js",
-    "test": "node scripts/test-send-media.mjs && node scripts/test-webhook-media.mjs && node scripts/test-instagram-integration.mjs",
+    "test": "node scripts/test-send-media.mjs && node scripts/test-webhook-media.mjs && node scripts/test-instagram-integration.mjs && node scripts/test-instagram-settings-flow.mjs",
     "test:e2e": "npx playwright test",
     "test:e2e:quick": "node scripts/test-e2e-playwright.mjs",
     "test:all": "npm test && npx playwright test",

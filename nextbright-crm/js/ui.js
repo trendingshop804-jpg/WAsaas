@@ -352,44 +352,72 @@ function renderConversation(conv) {
     messagesEl.innerHTML = conv.messages.map(m => {
       const state = m.status || '';
       const isOut = m.dir === 'out';
-      const failed = isOut && state === 'failed';
+      const isFailed = isOut && state === 'failed';
       const stateChip = isOut && state
-        ? `<div style="font-size:0.625rem;margin-top:3px;opacity:0.85;">${state}</div>`
+        ? `<div class="msg-status-chip ${state}" style="font-size:0.625rem;margin-top:3px;opacity:0.85;${isFailed ? 'color:var(--status-danger, #ef4444);font-weight:600;' : ''}">
+            ${isFailed ? '⚠️ Delivery failed' : state}
+           </div>`
         : '';
 
       const msgType = String(m.messageType || m.message_type || 'text').toLowerCase();
       const mediaUrl = m.mediaUrl || m.media_url || '';
+      const rawText = String(m.text || '').trim();
+      const isUnsupported = msgType === 'unsupported' ||
+                            rawText.toLowerCase() === '[unsupported]' ||
+                            rawText.toLowerCase().startsWith('[unsupported:');
 
       let bodyContent = '';
-      if (mediaUrl) {
+      if (isUnsupported) {
+        bodyContent = `<div class="msg-unsupported" style="display:inline-flex; align-items:center; gap:6px; color:var(--text-muted, #888); font-style:italic; font-size:0.8125rem;">
+          <span>⚠️</span>
+          <span>Unsupported message type</span>
+        </div>`;
+      } else if (mediaUrl) {
         if (msgType === 'image') {
           bodyContent = `<div style="margin-bottom:4px;"><a href="${escapeHtml(mediaUrl)}" target="_blank" rel="noopener"><img src="${escapeHtml(mediaUrl)}" alt="Image" style="max-width:240px; max-height:240px; border-radius:8px; display:block; object-fit:cover;" loading="lazy"></a></div>`;
-          if (m.text && !m.text.startsWith('📎') && !m.text.startsWith('http')) {
-            bodyContent += `<div>${escapeHtml(m.text)}</div>`;
+          if (rawText && !rawText.startsWith('📎') && !rawText.startsWith('http')) {
+            bodyContent += `<div>${escapeHtml(rawText)}</div>`;
           }
         } else if (msgType === 'sticker') {
           bodyContent = `<div style="margin-bottom:4px;"><img src="${escapeHtml(mediaUrl)}" alt="Sticker" style="width:120px; height:120px; object-fit:contain; display:block;"></div>`;
         } else if (msgType === 'audio' || msgType === 'voice') {
           bodyContent = `<div style="margin-bottom:4px;"><audio controls src="${escapeHtml(mediaUrl)}" style="max-width:220px; height:34px; display:block;"></audio></div>`;
-          if (m.text && !m.text.includes('Voice message') && !m.text.startsWith('📎')) {
-            bodyContent += `<div style="font-size:0.75rem; opacity:0.85;">${escapeHtml(m.text)}</div>`;
+          if (rawText && !rawText.includes('Voice message') && !rawText.startsWith('📎')) {
+            bodyContent += `<div style="font-size:0.75rem; opacity:0.85;">${escapeHtml(rawText)}</div>`;
           }
         } else if (msgType === 'video') {
           bodyContent = `<div style="margin-bottom:4px;"><video controls src="${escapeHtml(mediaUrl)}" style="max-width:240px; max-height:180px; border-radius:8px; display:block;"></video></div>`;
-          if (m.text && !m.text.startsWith('📎') && !m.text.startsWith('http')) {
-            bodyContent += `<div>${escapeHtml(m.text)}</div>`;
+          if (rawText && !rawText.startsWith('📎') && !rawText.startsWith('http')) {
+            bodyContent += `<div>${escapeHtml(rawText)}</div>`;
           }
         } else {
-          const label = m.fileName || m.file_name || m.text || 'Download File';
+          const label = m.fileName || m.file_name || rawText || 'Download File';
           bodyContent = `<div style="margin-bottom:4px;"><a href="${escapeHtml(mediaUrl)}" target="_blank" rel="noopener" download style="display:inline-flex; align-items:center; gap:6px; padding:6px 10px; background:rgba(255,255,255,0.15); border-radius:6px; text-decoration:none; color:inherit; font-size:12px; font-weight:500;">📎 <span>${escapeHtml(label)}</span> ⬇️</a></div>`;
         }
+      } else if (msgType !== 'text' && msgType !== '') {
+        const iconMap = {
+          image: '🖼️ Image',
+          sticker: '✨ Sticker',
+          audio: '🎵 Audio note',
+          voice: '🎤 Voice message',
+          video: '📹 Video',
+          document: '📄 Document',
+          location: '📍 Location',
+          contacts: '👤 Contact card',
+          interactive: '🔘 Interactive message'
+        };
+        const label = iconMap[msgType] || `📎 ${msgType}`;
+        const extraText = rawText ? `<div style="margin-top:4px;">${escapeHtml(rawText)}</div>` : '';
+        bodyContent = `<div style="font-size:0.8125rem; color:var(--text-muted, #888); font-style:italic;">${label} (media unavailable)</div>${extraText}`;
+      } else if (rawText) {
+        bodyContent = escapeHtml(rawText);
       } else {
-        bodyContent = escapeHtml(m.text || '');
+        bodyContent = `<span style="font-style:italic; opacity:0.6; font-size:0.8125rem;">(empty message)</span>`;
       }
 
       return `
       <div style="margin-bottom: 8px;" data-msg-state="${state || 'received'}">
-        <div class="msg-bubble ${m.dir}" style="${failed ? 'border:1px solid var(--status-danger);' : ''}">${bodyContent}${stateChip}</div>
+        <div class="msg-bubble ${m.dir}" style="${isFailed ? 'border:1px solid var(--status-danger, #ef4444); background: rgba(239, 68, 68, 0.1);' : ''}">${bodyContent}${stateChip}</div>
         <div class="msg-time" style="text-align:${isOut ? 'right' : 'left'}; padding: 2px 4px; font-size: 0.6875rem; color: var(--text-muted);">${formatMessageTime(m.time)}</div>
       </div>`;
     }).join('');
@@ -928,9 +956,10 @@ const integrationDefinitions = {
     serverManaged: true,
     saveEndpoint: '/api/integration-status',
     fields: [
-      { id: 'business-id', label: 'Instagram Business Account ID', placeholder: '17841405728287316' },
-      { id: 'username', label: 'Instagram Username', placeholder: 'nextbright_solutions' },
-      { id: 'access-token', label: 'Permanent / Page Access Token', type: 'password', placeholder: 'EAAG...' }
+      { id: 'business-id', label: 'Instagram Business Account ID', placeholder: '17841405728287316', help: 'Your 16-17 digit Instagram Professional/Business Account ID from Meta Business Suite.' },
+      { id: 'username', label: 'Instagram Username', placeholder: 'nextbright_solutions', help: 'Your Instagram handle (without @), used for display.' },
+      { id: 'page-id', label: 'Meta Facebook Page ID', placeholder: '109283746519283', help: 'The Facebook Page connected to this Instagram account.' },
+      { id: 'access-token', label: 'Permanent / Page Access Token', type: 'password', placeholder: 'EAAG...', help: 'Meta System User Token with instagram_manage_messages. Leave blank to keep saved token.' }
     ]
   },
   twilio: {
@@ -1086,7 +1115,31 @@ async function fetchIntegrationStatuses(keys = INTEGRATION_STATUS_KEYS, options 
       const payload = await response.json();
       if (!payload.success || !payload.integrations) throw new Error('Status API returned an invalid response');
 
-      Object.entries(payload.integrations).forEach(([key, statusInfo]) => setIntegrationStatus(key, statusInfo));
+      Object.entries(payload.integrations).forEach(([key, statusInfo]) => {
+        setIntegrationStatus(key, statusInfo);
+        // Synchronize server-saved non-secret config into settings cache so reloading preserves configuration
+        if (statusInfo?.config) {
+          const cfg = statusInfo.config;
+          const currentSettings = readIntegrationSettings();
+          if (key === 'instagram') {
+            currentSettings.instagram = currentSettings.instagram || {};
+            if (cfg.businessId) currentSettings.instagram['business-id'] = cfg.businessId;
+            if (cfg.username) currentSettings.instagram['username'] = cfg.username;
+            if (cfg.pageId) currentSettings.instagram['page-id'] = cfg.pageId;
+          } else if (key === 'whatsapp') {
+            currentSettings.whatsapp = currentSettings.whatsapp || {};
+            if (cfg.phoneNumberId) currentSettings.whatsapp['phone-number-id'] = cfg.phoneNumberId;
+            if (cfg.wabaId) currentSettings.whatsapp['waba-id'] = cfg.wabaId;
+            if (cfg.displayName) currentSettings.whatsapp['display-phone'] = cfg.displayName;
+          } else if (key === 'twilio') {
+            currentSettings.twilio = currentSettings.twilio || {};
+            if (cfg.accountSid) currentSettings.twilio['account-sid'] = cfg.accountSid;
+            if (cfg.fromNumber) currentSettings.twilio['from-number'] = cfg.fromNumber;
+            if (cfg.region) currentSettings.twilio['region'] = cfg.region;
+          }
+          writeIntegrationSettings(currentSettings);
+        }
+      });
       return payload;
     } catch (error) {
       selectedKeys.forEach(key => setIntegrationStatus(key, {
@@ -1119,7 +1172,9 @@ async function testIntegrationConnection(key, candidateValues = null) {
       bodyPayload.wabaId = candidateValues['waba-id'] || candidateValues['waba_id'] || '';
     } else if (key === 'instagram') {
       bodyPayload.accessToken = candidateValues['access-token'] || candidateValues['page_access_token'] || '';
-      bodyPayload.instagramBusinessId = candidateValues['business-id'] || candidateValues['ig_account_id'] || '';
+      bodyPayload.instagramBusinessId = candidateValues['business-id'] || candidateValues['ig_account_id'] || candidateValues['businessId'] || '';
+      bodyPayload.username = candidateValues['username'] || '';
+      bodyPayload.pageId = candidateValues['page-id'] || '';
     } else if (key === 'twilio') {
       bodyPayload.accountSid = candidateValues['account-sid'] || candidateValues['account_sid'] || '';
       bodyPayload.authToken = candidateValues['auth-token'] || candidateValues['auth_token'] || '';
@@ -1140,15 +1195,32 @@ async function testIntegrationConnection(key, candidateValues = null) {
   };
 
   if (key === 'whatsapp' && candidateValues) {
-    if (isPlaceholderOrBlank(bodyPayload.accessToken) || isPlaceholderOrBlank(bodyPayload.phoneNumberId)) {
-      showToast('Enter the WhatsApp access token and Phone Number ID.', 'error');
-      return { success: false, code: 'MISSING_CREDENTIALS', message: 'Enter the WhatsApp access token and Phone Number ID.' };
+    if (bodyPayload.accessToken || bodyPayload.phoneNumberId) {
+      if (isPlaceholderOrBlank(bodyPayload.accessToken) || isPlaceholderOrBlank(bodyPayload.phoneNumberId)) {
+        showToast('Enter the WhatsApp access token and Phone Number ID.', 'error');
+        return { success: false, code: 'MISSING_CREDENTIALS', message: 'Enter the WhatsApp access token and Phone Number ID.' };
+      }
+    }
+  }
+
+  if (key === 'instagram' && candidateValues) {
+    if (bodyPayload.accessToken || bodyPayload.instagramBusinessId) {
+      if (isPlaceholderOrBlank(bodyPayload.instagramBusinessId)) {
+        showToast('Instagram DMs: Instagram Business Account ID is required.', 'error');
+        return { success: false, code: 'MISSING_CREDENTIALS', message: 'Instagram Business Account ID is required.' };
+      }
     }
   }
 
   try {
     const headers = { 'Content-Type': 'application/json', Accept: 'application/json' };
-    const token = window.supabaseConfig?.accessToken || localStorage.getItem('sb-access-token') || '';
+    let token = null;
+    if (window.NB_AUTH?.getAccessToken) {
+      try { token = await window.NB_AUTH.getAccessToken(); } catch (_) {}
+    }
+    if (!token) {
+      token = window.supabaseConfig?.accessToken || localStorage.getItem('sb-access-token') || '';
+    }
     if (token) headers['Authorization'] = `Bearer ${token}`;
 
     const res = await fetch('/api/integration-status?route=test-connection', {
@@ -1163,10 +1235,10 @@ async function testIntegrationConnection(key, candidateValues = null) {
 
     showToast(`${definition.title}: ${message}`, isSuccess ? 'success' : 'error');
 
-    if (isSuccess && data.verifiedName) {
+    if (isSuccess && (data.verifiedName || data.displayName)) {
       setIntegrationStatus(key, {
         status: 'connected',
-        message: `Connected (${data.verifiedName})`,
+        message: `Connected (${data.verifiedName || data.displayName})`,
         checkedAt: new Date().toISOString()
       });
     }
@@ -1203,7 +1275,16 @@ function openIntegrationEditor(key) {
   if (!definition || !modal) return;
 
   const settings = readIntegrationSettings();
-  const values = settings[key] || {};
+  const values = { ...(settings[key] || {}) };
+
+  // Section 2: If the existing username contains a numeric ID, do not display it as username
+  // and do NOT automatically treat it as the Business Account ID. Keep fields strictly separate.
+  if (key === 'instagram') {
+    if (values['username'] && /^\d{10,}$/.test(String(values['username']).trim())) {
+      values['username'] = '';
+    }
+  }
+
   document.getElementById('integration-key').value = key;
   document.getElementById('integration-modal-title').textContent = definition.title;
   document.getElementById('integration-modal-subtitle').textContent = definition.subtitle;
@@ -1226,9 +1307,6 @@ function openIntegrationEditor(key) {
     label.htmlFor = `integration-${field.id}`;
     wrapper.appendChild(label);
 
-    // Credential fields are real inputs again: the values are POSTed to the
-    // server, which encrypts them. Only a previously-saved value is pre-filled,
-    // and never the secret itself - it is not returned by any read path.
     let input;
     if (field.type === 'select') {
       input = document.createElement('select');
@@ -1264,7 +1342,12 @@ function openIntegrationEditor(key) {
 }
 window.openIntegrationEditor = openIntegrationEditor;
 
+let integrationEditorInitialized = false;
+
 function initIntegrationEditor() {
+  if (integrationEditorInitialized) return;
+  integrationEditorInitialized = true;
+
   const modal = document.getElementById('integration-modal');
   if (!modal) return;
   const close = () => modal.classList.remove('open');
@@ -1288,19 +1371,32 @@ function initIntegrationEditor() {
     if (!definition || !form.reportValidity()) return;
 
     const button = event.currentTarget;
+    if (button.disabled) return;
+    const original = button.innerHTML;
+
     const values = {};
     fieldsWrap.querySelectorAll('input, select').forEach(input => {
-      const field = definition.fields.find(f => f.id === input.name);
-      // A credential is sent to the server for integrations that have a save
-      // endpoint, but it is never written to localStorage under any condition.
-      if (field?.type === 'password' && !definition.saveEndpoint) return;
       values[input.name] = input.value.trim();
     });
 
+    if (key === 'instagram') {
+      const bizId = values['business-id'];
+      if (!bizId) {
+        showToast('Instagram DMs: Instagram Business Account ID is required.', 'error');
+        return;
+      }
+      if (!/^\d{10,25}$/.test(bizId)) {
+        showToast('Instagram DMs: Instagram Business Account ID must be a numeric Meta ID (10-25 digits).', 'error');
+        return;
+      }
+      if (values['page-id'] && !/^\d{10,25}$/.test(values['page-id'])) {
+        showToast('Instagram DMs: Facebook Page ID must be a numeric ID (10-25 digits).', 'error');
+        return;
+      }
+    }
+
     if (definition.saveEndpoint) {
-      // Real save: the server encrypts and stores it, scoped to this user's org.
       button.disabled = true;
-      const original = button.innerHTML;
       button.innerHTML = '<i data-feather="loader"></i> Saving...';
       if (typeof feather !== 'undefined') feather.replace();
       markIntegrationChecking(key);
@@ -1319,11 +1415,21 @@ function initIntegrationEditor() {
           throw new Error(payload.error || `Save failed with HTTP ${response.status}.`);
         }
 
-        // Trust the server's own live verdict, not the click.
+        // Persist non-secret configuration into localStorage so reopening preserves it immediately
+        const currentSettings = readIntegrationSettings();
+        currentSettings[key] = currentSettings[key] || {};
+        Object.entries(values).forEach(([fieldId, val]) => {
+          const fieldDef = definition.fields.find(f => f.id === fieldId);
+          if (fieldDef?.type !== 'password') {
+            currentSettings[key][fieldId] = val;
+          }
+        });
+        writeIntegrationSettings(currentSettings);
+
         if (payload.status) setIntegrationStatus(key, payload.status);
 
-        // Clear the token box so the secret is not left sitting in the DOM.
-        const tokenInput = fieldsWrap.querySelector('input[name="authToken"], input[type="password"]');
+        // Clear token input box in the form
+        const tokenInput = fieldsWrap.querySelector('input[type="password"]');
         if (tokenInput) tokenInput.value = '';
 
         close();
@@ -1332,24 +1438,26 @@ function initIntegrationEditor() {
         });
         if (typeof feather !== 'undefined') feather.replace();
         void fetchIntegrationStatuses([key]);
+
         showToast(
-          payload.status?.status === 'connected'
-            ? `${definition.title} connected.`
-            : `${definition.title} saved. ${payload.status?.message || ''}`,
-          payload.status?.status === 'connected' ? 'success' : 'error'
+          payload.status?.connected
+            ? `${definition.title} connected and saved successfully.`
+            : `${definition.title} saved successfully. ${payload.status?.message || ''}`,
+          payload.status?.connected ? 'success' : 'success'
         );
         return;
       } catch (error) {
-        button.disabled = false;
-        button.innerHTML = original;
-        if (typeof feather !== 'undefined') feather.replace();
         showToast(`${definition.title}: ${error.message}`, 'error');
         void fetchIntegrationStatuses([key]);
         return;
+      } finally {
+        button.disabled = false;
+        button.innerHTML = original;
+        if (typeof feather !== 'undefined') feather.replace();
       }
     }
 
-    // Integrations with no server-side store keep the previous local behaviour.
+    // Local-only fallback for non-server managed integrations
     const localOnly = {};
     Object.entries(values).forEach(([fieldId, value]) => {
       const field = definition.fields.find(f => f.id === fieldId);
@@ -1591,7 +1699,60 @@ function initActionModals() {
   }
 
 /* ---- Toast Notifications ---- */
+function normalizeErrorMessage(err, fallback = 'An unexpected error occurred') {
+  if (!err) return fallback;
+  if (typeof err === 'string') {
+    const trimmed = err.trim();
+    if (!trimmed || trimmed === '[object Object]') return fallback;
+    return trimmed.replace(/\b(EAAB[a-zA-Z0-9_-]+|EAAG[a-zA-Z0-9_-]+|eyJ[a-zA-Z0-9._-]+)\b/g, '[REDACTED]');
+  }
+  if (err instanceof Error) {
+    return normalizeErrorMessage(err.message, fallback);
+  }
+  if (typeof err === 'object') {
+    if (err.error && typeof err.error === 'object') {
+      const sub = err.error;
+      const msg = sub.message || sub.error_user_msg || sub.error_user_title;
+      if (msg) return normalizeErrorMessage(msg, fallback);
+    }
+    if (typeof err.error === 'string') {
+      return normalizeErrorMessage(err.error, fallback);
+    }
+    if (typeof err.message === 'string') {
+      return normalizeErrorMessage(err.message, fallback);
+    }
+    if (typeof err.msg === 'string') {
+      return normalizeErrorMessage(err.msg, fallback);
+    }
+    if (typeof err.description === 'string') {
+      return normalizeErrorMessage(err.description, fallback);
+    }
+    if (typeof err.details === 'string') {
+      return normalizeErrorMessage(err.details, fallback);
+    }
+    try {
+      const serialized = JSON.stringify(err);
+      if (serialized && serialized !== '{}' && serialized !== '[]') {
+        return serialized;
+      }
+    } catch (_) {}
+  }
+  return fallback;
+}
+window.normalizeErrorMessage = normalizeErrorMessage;
+
+let lastToastKey = '';
+let lastToastTime = 0;
 function showToast(msg, type = 'default') {
+  const messageText = normalizeErrorMessage(msg);
+  const now = Date.now();
+  const key = `${type}:${messageText}`;
+  if (key === lastToastKey && (now - lastToastTime) < 1500) {
+    return;
+  }
+  lastToastKey = key;
+  lastToastTime = now;
+
   let container = document.getElementById('toast-container');
   if (!container) {
     container = document.createElement('div');
@@ -1610,7 +1771,7 @@ function showToast(msg, type = 'default') {
     </svg>
   `;
   const messageEl = document.createElement('span');
-  messageEl.textContent = msg;
+  messageEl.textContent = messageText;
   toast.appendChild(messageEl);
   container.appendChild(toast);
   setTimeout(() => {

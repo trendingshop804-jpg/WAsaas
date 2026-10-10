@@ -138,7 +138,11 @@ function fakePostgrest(url, options = {}) {
   if (options.body) { try { requestBody = JSON.parse(options.body); } catch { /* not json */ } }
   calls.push({ table, method, filters, url: String(url), body: requestBody });
 
-  let rows = { organization_users: ORGANIZATION_USERS, messages: MESSAGES, leads: LEADS }[table];
+const WHATSAPP_CONNECTIONS = [
+  { organization_id: ORG, phone_number_id: '1234567890', is_active: true, access_token: 'mock-whatsapp-token' }
+];
+
+  let rows = { organization_users: ORGANIZATION_USERS, messages: MESSAGES, leads: LEADS, whatsapp_connections: WHATSAPP_CONNECTIONS }[table];
   if (rows === undefined) return jsonRes({ message: `unknown table ${table}` }, 400);
   if (table === 'organization_users' && mode.membershipError) {
     return jsonRes({ message: 'simulated membership lookup failure' }, 500);

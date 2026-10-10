@@ -293,39 +293,69 @@ async function getInstagramTenantConfig(organizationId) {
 }
 
 async function checkInstagram(customConfig = {}) {
-  const tenantConfig = await getInstagramTenantConfig(
-    customConfig.organizationId
-  );
+  const cfg = customConfig || {};
+  const startedAt = Date.now();
+  const isCandidateTest = Boolean(cfg.testingCandidate);
 
-  const accessToken =
-    customConfig.accessToken ||
-    tenantConfig?.accessToken ||
-    firstEnv(
+  let tenantConfig = null;
+  if (cfg.organizationId) {
+    tenantConfig = await getInstagramTenantConfig(cfg.organizationId);
+  }
+
+  let accessToken = (cfg.accessToken || cfg.token || cfg['access-token']) ? String(cfg.accessToken || cfg.token || cfg['access-token']).trim() : '';
+  let accountId = (cfg.accountId || cfg.businessId || cfg.instagramBusinessId || cfg['business-id']) ? String(cfg.accountId || cfg.businessId || cfg.instagramBusinessId || cfg['business-id']).trim() : '';
+  const candidateUsername = cfg.username || cfg.instagramUsername || null;
+  const candidatePageId = cfg.pageId || cfg['page-id'] || null;
+
+  // If candidate test omitted accessToken (user left password field blank to use saved server token),
+  // fall back to the tenant's stored decrypted token.
+  if (!accessToken && tenantConfig?.accessToken) {
+    accessToken = tenantConfig.accessToken;
+  }
+  if (!accountId && tenantConfig?.accountId) {
+    accountId = tenantConfig.accountId;
+  }
+
+  // If not candidate test, also check environment variables as server defaults
+  if (!isCandidateTest) {
+    accessToken = accessToken || firstEnv(
       'INSTAGRAM_ACCESS_TOKEN',
       'META_INSTAGRAM_ACCESS_TOKEN',
       'META_ACCESS_TOKEN'
     );
-
-  const accountId =
-    customConfig.accountId ||
-    tenantConfig?.accountId ||
-    firstEnv(
+    accountId = accountId || firstEnv(
       'INSTAGRAM_BUSINESS_ID',
       'INSTAGRAM_ACCOUNT_ID',
       'INSTAGRAM_ID',
       'INSTAGRAM_PAGE_ID'
     );
-
-  const missing = [];
-
-  if (!accessToken) missing.push('INSTAGRAM_ACCESS_TOKEN');
-  if (!accountId) missing.push('INSTAGRAM_BUSINESS_ID');
-
-  if (missing.length) {
-    return notConfigured('Instagram Graph API', missing);
   }
 
-  const startedAt = Date.now();
+  const attachConfig = (resObj) => {
+    if (tenantConfig || accountId) {
+      resObj.config = {
+        businessId: tenantConfig?.accountId || accountId || null,
+        username: tenantConfig?.username || candidateUsername || null,
+        pageId: tenantConfig?.pageId || candidatePageId || null,
+        hasToken: Boolean(accessToken && !isPlaceholderOrBlank(accessToken))
+      };
+    }
+    return resObj;
+  };
+
+  if (!accountId || isPlaceholderOrBlank(accountId)) {
+    return attachConfig(result('not_configured', 'Instagram Business Account ID is required.', {
+      code: 'MISSING_CREDENTIALS',
+      message: 'Instagram Business Account ID is required.'
+    }));
+  }
+
+  if (!accessToken || isPlaceholderOrBlank(accessToken)) {
+    return attachConfig(result('not_configured', 'Meta Access Token is required.', {
+      code: 'MISSING_CREDENTIALS',
+      message: 'Meta Access Token is required.'
+    }));
+  }
 
   const url =
     `https://graph.facebook.com/${META_GRAPH_VERSION}/` +
@@ -344,60 +374,84 @@ async function checkInstagram(customConfig = {}) {
       const errCode = payload?.error?.code;
       const errMsg = errorMessage(payload, response);
 
-      if (errCode === 190) {
-        return result(
+      if (response.status === 401 || errCode === 190) {
+        return attachConfig(result(
           'token_expired',
-          'Instagram connection failed: Meta Access Token has expired or been invalidated.',
+          'Instagram connection failed: Meta Access Token has expired or is invalid.',
           {
             latencyMs,
-            code: 190
+            code: 'INVALID_CREDENTIALS',
+            errorCode: 190,
+            httpStatus: response.status
           }
-        );
+        ));
       }
 
-      if (errCode === 100 || errCode === 200 || errCode === 10) {
-        return result(
+      if (errCode === 100 || errCode === 803) {
+        return attachConfig(result(
+          'error',
+          `Instagram connection failed: Instagram Business Account ID was not found or is invalid (${errMsg}).`,
+          {
+            latencyMs,
+            code: 'INVALID_ACCOUNT_ID',
+            errorCode: errCode,
+            httpStatus: response.status
+          }
+        ));
+      }
+
+      if (errCode === 200 || errCode === 10 || errCode === 298) {
+        return attachConfig(result(
           'permission_missing',
-          `Instagram connection failed: Messaging permission or Page ID missing (${errMsg}).`,
+          `Instagram connection failed: Missing required permissions (instagram_basic, instagram_manage_messages) or Page access (${errMsg}).`,
           {
             latencyMs,
-            code: errCode
+            code: 'PERMISSION_ERROR',
+            errorCode: errCode,
+            httpStatus: response.status
           }
-        );
+        ));
       }
 
-      return result(
+      return attachConfig(result(
         'error',
         `Instagram connection failed: ${errMsg}`,
         {
           latencyMs,
-          code: errCode || response.status
+          code: 'ERROR',
+          errorCode: errCode || response.status,
+          httpStatus: response.status
         }
-      );
+      ));
     }
 
-    return result(
+    const verifiedName = payload.username || payload.name || tenantConfig?.username || accountId;
+    return attachConfig(result(
       'connected',
-      'Instagram Graph API responded successfully.',
+      `Instagram Business Account verified successfully (@${verifiedName})`,
       {
         latencyMs,
         provider: 'Meta Instagram Graph API',
-        displayName:
-          payload.username ||
-          payload.name ||
-          tenantConfig?.username ||
-          null,
-        accountId
+        displayName: verifiedName,
+        verifiedName,
+        accountName: payload.name || verifiedName,
+        businessId: payload.id || accountId,
+        username: payload.username || null,
+        accountId: payload.id || accountId,
+        code: 'SUCCESS'
       }
-    );
+    ));
   } catch (error) {
-    return result(
-      error?.code === 'TIMEOUT' ? 'unavailable' : 'error',
-      `Instagram connection unavailable: ${error.message}`,
+    const latencyMs = Date.now() - startedAt;
+    const isTimeout = error?.code === 'TIMEOUT' || error?.name === 'AbortError';
+    return attachConfig(result(
+      'unavailable',
+      `Instagram connection unavailable: ${isTimeout ? 'Request timed out.' : error.message}`,
       {
-        latencyMs: Date.now() - startedAt
+        latencyMs,
+        code: 'CONNECTION_ERROR'
       }
-    );
+    ));
   }
 }
 

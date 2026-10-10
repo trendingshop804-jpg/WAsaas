@@ -187,20 +187,59 @@ async function saveCredentials(req, res) {
 
   // ── 3. INSTAGRAM GRAPH API SAVE ──────────────────────────────────────────
   if (integration === 'instagram') {
-    const instagramBusinessId = String(body.instagramBusinessId || body.ig_account_id || body.accountId || '').trim();
+    const instagramBusinessId = String(
+      body.instagramBusinessId ||
+      body.instagram_business_id ||
+      body.businessId ||
+      body.business_id ||
+      body['business-id'] ||
+      body.ig_account_id ||
+      body.accountId ||
+      ''
+    ).trim();
+
     if (!instagramBusinessId) {
       return res.status(400).json({ error: 'Instagram Business Account ID is required.' });
     }
 
-    const accessTokenRaw = String(body.accessToken || body.page_access_token || '').trim();
-    const username = String(body.username || '').replace(/^@/, '').trim() || null;
-    const pageId = String(body.pageId || body.page_id || '').trim() || null;
+    if (!/^\d{10,25}$/.test(instagramBusinessId)) {
+      return res.status(400).json({ error: 'Instagram Business Account ID must be a numeric Meta ID (10-25 digits).' });
+    }
+
+    const accessTokenRaw = String(
+      body.accessToken ||
+      body.access_token ||
+      body.page_access_token ||
+      body['access-token'] ||
+      body.system_token ||
+      ''
+    ).trim();
+
+    const username = String(
+      body.username ||
+      body.instagram_username ||
+      body['username'] ||
+      ''
+    ).replace(/^@/, '').trim() || null;
+
+    const pageId = String(
+      body.pageId ||
+      body.page_id ||
+      body['page-id'] ||
+      ''
+    ).trim() || null;
+
+    if (pageId && !/^\d{10,25}$/.test(pageId)) {
+      return res.status(400).json({ error: 'Facebook Page ID must be a numeric ID (10-25 digits).' });
+    }
 
     const { data: existing } = await admin
       .from('instagram_connections')
-      .select('id, access_token_encrypted')
+      .select('id, access_token_encrypted, instagram_business_id')
       .eq('organization_id', access.organizationId)
-      .eq('instagram_business_id', instagramBusinessId)
+      .eq('is_active', true)
+      .order('updated_at', { ascending: false })
+      .limit(1)
       .maybeSingle();
 
     let accessTokenEncrypted = existing?.access_token_encrypted || null;
@@ -238,7 +277,16 @@ async function saveCredentials(req, res) {
     }
 
     const status = await getIntegrationStatus('instagram', { organizationId: access.organizationId });
-    return res.status(200).json({ success: true, connection: saved, status });
+    return res.status(200).json({
+      success: true,
+      connection: saved,
+      status,
+      configured: true,
+      businessId: saved?.instagram_business_id || instagramBusinessId,
+      username: saved?.instagram_username || username || null,
+      pageId: saved?.page_id || pageId || null,
+      hasToken: Boolean(accessTokenEncrypted)
+    });
   }
 }
 
@@ -256,7 +304,8 @@ export default async function handler(req, res) {
 
   if (req.method === 'OPTIONS') return res.status(204).end();
 
-  const isTestConnection = query.route === 'test-connection';
+  const bodyObj = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
+  const isTestConnection = query.route === 'test-connection' || bodyObj.route === 'test-connection' || bodyObj.action === 'test-connection';
 
   // ── Route: save provider credentials ─────────────────────────────────────
   if (req.method === 'POST' && !isTestConnection) {
@@ -270,16 +319,36 @@ export default async function handler(req, res) {
       return res.status(405).json({ error: 'Method Not Allowed' });
     }
 
+    const body = bodyObj;
+    const requestedIntegration = body.integration || body.provider || query.integration || query.provider || 'whatsapp';
+    const normalizedKey = normalizeIntegrationKey(requestedIntegration);
+
     try {
-      const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
-      const requestedIntegration = body.integration || query.integration || 'whatsapp';
-      const normalizedKey = normalizeIntegrationKey(requestedIntegration);
+      const accessToken = (body.accessToken || body.access_token || body['access-token'] || body.page_access_token || body.system_token || query.accessToken || '').trim();
+      const phoneNumberId = (body.phoneNumberId || body.phone_number_id || body['phone-number-id'] || query.phoneNumberId || '').trim();
+      const wabaId = (body.wabaId || body.waba_id || body['waba-id'] || query.wabaId || '').trim();
 
-      const accessToken = body.accessToken || body.access_token || body.system_token || query.accessToken || '';
-      const phoneNumberId = body.phoneNumberId || body.phone_number_id || query.phoneNumberId || '';
-      const wabaId = body.wabaId || body.waba_id || query.wabaId || '';
+      const instagramBusinessId = (
+        body.instagramBusinessId ||
+        body.instagram_business_id ||
+        body.businessId ||
+        body.business_id ||
+        body['business-id'] ||
+        body.ig_account_id ||
+        body.accountId ||
+        query.accountId ||
+        query.instagramBusinessId ||
+        ''
+      ).trim();
 
-      const isCandidateTest = Boolean(accessToken || phoneNumberId || req.method === 'POST');
+      let organizationId = body.organizationId || query.organizationId || null;
+      try {
+        const { getBearerToken, verifyOrgAccess } = await import('./_supabase.js');
+        if (getBearerToken(req)) {
+          const access = await verifyOrgAccess(req);
+          if (access?.organizationId) organizationId = access.organizationId;
+        }
+      } catch (e) {}
 
       let result = null;
       if (normalizedKey === 'whatsapp') {
@@ -287,25 +356,25 @@ export default async function handler(req, res) {
           accessToken,
           phoneNumberId,
           wabaId,
-          testingCandidate: isCandidateTest,
-          organizationId: null
+          testingCandidate: Boolean(accessToken || phoneNumberId),
+          organizationId
         });
       } else if (normalizedKey === 'instagram') {
         result = await checkInstagram({
-          accessToken: body.accessToken || body.page_access_token || query.accessToken || '',
-          accountId: body.instagramBusinessId || body.ig_account_id || body.accountId || query.accountId || '',
-          testingCandidate: isCandidateTest,
-          organizationId: null
+          accessToken,
+          accountId: instagramBusinessId,
+          testingCandidate: Boolean(accessToken || instagramBusinessId),
+          organizationId
         });
       } else if (normalizedKey === 'twilio') {
         result = await checkTwilio({
-          accountSid: body.accountSid || body.account_sid || query.accountSid || '',
-          authToken: body.authToken || body.auth_token || query.authToken || '',
-          testingCandidate: isCandidateTest,
-          organizationId: null
+          accountSid: body.accountSid || body.account_sid || body['account-sid'] || query.accountSid || '',
+          authToken: body.authToken || body.auth_token || body['auth-token'] || query.authToken || '',
+          testingCandidate: Boolean(body.accountSid || body.authToken),
+          organizationId
         });
       } else {
-        result = await getIntegrationStatus(normalizedKey);
+        result = await getIntegrationStatus(normalizedKey, { organizationId });
       }
 
       if (!result) {
@@ -328,6 +397,9 @@ export default async function handler(req, res) {
         } else if (result.code === 'INVALID_CREDENTIALS' || result.status === 'token_expired') {
           statusCode = 401;
           code = 'INVALID_CREDENTIALS';
+        } else if (result.code === 'INVALID_ACCOUNT_ID') {
+          statusCode = 404;
+          code = 'INVALID_ACCOUNT_ID';
         } else if (result.code === 'PERMISSION_ERROR' || result.status === 'permission_missing') {
           statusCode = 403;
           code = 'PERMISSION_ERROR';
@@ -339,24 +411,32 @@ export default async function handler(req, res) {
         }
       }
 
+      const providerLabel = normalizedKey === 'instagram' ? 'Instagram' : normalizedKey === 'twilio' ? 'Twilio' : 'WhatsApp';
+
       return res.status(statusCode).json({
         success: isConnected,
+        provider: normalizedKey,
         code,
         status: isConnected ? 'connected' : (result.status || 'error'),
         connected: isConnected,
-        message: result.message || (isConnected ? 'Connection verified successfully' : 'WhatsApp connection failed.'),
+        message: result.message || (isConnected ? 'Connection verified successfully' : `${providerLabel} connection failed.`),
+        accountName: result.accountName || result.displayName || result.verifiedName || null,
         verifiedName: result.verifiedName || result.displayName || null,
         displayName: result.displayName || null,
+        username: result.username || null,
+        businessId: result.businessId || result.accountId || null,
         checkedAt: result.checkedAt || new Date().toISOString(),
-        latencyMs: result.latencyMs ?? null
+        latencyMs: result.latencyMs ?? null,
+        config: result.config || null
       });
     } catch (err) {
       console.error('[Test Connection Error]', err);
+      const providerLabel = normalizedKey === 'instagram' ? 'Instagram' : normalizedKey === 'twilio' ? 'Twilio' : 'WhatsApp';
       return res.status(500).json({
         success: false,
         code: 'CONNECTION_ERROR',
         status: 'Error',
-        message: `WhatsApp connection failed: ${err.message}`
+        message: `${providerLabel} connection failed: ${err.message}`
       });
     }
   }

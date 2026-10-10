@@ -284,11 +284,17 @@ function cleanText(value, maxLength) {
  * organization_id filter is what keeps this tenant-scoped.
  */
 async function organizationHasMessageForPhone(supabase, organizationId, target) {
+  const forms = Array.from(phoneVariants(target));
+  const targetBare = digitsOnly(target);
+  if (targetBare && !forms.includes(targetBare)) forms.push(targetBare);
+  const withPlus = forms.map(f => `+${f}`);
+  const allForms = [...new Set([...forms, ...withPlus])];
+
   const { data, error } = await supabase
     .from('messages')
     .select('id, sender_number')
     .eq('organization_id', organizationId)
-    .eq('sender_number', target)
+    .in('sender_number', allForms)
     .limit(1);
 
   if (error) return false;
@@ -413,6 +419,8 @@ function getMediaMessageTypeFromMime(mimeType, fileName) {
 }
 
 async function getTenantWhatsAppCredentials(supabase, organizationId) {
+  if (!organizationId || !supabase) return null;
+
   const { data: conn, error } = await supabase
     .from('whatsapp_connections')
     .select('phone_number_id, access_token_encrypted, access_token')
@@ -816,10 +824,15 @@ export default async function handler(req, res) {
   // ---- POST: Send Outbound Text WhatsApp Message -------------------------
   if (req.method === 'POST') {
     const body = (typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {}));
-    const phone = digitsOnly(body.phone || body.to || body.sender_number);
+    const rawPhone = body.phone || body.to || body.sender_number || body.recipient;
+    const phoneDigits = digitsOnly(rawPhone);
+    const phone = normalizePhone(rawPhone) || phoneDigits;
     const text = String(body.text || body.content || body.message || '').trim();
 
-    if (!phone) return res.status(400).json({ success: false, error: 'A phone number is required.' });
+    if (!rawPhone || !phone) return res.status(400).json({ success: false, error: 'A phone number is required.' });
+    if (phone.length < 7 || phone.length > 15) {
+      return res.status(400).json({ success: false, error: 'A valid recipient phone number (7-15 digits) is required.' });
+    }
     if (!text) return res.status(400).json({ success: false, error: 'Message text is required.' });
     if (text.length > 4096) return res.status(400).json({ success: false, error: 'Message text is too long (max 4096).' });
 
@@ -870,7 +883,7 @@ export default async function handler(req, res) {
       .order('created_at', { ascending: false })
       .limit(5);
 
-    const matchingDupe = (dupe || []).find(m => digitsOnly(m.sender_number) === phone);
+    const matchingDupe = (dupe || []).find(m => digitsOnly(m.sender_number) === phone || normalizePhone(m.sender_number) === phone);
     if (matchingDupe) {
       return res.status(200).json({
         success: true,
@@ -883,10 +896,7 @@ export default async function handler(req, res) {
       });
     }
 
-    // Newest inbound for THIS exact number. Previously the 5 newest inbound
-    // messages for the whole organization were fetched and then filtered, so a
-    // busier tenant could push the matching row out of the result set and the
-    // 24-hour window would be computed from the wrong (missing) row.
+    // Newest inbound for THIS exact number.
     const phoneForms = Array.from(phoneVariants(phone));
     if (!phoneForms.includes(phone)) phoneForms.push(phone);
     const bareDigits = digitsOnly(phone);
@@ -965,6 +975,9 @@ export default async function handler(req, res) {
     }
 
     let graphResult;
+    const controller = new AbortController();
+    const timeoutTimer = setTimeout(() => controller.abort(), 15000);
+
     try {
       const metaRes = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${phoneNumberId}/messages`, {
         method: 'POST',
@@ -972,18 +985,43 @@ export default async function handler(req, res) {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${accessToken}`
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
+        signal: controller.signal
       });
+      clearTimeout(timeoutTimer);
+
       const metaBody = await metaRes.json().catch(() => ({}));
 
       if (!metaRes.ok || metaBody?.error) {
-        const apiError = metaBody?.error?.message || `HTTP ${metaRes.status}`;
-        const apiCode = metaBody?.error?.code || null;
-        await supabase.from('messages').update({ status: 'failed' }).eq('id', pendingRow.id);
-        return res.status(502).json({
+        const metaErr = metaBody?.error || {};
+        let apiError = metaErr.message || `Meta returned HTTP ${metaRes.status}`;
+        const apiCode = metaErr.code || null;
+        const apiSubcode = metaErr.error_subcode || null;
+
+        if (apiCode === 190 || metaRes.status === 401) {
+          apiError = 'Invalid OAuth access token. Reconnect your WhatsApp account.';
+        } else if (apiCode === 131030) {
+          apiError = 'Recipient phone number is not in your allowed test list.';
+        } else if (apiCode === 131026) {
+          apiError = 'Message undeliverable to this phone number.';
+        } else if (apiCode === 131047) {
+          apiError = 'Outside 24-hour customer service window. An approved template is required.';
+        } else if (apiCode === 130429 || apiCode === 80007) {
+          apiError = 'WhatsApp Cloud API rate limit exceeded. Please retry shortly.';
+        }
+
+        await supabase.from('messages').update({ status: 'failed', error_code: String(apiCode || metaRes.status), error_message: apiError }).eq('id', pendingRow.id);
+        const httpStatus = apiCode === 190 || metaRes.status === 401 ? 401
+          : apiCode === 130429 || apiCode === 80007 ? 429
+          : apiCode === 131047 ? 422
+          : metaRes.status === 400 || metaRes.status === 403 ? metaRes.status
+          : 502;
+
+        return res.status(httpStatus).json({
           success: false,
-          error: `WhatsApp rejected the message: ${apiError}`,
+          error: `WhatsApp send failed: ${apiError}`,
           code: apiCode,
+          subcode: apiSubcode,
           status: 'failed',
           messageId: pendingRow.id
         });
@@ -992,10 +1030,14 @@ export default async function handler(req, res) {
       const waMessageId = metaBody?.messages?.[0]?.id || null;
       graphResult = { waMessageId, contact: metaBody?.contacts?.[0]?.wa_id || phone };
     } catch (err) {
-      await supabase.from('messages').update({ status: 'failed' }).eq('id', pendingRow.id);
-      return res.status(502).json({
+      clearTimeout(timeoutTimer);
+      const isTimeout = err?.name === 'AbortError' || err?.code === 'TIMEOUT';
+      const errMsg = isTimeout ? 'WhatsApp Cloud API request timed out.' : err.message;
+      await supabase.from('messages').update({ status: 'failed', error_message: errMsg }).eq('id', pendingRow.id);
+      return res.status(isTimeout ? 504 : 502).json({
         success: false,
-        error: `Could not reach WhatsApp Cloud API: ${err.message}`,
+        error: `Could not reach WhatsApp Cloud API: ${errMsg}`,
+        code: isTimeout ? 'GATEWAY_TIMEOUT' : 'CONNECTION_ERROR',
         status: 'failed',
         messageId: pendingRow.id
       });
