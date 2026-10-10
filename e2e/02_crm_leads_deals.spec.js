@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 
 test.describe('Flow 2: B2B CRM, Leads & Sales Pipeline Management', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/nextbright-crm/index.html');
+    await page.goto('/nextbright-crm/index.html', { waitUntil: 'domcontentloaded' });
     await page.waitForLoadState('domcontentloaded');
   });
 

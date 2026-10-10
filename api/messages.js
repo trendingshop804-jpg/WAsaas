@@ -415,7 +415,7 @@ function getMediaMessageTypeFromMime(mimeType, fileName) {
 async function getTenantWhatsAppCredentials(supabase, organizationId) {
   const { data: conn, error } = await supabase
     .from('whatsapp_connections')
-    .select('phone_number_id, access_token_encrypted')
+    .select('phone_number_id, access_token_encrypted, access_token')
     .eq('organization_id', organizationId)
     .eq('is_active', true)
     .order('updated_at', { ascending: false })
@@ -431,7 +431,9 @@ async function getTenantWhatsAppCredentials(supabase, organizationId) {
       accessToken = await decryptToken(conn.access_token_encrypted);
     } catch (_) { accessToken = null; }
   }
-
+  if (!accessToken && conn.access_token) {
+    accessToken = conn.access_token;
+  }
 
   if (!accessToken) return null;
   return { phoneNumberId: conn.phone_number_id, accessToken };
@@ -696,23 +698,17 @@ export default async function handler(req, res) {
 
       let convId = null;
       if (leadId) {
-        const { data: conversation } = await supabase
+        const { data: conversation, error: conversationError } = await supabase
           .from('conversations')
           .select('id, organization_id')
           .eq('lead_id', leadId)
           .eq('organization_id', organizationId)
           .maybeSingle();
 
-        if (conversation) {
-          convId = conversation.id;
-        } else {
-          const { data: newConv } = await supabase.from('conversations').insert({
-            organization_id: organizationId,
-            lead_id: leadId,
-            channel: 'whatsapp'
-          }).select('id').single();
-          convId = newConv?.id;
+        if (conversationError || !conversation || conversation.organization_id !== organizationId) {
+          return res.status(404).json({ error: 'No conversation found for this lead.' });
         }
+        convId = conversation.id;
       }
 
       const creds = await getTenantWhatsAppCredentials(supabase, organizationId);
@@ -928,9 +924,10 @@ export default async function handler(req, res) {
     }
 
     let conversationId = body.conversation_id || null;
-    if (!conversationId) {
-      const lead = await findLeadByNormalizedPhone(supabase, organizationId, phone);
-      if (lead) {
+    let lead = null;
+    try {
+      lead = await findLeadByNormalizedPhone(supabase, organizationId, phone);
+      if (!conversationId && lead) {
         const { data: conv } = await supabase
           .from('conversations')
           .select('id')
@@ -939,7 +936,7 @@ export default async function handler(req, res) {
           .limit(1);
         if (conv?.[0]?.id) conversationId = conv[0].id;
       }
-    }
+    } catch (_) {}
 
     const insertPayload = {
       organization_id: organizationId,

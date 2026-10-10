@@ -6,8 +6,31 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { spawn } from 'node:child_process';
+
+async function getAvailableBaseUrl() {
+  for (const port of [3001, 3000]) {
+    try {
+      const res = await fetch(`http://localhost:${port}/nextbright-crm/index.html`);
+      if (res.status === 200) return { url: `http://localhost:${port}`, proc: null };
+    } catch (_) {}
+  }
+  // Start dev server on 3001
+  const proc = spawn('node', ['dev-server.js'], { stdio: 'ignore' });
+  for (let i = 0; i < 30; i++) {
+    await new Promise(r => setTimeout(r, 500));
+    try {
+      const res = await fetch('http://localhost:3001/nextbright-crm/index.html');
+      if (res.status === 200) return { url: 'http://localhost:3001', proc };
+    } catch (_) {}
+  }
+  return { url: 'http://localhost:3001', proc };
+}
+
 async function runE2ETests() {
   console.log('🎭 Starting Playwright End-to-End UI Test Suite...\n');
+
+  const { url: baseUrl, proc: serverProc } = await getAvailableBaseUrl();
 
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
@@ -26,8 +49,8 @@ async function runE2ETests() {
 
   try {
     // 1. Load Localhost App
-    await test('Load application home on http://localhost:3000', async () => {
-      const response = await page.goto('http://localhost:3000/nextbright-crm/index.html', { waitUntil: 'domcontentloaded' });
+    await test(`Load application home on ${baseUrl}`, async () => {
+      const response = await page.goto(`${baseUrl}/nextbright-crm/index.html`, { waitUntil: 'domcontentloaded' });
       assert.equal(response.status(), 200, 'Page loads with 200 OK');
       const title = await page.title();
       assert.ok(title.length > 0, 'Page has a title');
@@ -72,6 +95,9 @@ async function runE2ETests() {
 
   } finally {
     await browser.close();
+    if (serverProc) {
+      try { serverProc.kill(); } catch (_) {}
+    }
   }
 
   console.log(failures === 0 ? '\n✨ All Playwright E2E UI tests passed successfully!' : `\n❌ ${failures} E2E test(s) failed.`);
