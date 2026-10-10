@@ -592,11 +592,61 @@ async function checkStripe() {
   }
 }
 
+async function checkAiProvider(customConfig = {}) {
+  const apiKey =
+    customConfig.apiKey ||
+    firstEnv('OPENROUTER_API_KEY', 'OPENAI_API_KEY');
+
+  if (!apiKey) {
+    return notConfigured('AI Provider', ['OPENROUTER_API_KEY']);
+  }
+
+  const startedAt = Date.now();
+  const isOpenRouter = apiKey.startsWith('sk-or-');
+  const url = isOpenRouter ? 'https://openrouter.ai/api/v1/auth/key' : 'https://api.openai.com/v1/models';
+
+  try {
+    const { response, payload } = await requestJson(url, {
+      headers: {
+        Authorization: `Bearer ${apiKey}`
+      }
+    });
+
+    const latencyMs = Date.now() - startedAt;
+
+    if (!response.ok || payload?.error) {
+      const errMsg = errorMessage(payload, response);
+      return result(
+        'error',
+        `AI Provider authentication failed: ${errMsg}`,
+        { latencyMs }
+      );
+    }
+
+    return result(
+      'connected',
+      `AI Provider (${isOpenRouter ? 'OpenRouter AI' : 'OpenAI'}) verified successfully.`,
+      {
+        latencyMs,
+        provider: isOpenRouter ? 'OpenRouter' : 'OpenAI',
+        model: process.env.FOLLOWUP_AI_MODEL || 'openai/gpt-4o-mini'
+      }
+    );
+  } catch (err) {
+    return result(
+      err?.code === 'TIMEOUT' ? 'unavailable' : 'error',
+      `AI Provider check failed: ${err.message}`,
+      { latencyMs: Date.now() - startedAt }
+    );
+  }
+}
+
 const CHECKERS = {
   whatsapp: checkWhatsApp,
   instagram: checkInstagram,
   twilio: checkTwilio,
-  stripe: checkStripe
+  stripe: checkStripe,
+  ai: checkAiProvider
 };
 
 export const INTEGRATION_KEYS = Object.keys(CHECKERS);
@@ -618,6 +668,10 @@ export function normalizeIntegrationKey(key) {
 
   if (value === 'calls' || value === 'calls-monitor') {
     return 'twilio';
+  }
+
+  if (value === 'openai' || value === 'openrouter' || value === 'ai-agent') {
+    return 'ai';
   }
 
   return value;
