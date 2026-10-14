@@ -38,11 +38,79 @@ function copyStaticFilesPlugin() {
   };
 }
 
+function apiDevPlugin() {
+  return {
+    name: 'api-dev-middleware',
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        const url = new URL(req.url, 'http://localhost:3001');
+        if (url.pathname.startsWith('/api/')) {
+          let fnName = url.pathname.replace('/api/', '').replace(/\/$/, '') || 'index';
+          const rewrites = {
+            'ai-agents': 'ai-chat',
+            'knowledge-base': 'ai-chat'
+          };
+          if (rewrites[fnName]) {
+            url.searchParams.set('route', rewrites[fnName] === 'ai-chat' ? (fnName === 'ai-agents' ? 'ai_agents' : 'knowledge_base') : fnName);
+            fnName = rewrites[fnName];
+          }
+          const handlerPath = resolve(__dirname, 'api', `${fnName}.js`);
+          if (fs.existsSync(handlerPath)) {
+            try {
+              let body = {};
+              if (req.method !== 'GET' && req.method !== 'HEAD') {
+                const chunks = [];
+                for await (const chunk of req) chunks.push(chunk);
+                const raw = Buffer.concat(chunks).toString('utf8');
+                try { body = JSON.parse(raw); } catch { body = raw; }
+              }
+              const query = Object.fromEntries(url.searchParams.entries());
+              const apiReq = Object.assign(req, {
+                query,
+                body,
+                headers: req.headers
+              });
+              const apiRes = {
+                _statusCode: 200,
+                _headers: {},
+                status(c) { this._statusCode = c; return this; },
+                setHeader(k, v) { this._headers[k] = v; return this; },
+                json(obj) {
+                  res.writeHead(this._statusCode, { 'Content-Type': 'application/json', ...this._headers });
+                  res.end(JSON.stringify(obj));
+                },
+                send(data) {
+                  res.writeHead(this._statusCode, this._headers);
+                  res.end(data);
+                },
+                end(d) {
+                  res.writeHead(this._statusCode, this._headers);
+                  res.end(d);
+                }
+              };
+              const mod = await import(`${pathToFileURL(handlerPath).href}?t=${Date.now()}`);
+              const handler = mod.default || mod.handler;
+              if (typeof handler === 'function') {
+                return await handler(apiReq, apiRes);
+              }
+            } catch (err) {
+              console.error('[Vite API Middleware error]:', err.message);
+              res.writeHead(500, { 'Content-Type': 'application/json' });
+              return res.end(JSON.stringify({ error: err.message }));
+            }
+          }
+        }
+        next();
+      });
+    }
+  };
+}
+
 export default defineConfig({
   server: {
     port: 3001,
   },
-  plugins: [copyStaticFilesPlugin()],
+  plugins: [copyStaticFilesPlugin(), apiDevPlugin()],
   build: {
     outDir: 'dist',
     emptyOutDir: true,
@@ -53,3 +121,4 @@ export default defineConfig({
     },
   },
 });
+

@@ -70,9 +70,26 @@ function navigateTo(viewId, updateHistory = true) {
   if (sidebar) sidebar.classList.remove('mobile-open');
   if (overlay) overlay.classList.remove('active');
 
-  // Trigger chart resizes if switching to dashboard/reports
-  if (typeof Chart !== 'undefined') {
-    Object.values(Chart.instances || {}).forEach(c => c.resize());
+  // Trigger specific view handlers
+  try {
+    if (targetView === 'social-dashboard' && window.NextBrightDashboard?.render) window.NextBrightDashboard.render();
+    else if (targetView === 'social-inbox' && window.NextBrightInbox?.init) window.NextBrightInbox.init();
+    else if (targetView === 'instagram-posts' && window.NextBrightIGPosts?.init) window.NextBrightIGPosts.init();
+    else if (targetView === 'content-library' && window.NextBrightLibrary?.init) window.NextBrightLibrary.init();
+    else if (targetView === 'social-calendar' && window.NextBrightCalendar?.init) window.NextBrightCalendar.init();
+    else if (targetView === 'wa-campaigns' && window.NextBrightWACampaigns?.init) window.NextBrightWACampaigns.init();
+    else if (targetView === 'wa-broadcast' && window.NextBrightWABroadcast?.init) window.NextBrightWABroadcast.init();
+    else if (targetView === 'wa-channels' && window.NextBrightWAChannels?.init) window.NextBrightWAChannels.init();
+    else if (targetView === 'campaign-analytics' && window.NextBrightAnalytics?.init) window.NextBrightAnalytics.init();
+    else if (targetView === 'social-integrations' && window.NextBrightIntegrations?.init) window.NextBrightIntegrations.init();
+    else if (targetView === 'ai-agents' && window.NextBrightAIAgents?.init) window.NextBrightAIAgents.init();
+    else if (targetView === 'knowledge-base' && window.NextBrightKB?.init) window.NextBrightKB.init();
+  } catch (viewErr) {
+    console.error(`[Router] Error activating view ${targetView}:`, viewErr);
+  }
+
+  if (typeof feather !== 'undefined') {
+    setTimeout(() => { try { feather.replace(); } catch (_) {} }, 10);
   }
 
   window.scrollTo({ top: 0, behavior: 'smooth' });

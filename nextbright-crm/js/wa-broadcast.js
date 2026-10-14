@@ -2,7 +2,6 @@
    wa-broadcast.js — NextBright CRM
    WhatsApp Broadcast Lists, Segment Builder & Opt-Out Suppression
    ============================================================================= */
-
 'use strict';
 
 (function () {
@@ -33,9 +32,34 @@
     }
   ];
 
+  const DEFAULT_BROADCASTS = [
+    {
+      id: 'bc-1',
+      title: 'Q4 Product Launch Announcement',
+      segment_name: 'High Score Hot Leads',
+      template: 'exclusive_festive_offer',
+      recipients: 85,
+      delivered: 84,
+      read: 71,
+      status: 'completed',
+      sent_at: new Date(Date.now() - 86400000 * 2).toISOString()
+    },
+    {
+      id: 'bc-2',
+      title: 'Weekend Webinar Invite',
+      segment_name: 'Inbound Webhook Leads',
+      template: 'lead_welcome_v2',
+      recipients: 240,
+      delivered: 236,
+      read: 189,
+      status: 'completed',
+      sent_at: new Date(Date.now() - 86400000 * 4).toISOString()
+    }
+  ];
+
   const DEFAULT_OPTOUTS = [
-    { phone: '+15550192834', name: 'John Doe', optout_date: '2026-09-15', reason: 'Replied STOP' },
-    { phone: '+919876012345', name: 'Rajesh Kumar', optout_date: '2026-09-20', reason: 'User opt-out request' }
+    { phone: '+15550192834', name: 'John Doe', optout_date: '2026-10-05', reason: 'Replied STOP' },
+    { phone: '+919876012345', name: 'Rajesh Kumar', optout_date: '2026-10-08', reason: 'User opt-out request' }
   ];
 
   function getSegments() {
@@ -49,6 +73,19 @@
 
   function saveSegments(segs) {
     localStorage.setItem('nb_wa_segments', JSON.stringify(segs));
+  }
+
+  function getBroadcasts() {
+    try {
+      const stored = localStorage.getItem('nb_wa_broadcasts');
+      if (stored) return JSON.parse(stored);
+    } catch (e) {}
+    localStorage.setItem('nb_wa_broadcasts', JSON.stringify(DEFAULT_BROADCASTS));
+    return DEFAULT_BROADCASTS;
+  }
+
+  function saveBroadcasts(bcs) {
+    localStorage.setItem('nb_wa_broadcasts', JSON.stringify(bcs));
   }
 
   function getOptouts() {
@@ -65,88 +102,124 @@
   }
 
   function initWABroadcast() {
-    renderSegmentsGrid();
-    renderOptoutsTable();
+    renderSegments();
+    renderBroadcasts();
+    renderOptouts();
     setupEventListeners();
   }
 
   function setupEventListeners() {
-    const createSegBtn = document.getElementById('btn-create-segment');
+    const createSegBtn = document.getElementById('create-segment-btn');
     if (createSegBtn) {
-      createSegBtn.addEventListener('click', openCreateSegmentModal);
+      createSegBtn.onclick = openCreateSegmentModal;
     }
 
-    const form = document.getElementById('form-create-segment');
-    if (form) {
-      form.addEventListener('submit', handleCreateSegmentSubmit);
+    const createBcBtn = document.getElementById('create-broadcast-btn');
+    if (createBcBtn) {
+      createBcBtn.onclick = openCreateBroadcastModal;
+    }
+
+    const formSeg = document.getElementById('form-create-segment');
+    if (formSeg) {
+      formSeg.onsubmit = handleCreateSegmentSubmit;
+    }
+
+    const formBc = document.getElementById('form-create-broadcast');
+    if (formBc) {
+      formBc.onsubmit = handleCreateBroadcastSubmit;
     }
 
     const addOptoutBtn = document.getElementById('btn-add-optout');
     if (addOptoutBtn) {
-      addOptoutBtn.addEventListener('click', handleAddOptout);
+      addOptoutBtn.onclick = handleAddOptout;
     }
   }
 
-  function renderSegmentsGrid() {
-    const container = document.getElementById('segments-grid');
+  function renderSegments() {
+    const container = document.getElementById('segments-list');
     if (!container) return;
 
     const segs = getSegments();
-
     if (segs.length === 0) {
-      container.innerHTML = `
-        <div style="grid-column: 1 / -1; padding: 32px; text-align: center; color: var(--text-muted); background: white; border-radius: 8px;">
-          No segments created yet. Create a target audience segment to send targeted broadcasts.
-        </div>
-      `;
+      container.innerHTML = `<div style="padding:24px;text-align:center;color:var(--text-muted);background:#fff;border-radius:8px;">No audience segments created yet.</div>`;
       return;
     }
 
     container.innerHTML = segs.map(seg => `
-      <div class="segment-card" style="background: white; border-radius: 10px; border: 1px solid var(--border-light); padding: 16px; display: flex; flex-direction: column; justify-content: space-between;">
+      <div class="card" style="padding:14px 16px;border-radius:10px;border:1px solid var(--border-light);background:#fff;display:flex;justify-content:space-between;align-items:center;">
         <div>
-          <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
-            <strong style="font-size: 0.95rem; color: var(--text-dark);">${escapeHtml(seg.name)}</strong>
-            <span class="badge badge-primary" style="font-size: 0.75rem;">${seg.contact_count} contacts</span>
+          <div style="font-weight:700;font-size:0.9rem;color:var(--text-primary);display:flex;align-items:center;gap:8px;">
+            <span>${escapeHtml(seg.name)}</span>
+            <span class="badge badge-info" style="font-size:0.7rem;">${seg.contact_count} contacts</span>
           </div>
-          <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 12px;">${escapeHtml(seg.description)}</p>
-          <div style="background: var(--navy-50); padding: 6px 10px; border-radius: 6px; font-family: monospace; font-size: 0.75rem; color: var(--navy-800); margin-bottom: 14px;">
-            ${escapeHtml(seg.criteria)}
-          </div>
+          <div style="font-size:0.78rem;color:var(--text-muted);margin-top:2px;">${escapeHtml(seg.description)}</div>
+          <div style="font-size:0.72rem;color:var(--brand-primary);margin-top:4px;">Rule: <code>${escapeHtml(seg.criteria)}</code></div>
         </div>
-        <div style="display: flex; gap: 8px; border-top: 1px solid var(--border-light); padding-top: 12px;">
-          <button class="btn btn-secondary btn-sm" style="flex: 1;" onclick="window.NextBrightWABroadcast.exportSegment('${seg.id}')">
-            <i data-feather="download"></i> Export CSV
-          </button>
-          <button class="btn btn-secondary btn-sm" style="color: var(--status-danger);" onclick="window.NextBrightWABroadcast.deleteSegment('${seg.id}')">
-            <i data-feather="trash-2"></i>
+        <div>
+          <button class="btn btn-secondary btn-sm" style="color:var(--status-danger,#ef4444);" onclick="window.NextBrightWABroadcast.deleteSegment('${seg.id}')">
+            <i data-feather="trash-2" style="width:12px;height:12px;"></i>
           </button>
         </div>
       </div>
     `).join('');
 
-    if (window.feather) feather.replace();
+    if (typeof feather !== 'undefined') feather.replace();
   }
 
-  function renderOptoutsTable() {
-    const container = document.getElementById('optouts-table-body');
+  function renderBroadcasts() {
+    const container = document.getElementById('broadcasts-list');
     if (!container) return;
 
-    const opts = getOptouts();
-
-    if (opts.length === 0) {
-      container.innerHTML = `
-        <tr><td colspan="4" style="text-align: center; padding: 24px; color: var(--text-muted);">No contacts in opt-out list</td></tr>
-      `;
+    const bcs = getBroadcasts();
+    if (bcs.length === 0) {
+      container.innerHTML = `<div style="padding:24px;text-align:center;color:var(--text-muted);background:#fff;border-radius:8px;">No broadcast history yet.</div>`;
       return;
     }
 
-    container.innerHTML = opts.map(o => `
+    container.innerHTML = bcs.map(bc => `
+      <div class="card" style="padding:14px 16px;border-radius:10px;border:1px solid var(--border-light);background:#fff;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+          <div>
+            <strong style="font-size:0.9rem;color:var(--text-primary);">${escapeHtml(bc.title)}</strong>
+            <div style="font-size:0.78rem;color:var(--text-muted);margin-top:2px;">
+              Segment: <strong>${escapeHtml(bc.segment_name)}</strong> · Template: <code>${bc.template}</code>
+            </div>
+          </div>
+          <span class="badge badge-success" style="text-transform:capitalize;">${bc.status}</span>
+        </div>
+        <div style="display:flex;gap:16px;font-size:0.78rem;color:var(--text-secondary);margin-top:8px;">
+          <span>📤 ${bc.recipients} sent</span>
+          <span style="color:#10b981;">✅ ${bc.delivered} delivered</span>
+          <span style="color:#6366f1;">👀 ${bc.read} read</span>
+          <span style="margin-left:auto;color:var(--text-muted);font-size:0.72rem;">${new Date(bc.sent_at).toLocaleDateString()}</span>
+        </div>
+      </div>
+    `).join('');
+
+    if (typeof feather !== 'undefined') feather.replace();
+  }
+
+  function renderOptouts() {
+    const tbody = document.getElementById('optouts-table-body');
+    if (!tbody) return;
+
+    const opts = getOptouts();
+    if (opts.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text-muted);">No suppressed numbers.</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = opts.map((o, idx) => `
       <tr>
-        <td style="font-family: monospace; font-weight: 600;">${o.phone}</td>
-        <td>${escapeHtml(o.name)}</td>
-        <td><span class="badge badge-danger">${o.reason}</span></td>
-        <td style="font-size: 0.8rem; color: var(--text-muted);">${o.optout_date}</td>
+        <td><strong>${escapeHtml(o.phone)}</strong></td>
+        <td>${escapeHtml(o.name || 'Anonymous')}</td>
+        <td>${o.optout_date}</td>
+        <td><span class="badge badge-secondary">${escapeHtml(o.reason)}</span></td>
+        <td>
+          <button class="btn btn-secondary btn-sm" style="font-size:0.72rem;padding:2px 8px;" onclick="window.NextBrightWABroadcast.removeOptout(${idx})">
+            Remove
+          </button>
+        </td>
       </tr>
     `).join('');
   }
@@ -161,70 +234,102 @@
     if (modal) modal.style.display = 'none';
   }
 
+  function openCreateBroadcastModal() {
+    const modal = document.getElementById('modal-create-broadcast');
+    const segSelect = document.getElementById('broadcast-segment-select');
+    if (segSelect) {
+      const segs = getSegments();
+      segSelect.innerHTML = segs.map(s => `<option value="${s.id}">${s.name} (${s.contact_count} contacts)</option>`).join('');
+    }
+    if (modal) modal.style.display = 'flex';
+  }
+
   function handleCreateSegmentSubmit(e) {
     e.preventDefault();
-    const name = document.getElementById('seg-name-input')?.value || 'New Segment';
-    const description = document.getElementById('seg-desc-input')?.value || 'Target segment';
-    const criteria = document.getElementById('seg-criteria-input')?.value || 'Status == Active';
+    const name = document.getElementById('segment-name-input')?.value.trim();
+    const desc = document.getElementById('segment-desc-input')?.value.trim() || 'Custom audience segment';
+    const criteria = document.getElementById('segment-criteria-select')?.value || 'All Contacts';
+
+    if (!name) return;
 
     const segs = getSegments();
-    const newSeg = {
+    segs.unshift({
       id: 'seg-' + Date.now(),
       name,
-      description,
+      description: desc,
       criteria,
-      contact_count: Math.floor(Math.random() * 100) + 15,
+      contact_count: Math.floor(40 + Math.random() * 160),
       created_at: new Date().toISOString()
-    };
+    });
 
-    segs.unshift(newSeg);
     saveSegments(segs);
     closeCreateSegmentModal();
-    renderSegmentsGrid();
+    renderSegments();
+    if (window.showToast) window.showToast(`Audience segment "${name}" created!`, 'success');
+  }
 
-    if (window.showToast) window.showToast(`Audience Segment "${name}" created!`, 'success');
+  function handleCreateBroadcastSubmit(e) {
+    e.preventDefault();
+    const title = document.getElementById('broadcast-name-input')?.value.trim();
+    const segId = document.getElementById('broadcast-segment-select')?.value;
+    const template = document.getElementById('broadcast-template-select')?.value || 'exclusive_festive_offer';
+
+    if (!title) return;
+
+    const segs = getSegments();
+    const seg = segs.find(s => s.id === segId) || segs[0] || { name: 'General Audience', contact_count: 50 };
+
+    const bcs = getBroadcasts();
+    const newBc = {
+      id: 'bc-' + Date.now(),
+      title,
+      segment_name: seg.name,
+      template,
+      recipients: seg.contact_count,
+      delivered: Math.round(seg.contact_count * 0.98),
+      read: Math.round(seg.contact_count * 0.82),
+      status: 'completed',
+      sent_at: new Date().toISOString()
+    };
+
+    bcs.unshift(newBc);
+    saveBroadcasts(bcs);
+
+    document.getElementById('modal-create-broadcast').style.display = 'none';
+    renderBroadcasts();
+    if (window.showToast) window.showToast(`Broadcast "${title}" dispatched to ${seg.contact_count} recipients!`, 'success');
   }
 
   function handleAddOptout() {
-    const phone = prompt('Enter phone number to add to WhatsApp Opt-Out suppression list:');
+    const phone = prompt('Enter phone number to add to suppression list (e.g. +15550192834):');
     if (!phone) return;
-
     const opts = getOptouts();
     opts.unshift({
-      phone,
-      name: 'Manual Suppressed Contact',
+      phone: phone.trim(),
+      name: 'Suppressed Contact',
       optout_date: new Date().toISOString().split('T')[0],
-      reason: 'Manual Opt-Out Add'
+      reason: 'Manual opt-out'
     });
-
     saveOptouts(opts);
-    renderOptoutsTable();
-    if (window.showToast) window.showToast(`Added ${phone} to suppression list`, 'default');
-  }
-
-  function exportSegment(id) {
-    const segs = getSegments();
-    const seg = segs.find(s => s.id === id);
-    if (!seg) return;
-
-    const csvContent = `Phone,Name,LeadScore,Segment\n+919876543210,Sample Lead 1,85,${seg.name}\n+919876543211,Sample Lead 2,90,${seg.name}`;
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${seg.name.toLowerCase().replace(/\s+/g, '_')}_contacts.csv`;
-    a.click();
-
-    if (window.showToast) window.showToast(`Exported CSV for ${seg.name}`, 'info');
+    renderOptouts();
+    if (window.showToast) window.showToast(`Phone ${phone} added to suppression list`, 'default');
   }
 
   function deleteSegment(id) {
-    if (!confirm('Delete this segment?')) return;
+    if (!confirm('Are you sure you want to delete this audience segment?')) return;
     let segs = getSegments();
     segs = segs.filter(s => s.id !== id);
     saveSegments(segs);
-    renderSegmentsGrid();
+    renderSegments();
     if (window.showToast) window.showToast('Segment removed', 'default');
+  }
+
+  function removeOptout(idx) {
+    let opts = getOptouts();
+    opts.splice(idx, 1);
+    saveOptouts(opts);
+    renderOptouts();
+    if (window.showToast) window.showToast('Number removed from suppression list', 'default');
   }
 
   function escapeHtml(str) {
@@ -234,9 +339,11 @@
 
   window.NextBrightWABroadcast = {
     init: initWABroadcast,
-    exportSegment,
+    openCreateSegmentModal,
+    openCreateBroadcastModal,
+    closeModal: closeCreateSegmentModal,
     deleteSegment,
-    closeModal: closeCreateSegmentModal
+    removeOptout
   };
 
   document.addEventListener('DOMContentLoaded', () => {

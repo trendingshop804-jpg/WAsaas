@@ -1465,7 +1465,13 @@ curl -X POST https://your-domain.com/api/leads \
               <button class="btn btn-secondary btn-sm btn-icon" id="social-cal-prev"><i data-feather="chevron-left"></i></button>
               <span id="social-cal-month" style="font-weight:700;font-size:0.9375rem;min-width:140px;text-align:center;"></span>
               <button class="btn btn-secondary btn-sm btn-icon" id="social-cal-next"><i data-feather="chevron-right"></i></button>
-              <div style="margin-left:auto;display:flex;gap:6px;">
+              <button class="btn btn-secondary btn-sm" id="social-cal-today" style="margin-left:6px;">Today</button>
+              <div style="margin-left:auto;display:flex;gap:8px;align-items:center;">
+                <select class="filter-sel" id="social-cal-filter-channel" style="height:32px;font-size:0.78rem;">
+                  <option value="all">All Channels</option>
+                  <option value="instagram">Instagram</option>
+                  <option value="whatsapp">WhatsApp</option>
+                </select>
                 <span class="cal-post-pill published" style="pointer-events:none;">Published</span>
                 <span class="cal-post-pill scheduled" style="pointer-events:none;">Scheduled</span>
                 <span class="cal-post-pill draft" style="pointer-events:none;">Draft</span>
@@ -1564,6 +1570,33 @@ curl -X POST https://your-domain.com/api/leads \
                 </div>
               </div>
             </div>
+
+            <!-- Opt-Out Suppression List (Compliance) -->
+            <div class="card" style="margin-top:20px;padding:20px;">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                <div>
+                  <div class="card-title" style="font-size:0.95rem;">Opt-Out &amp; Suppression List (WhatsApp Anti-Spam Compliance)</div>
+                  <div style="font-size:0.78rem;color:var(--text-muted);">Contacts who requested opt-out or replied STOP are automatically excluded from broadcasts</div>
+                </div>
+                <button class="btn btn-secondary btn-sm" id="btn-add-optout"><i data-feather="user-x"></i> Add Opt-Out Number</button>
+              </div>
+              <div class="table-wrap">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Phone Number</th>
+                      <th>Contact Name</th>
+                      <th>Opt-Out Date</th>
+                      <th>Reason</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="optouts-table-body">
+                    <!-- JS-rendered optouts -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         </section>
 
@@ -1573,42 +1606,104 @@ curl -X POST https://your-domain.com/api/leads \
         <section class="view-panel" id="view-wa-channels">
           <div class="social-page-hero">
             <div class="social-page-hero-info">
-              <div class="social-page-hero-title"><i data-feather="hash"></i> WhatsApp Channels</div>
-              <div class="social-page-hero-sub">Information about WhatsApp Channels and what your business account supports</div>
+              <div class="social-page-hero-title"><i data-feather="hash"></i> WhatsApp Channels &amp; Business Profile</div>
+              <div class="social-page-hero-sub">Official Meta WABA profile details, messaging tier limits, and channel broadcast guidance</div>
+            </div>
+            <div class="social-page-hero-actions">
+              <button class="btn btn-secondary btn-sm" id="btn-sync-wa-profile"><i data-feather="refresh-cw"></i> Sync with Meta API</button>
             </div>
           </div>
-          <div style="padding:20px;max-width:720px;" id="wa-channels-root">
-            <div class="wa-channel-info-card">
-              <div class="wa-channel-logo">📢</div>
-              <h2 style="font-size:1.125rem;font-weight:700;margin-bottom:8px;">WhatsApp Channels</h2>
-              <p style="font-size:0.875rem;color:var(--text-secondary);line-height:1.6;margin-bottom:12px;">
-                WhatsApp Channels is a one-way broadcast feature available directly inside the WhatsApp app. It is a <strong>separate product</strong> from the WhatsApp Business Platform (API). Channel creation, management and publishing are done through the WhatsApp app itself, <strong>not</strong> through the Business API your CRM uses.
-              </p>
-              <div class="channel-limitation-notice">
-                <span class="notice-icon">⚠️</span>
-                <div>
-                  <strong>Important API Limitation:</strong> The WhatsApp Business Platform API used by this CRM does not support WhatsApp Channel creation or publishing. Your WABA (WhatsApp Business Account) credentials control messaging to individual contacts using approved templates — they do not grant Channel access.
+          <div style="padding:20px;max-width:1100px;" id="wa-channels-root">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+              <!-- Left: Business Profile Manager -->
+              <div class="card" style="padding:20px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+                  <strong style="font-size:1rem;display:flex;align-items:center;gap:6px;color:#25d366;">
+                    <i data-feather="settings"></i> WhatsApp Business Profile (WABA)
+                  </strong>
+                  <span class="badge badge-success" id="wa-channel-quality">Quality: HIGH</span>
                 </div>
+                <!-- Status Pills -->
+                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;">
+                  <div style="background:var(--navy-50);padding:10px;border-radius:8px;border:1px solid var(--border-light);text-align:center;">
+                    <div style="font-size:0.7rem;color:var(--text-muted);font-weight:600;">PHONE NUMBER</div>
+                    <div id="wa-channel-phone" style="font-size:0.85rem;font-weight:700;color:var(--text-primary);margin-top:2px;">+1 (555) 019-2834</div>
+                  </div>
+                  <div style="background:var(--navy-50);padding:10px;border-radius:8px;border:1px solid var(--border-light);text-align:center;">
+                    <div style="font-size:0.7rem;color:var(--text-muted);font-weight:600;">MESSAGING TIER</div>
+                    <div id="wa-channel-tier" style="font-size:0.85rem;font-weight:700;color:var(--brand-primary);margin-top:2px;">TIER_1</div>
+                  </div>
+                  <div style="background:var(--navy-50);padding:10px;border-radius:8px;border:1px solid var(--border-light);text-align:center;">
+                    <div style="font-size:0.7rem;color:var(--text-muted);font-weight:600;">DAILY LIMIT</div>
+                    <div id="wa-channel-limit" style="font-size:0.85rem;font-weight:700;color:#10b981;margin-top:2px;">1,000 / 24h</div>
+                  </div>
+                </div>
+                <form id="form-wa-profile">
+                  <div style="margin-bottom:10px;">
+                    <label class="form-label" style="font-size:0.8rem;font-weight:600;">Business Display Name</label>
+                    <input type="text" id="wa-prof-name" class="form-control" placeholder="Business Display Name" required>
+                  </div>
+                  <div style="margin-bottom:10px;">
+                    <label class="form-label" style="font-size:0.8rem;font-weight:600;">About / Bio (Shown in WhatsApp)</label>
+                    <textarea id="wa-prof-about" class="form-control" rows="2" placeholder="Brief description of your business..."></textarea>
+                  </div>
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+                    <div>
+                      <label class="form-label" style="font-size:0.8rem;font-weight:600;">Business Email</label>
+                      <input type="email" id="wa-prof-email" class="form-control" placeholder="support@domain.com">
+                    </div>
+                    <div>
+                      <label class="form-label" style="font-size:0.8rem;font-weight:600;">Industry Vertical</label>
+                      <select id="wa-prof-vertical" class="form-control">
+                        <option value="SOFTWARE">Software / IT</option>
+                        <option value="RETAIL">Retail / eCommerce</option>
+                        <option value="FINANCE">Financial Services</option>
+                        <option value="EDUCATION">Education</option>
+                        <option value="OTHER">Other</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div style="margin-bottom:10px;">
+                    <label class="form-label" style="font-size:0.8rem;font-weight:600;">Business Website</label>
+                    <input type="url" id="wa-prof-website" class="form-control" placeholder="https://yourcompany.com">
+                  </div>
+                  <div style="margin-bottom:14px;">
+                    <label class="form-label" style="font-size:0.8rem;font-weight:600;">Physical Address</label>
+                    <input type="text" id="wa-prof-address" class="form-control" placeholder="City, Country">
+                  </div>
+                  <div style="display:flex;justify-content:flex-end;">
+                    <button type="submit" class="btn btn-primary" style="background:#25d366;border-color:#25d366;"><i data-feather="save"></i> Save Profile</button>
+                  </div>
+                </form>
               </div>
-              <div style="margin-top:20px;">
-                <div class="card-title" style="margin-bottom:10px;">What IS supported via this CRM:</div>
-                <ul style="font-size:0.8375rem;color:var(--text-secondary);line-height:2;padding-left:20px;">
-                  <li>✅ Sending approved template messages to individual contacts</li>
-                  <li>✅ WhatsApp Campaigns to segmented audiences</li>
-                  <li>✅ Two-way messaging within the 24-hour service window</li>
-                  <li>✅ Delivery, read and reply status tracking</li>
-                </ul>
-              </div>
-              <div style="margin-top:20px;">
-                <div class="card-title" style="margin-bottom:10px;">To use WhatsApp Channels:</div>
-                <ul style="font-size:0.8375rem;color:var(--text-secondary);line-height:2;padding-left:20px;">
-                  <li>Open the WhatsApp app on your phone</li>
-                  <li>Go to Updates → + (plus icon)</li>
-                  <li>Select "New channel" and follow the setup wizard</li>
-                </ul>
-                <a href="https://faq.whatsapp.com/1072646130356612" target="_blank" rel="noopener" class="btn btn-secondary" style="margin-top:12px;display:inline-flex;align-items:center;gap:6px;">
-                  <i data-feather="external-link" style="width:14px;height:14px;"></i> WhatsApp Channels Help
-                </a>
+
+              <!-- Right: Channels Info Card -->
+              <div class="wa-channel-info-card" style="padding:20px;height:fit-content;">
+                <div class="wa-channel-logo" style="margin-bottom:10px;">📢</div>
+                <h2 style="font-size:1.1rem;font-weight:700;margin-bottom:6px;">WhatsApp Channels</h2>
+                <p style="font-size:0.8375rem;color:var(--text-secondary);line-height:1.5;margin-bottom:10px;">
+                  WhatsApp Channels is a one-way broadcast feature available directly inside the WhatsApp consumer app. It is managed through the mobile app itself, rather than the WhatsApp Business Cloud API.
+                </p>
+                <div class="channel-limitation-notice" style="margin-top:10px;">
+                  <span class="notice-icon">⚠️</span>
+                  <div style="font-size:0.8rem;">
+                    <strong>Meta API Architecture:</strong> Meta’s Cloud API powers CRM campaigns, 2-way conversational support, and templates. WhatsApp Channels is a separate app-only broadcast directory.
+                  </div>
+                </div>
+                <div style="margin-top:16px;">
+                  <div class="card-title" style="margin-bottom:8px;font-size:0.85rem;">Supported in NextBright CRM:</div>
+                  <ul style="font-size:0.8rem;color:var(--text-secondary);line-height:1.8;padding-left:18px;">
+                    <li>✅ Approved Cloud API template broadcasts</li>
+                    <li>✅ Segmented marketing campaigns with delivery tracking</li>
+                    <li>✅ Interactive 2-way chats within 24h customer window</li>
+                    <li>✅ Real-time delivery, read receipt, and webhook tracking</li>
+                  </ul>
+                </div>
+                <div style="margin-top:14px;">
+                  <a href="https://faq.whatsapp.com/1072646130356612" target="_blank" rel="noopener" class="btn btn-secondary btn-sm" style="display:inline-flex;align-items:center;gap:6px;">
+                    <i data-feather="external-link" style="width:13px;height:13px;"></i> Official WhatsApp Channels FAQ
+                  </a>
+                </div>
               </div>
             </div>
           </div>
@@ -1722,7 +1817,7 @@ curl -X POST https://your-domain.com/api/leads \
               </div>
               <div class="integration-card-footer">
                 <button class="btn btn-primary btn-sm" id="ig-connect-btn"><i data-feather="link"></i> Connect with Meta</button>
-                <button class="btn btn-secondary btn-sm" id="ig-disconnect-btn" style="display:none;"><i data-feather="unlink"></i> Disconnect</button>
+                <button class="btn btn-secondary btn-sm" id="ig-disconnect-btn" style="display:none;"><i data-feather="slash"></i> Disconnect</button>
                 <button class="btn btn-secondary btn-sm" id="ig-test-btn" style="display:none;"><i data-feather="zap"></i> Test</button>
               </div>
             </div>
@@ -1759,7 +1854,7 @@ curl -X POST https://your-domain.com/api/leads \
               <div class="integration-card-footer">
                 <button class="btn btn-primary btn-sm" id="wa-connect-btn"><i data-feather="settings"></i> Configure</button>
                 <button class="btn btn-secondary btn-sm" id="wa-test-btn"><i data-feather="zap"></i> Test</button>
-                <button class="btn btn-secondary btn-sm" id="wa-disconnect-btn" style="display:none;"><i data-feather="unlink"></i> Disconnect</button>
+                <button class="btn btn-secondary btn-sm" id="wa-disconnect-btn" style="display:none;"><i data-feather="slash"></i> Disconnect</button>
               </div>
             </div>
 
@@ -1828,8 +1923,9 @@ curl -X POST https://your-domain.com/api/leads \
               </div>
               <div class="social-page-hero-sub">Multi-tenant AI customer support, sales lead qualifier & 24/7 auto-reply for Instagram & WhatsApp</div>
             </div>
-            <div class="social-page-hero-actions">
-              <button class="btn btn-primary btn-sm" id="btn-create-ai-agent"><i data-feather="plus"></i> New AI Agent</button>
+            <div class="social-page-hero-actions" style="display:flex;gap:8px;">
+              <button type="button" class="btn btn-secondary btn-sm" id="btn-test-ai-agent" onclick="window.NextBrightAIAgents?.openTestModal()"><i data-feather="zap"></i> Test Auto-Reply</button>
+              <button type="button" class="btn btn-primary btn-sm" id="btn-create-ai-agent"><i data-feather="plus"></i> New AI Agent</button>
             </div>
           </div>
 
@@ -2187,10 +2283,11 @@ curl -X POST https://your-domain.com/api/leads \
   <div class="modal-backdrop" id="modal-create-ai-agent" style="display:none;align-items:center;justify-content:center;z-index:2000;">
     <div class="card" style="width:100%;max-width:540px;padding:24px;box-shadow:var(--shadow-xl);max-height:90vh;overflow-y:auto;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-        <strong style="font-size:1.1rem;">Configure AI Reply Agent</strong>
-        <button class="icon-btn" onclick="window.NextBrightAIAgents?.closeModal()"><i data-feather="x"></i></button>
+        <strong style="font-size:1.1rem;" id="modal-ai-agent-title">Configure AI Reply Agent</strong>
+        <button type="button" class="icon-btn" onclick="window.NextBrightAIAgents?.closeModal()"><i data-feather="x"></i></button>
       </div>
       <form id="form-create-ai-agent">
+        <input type="hidden" id="agent-id-input" value="">
         <div style="margin-bottom:12px;">
           <label class="form-label" style="font-size:0.85rem;font-weight:600;">Agent Name</label>
           <input type="text" id="agent-name-input" class="form-control" placeholder="e.g. Inbound Sales Rep" required>
@@ -2202,21 +2299,64 @@ curl -X POST https://your-domain.com/api/leads \
         <div style="margin-bottom:12px;">
           <label class="form-label" style="font-size:0.85rem;font-weight:600;">Conversation Tone</label>
           <select id="agent-tone-select" class="form-control">
-            <option value="Professional">Professional & Courteous</option>
-            <option value="Friendly">Friendly & Enthusiastic</option>
-            <option value="Sales-focused">Sales-focused & Persuasive</option>
-            <option value="Casual">Casual & Direct</option>
+            <option value="Professional">Professional &amp; Courteous</option>
+            <option value="Friendly">Friendly &amp; Enthusiastic</option>
+            <option value="Sales-focused">Sales-focused &amp; Persuasive</option>
+            <option value="Casual">Casual &amp; Direct</option>
           </select>
         </div>
         <div style="margin-bottom:16px;">
-          <label class="form-label" style="font-size:0.85rem;font-weight:600;">System Instructions & Goals</label>
+          <label class="form-label" style="font-size:0.85rem;font-weight:600;">System Instructions &amp; Goals</label>
           <textarea id="agent-instructions-input" class="form-control" rows="4" placeholder="Describe the agent's goals, how it should answer inquiries, pricing guidance, and when to book appointments..."></textarea>
         </div>
         <div style="display:flex;justify-content:flex-end;gap:10px;">
           <button type="button" class="btn btn-secondary" onclick="window.NextBrightAIAgents?.closeModal()">Cancel</button>
-          <button type="submit" class="btn btn-primary"><i data-feather="check"></i> Save Agent</button>
+          <button type="submit" class="btn btn-primary" id="btn-save-ai-agent-submit"><i data-feather="check"></i> Save Agent</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- AI AGENT TEST SIMULATOR MODAL -->
+  <div class="modal-backdrop" id="modal-test-ai-agent" style="display:none;align-items:center;justify-content:center;z-index:2000;">
+    <div class="card" style="width:100%;max-width:560px;padding:24px;box-shadow:var(--shadow-xl);max-height:90vh;overflow-y:auto;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <strong style="font-size:1.1rem;display:flex;align-items:center;gap:8px;">
+          <span style="font-size:1.2rem;">⚡</span> Test AI Grounded Auto-Reply
+        </strong>
+        <button type="button" class="icon-btn" onclick="document.getElementById('modal-test-ai-agent').style.display='none'"><i data-feather="x"></i></button>
+      </div>
+      <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:14px;">
+        Test how this agent replies using your active Knowledge Base entries and handles human handover triggers.
+      </p>
+
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;">
+        <span style="font-size:0.75rem;color:var(--text-muted);align-self:center;">Try:</span>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('ai-test-query-input').value='What is the pricing for the enterprise plan?'">Pricing inquiry</button>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('ai-test-query-input').value='What are your support working hours?'">Working hours</button>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('ai-test-query-input').value='Can I speak to a human representative?'">Human handover</button>
+      </div>
+
+      <div style="margin-bottom:14px;">
+        <input type="text" id="ai-test-query-input" class="form-control" placeholder="Type a sample customer question..." value="What is the pricing for the enterprise plan?">
+      </div>
+
+      <div style="display:flex;justify-content:flex-end;margin-bottom:16px;">
+        <button type="button" class="btn btn-primary btn-sm" id="btn-run-ai-test" onclick="window.NextBrightAIAgents?.runTestReply()">
+          <i data-feather="play"></i> Generate Grounded Reply
+        </button>
+      </div>
+
+      <div id="ai-test-result-box" style="display:none;background:var(--slate-50,#f8fafc);border:1px solid var(--border-light);border-radius:10px;padding:16px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <span id="ai-test-badge" class="badge badge-success">Active Grounded Reply</span>
+          <span id="ai-test-confidence" style="font-size:0.75rem;color:var(--text-muted);">Confidence: 94%</span>
+        </div>
+        <div id="ai-test-reply-text" style="font-size:0.875rem;color:var(--text-dark);line-height:1.5;margin-bottom:10px;"></div>
+        <div id="ai-test-sources-box" style="font-size:0.75rem;color:var(--text-muted);border-top:1px dashed var(--border-light);padding-top:8px;">
+          <strong>Knowledge Base Source:</strong> <span id="ai-test-sources"></span>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -2224,10 +2364,11 @@ curl -X POST https://your-domain.com/api/leads \
   <div class="modal-backdrop" id="modal-create-kb-entry" style="display:none;align-items:center;justify-content:center;z-index:2000;">
     <div class="card" style="width:100%;max-width:540px;padding:24px;box-shadow:var(--shadow-xl);max-height:90vh;overflow-y:auto;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-        <strong style="font-size:1.1rem;">Add Knowledge Base Entry</strong>
-        <button class="icon-btn" onclick="window.NextBrightKB?.closeModal()"><i data-feather="x"></i></button>
+        <strong style="font-size:1.1rem;" id="modal-kb-title">Add Knowledge Base Entry</strong>
+        <button type="button" class="icon-btn" onclick="window.NextBrightKB?.closeModal()"><i data-feather="x"></i></button>
       </div>
       <form id="form-create-kb-entry">
+        <input type="hidden" id="kb-id-input" value="">
         <div style="margin-bottom:12px;">
           <label class="form-label" style="font-size:0.85rem;font-weight:600;">Entry Title</label>
           <input type="text" id="kb-title-input" class="form-control" placeholder="e.g. Enterprise Plan Pricing" required>
@@ -2236,7 +2377,7 @@ curl -X POST https://your-domain.com/api/leads \
           <label class="form-label" style="font-size:0.85rem;font-weight:600;">Category</label>
           <select id="kb-category-select" class="form-control">
             <option value="company">Company Info</option>
-            <option value="pricing">Pricing & Packages</option>
+            <option value="pricing">Pricing &amp; Packages</option>
             <option value="faq">FAQ</option>
             <option value="booking">Booking / Demo Instructions</option>
             <option value="policy">Policy / Terms</option>
@@ -2248,7 +2389,309 @@ curl -X POST https://your-domain.com/api/leads \
         </div>
         <div style="display:flex;justify-content:flex-end;gap:10px;">
           <button type="button" class="btn btn-secondary" onclick="window.NextBrightKB?.closeModal()">Cancel</button>
-          <button type="submit" class="btn btn-primary"><i data-feather="check"></i> Save Entry</button>
+          <button type="submit" class="btn btn-primary" id="btn-save-kb-submit"><i data-feather="check"></i> Save Entry</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ========================================================================
+       SOCIAL & WHATSAPP MODALS
+       ======================================================================== -->
+
+  <!-- CREATE INSTAGRAM POST MODAL -->
+  <div class="modal-backdrop" id="modal-create-ig-post" style="display:none;align-items:center;justify-content:center;z-index:2000;">
+    <div class="card" style="width:100%;max-width:680px;padding:24px;box-shadow:var(--shadow-xl);max-height:90vh;overflow-y:auto;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <strong style="font-size:1.15rem;display:flex;align-items:center;gap:8px;">
+          <span style="font-size:18px;">📸</span> Create Instagram Post
+        </strong>
+        <button type="button" class="icon-btn" onclick="window.NextBrightIGPosts?.closeModal()"><i data-feather="x"></i></button>
+      </div>
+      <form id="form-create-ig-post">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+          <div>
+            <label class="form-label" style="font-size:0.85rem;font-weight:600;">Post Type</label>
+            <select id="ig-post-type-select" class="form-control" style="margin-bottom:12px;">
+              <option value="feed">Feed Post (1:1 / 4:5)</option>
+              <option value="reel">Reel Video (9:16)</option>
+              <option value="story">Story (24h ephemeral)</option>
+              <option value="carousel">Carousel (Multi-Slide)</option>
+            </select>
+
+            <label class="form-label" style="font-size:0.85rem;font-weight:600;">Media URL / Asset</label>
+            <div style="display:flex;gap:6px;margin-bottom:12px;">
+              <input type="url" id="ig-post-media-url" class="form-control" placeholder="https://images.unsplash.com/..." required style="flex:1;">
+              <button type="button" class="btn btn-secondary btn-sm" onclick="window.switchView('content-library')" title="Pick from library"><i data-feather="folder"></i></button>
+            </div>
+
+            <label class="form-label" style="font-size:0.85rem;font-weight:600;">Schedule Date &amp; Time (optional)</label>
+            <input type="datetime-local" id="ig-post-schedule-time" class="form-control" style="margin-bottom:12px;">
+
+            <label class="form-label" style="font-size:0.85rem;font-weight:600;">Caption</label>
+            <textarea id="ig-post-caption-input" class="form-control" rows="4" placeholder="Write an engaging caption with hashtags..." required></textarea>
+            <div style="display:flex;justify-content:space-between;font-size:0.75rem;color:var(--text-muted);margin-top:4px;">
+              <span>Hashtags, mentions &amp; emojis</span>
+              <span id="ig-caption-char-count">0 / 2200</span>
+            </div>
+          </div>
+
+          <!-- Live Preview -->
+          <div>
+            <label class="form-label" style="font-size:0.85rem;font-weight:600;">Live Feed Preview</label>
+            <div class="post-preview-panel" style="background:var(--navy-50);border-radius:10px;padding:12px;display:flex;flex-direction:column;align-items:center;">
+              <div class="post-preview-frame" style="width:230px;background:#fff;border-radius:12px;border:1px solid var(--border-light);box-shadow:var(--shadow-md);overflow:hidden;">
+                <div class="preview-ig-header" style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid #f1f5f9;">
+                  <div class="preview-ig-avatar" style="width:26px;height:26px;border-radius:50%;background:linear-gradient(135deg,#f09433,#dc2743);"></div>
+                  <span class="preview-ig-username" id="ig-preview-username" style="font-size:0.75rem;font-weight:700;">nextbright_crm</span>
+                </div>
+                <div class="preview-ig-media" style="width:100%;aspect-ratio:1;background:#f8fafc;display:flex;align-items:center;justify-content:center;overflow:hidden;">
+                  <img id="ig-preview-image" src="https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=600" alt="Preview" style="width:100%;height:100%;object-fit:cover;">
+                </div>
+                <div class="preview-ig-caption" id="ig-preview-caption" style="padding:8px 10px;font-size:0.72rem;line-height:1.4;max-height:60px;overflow:hidden;color:var(--text-primary);">
+                  Your caption preview will appear here...
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;justify-content:flex-end;gap:10px;border-top:1px solid var(--border-light);padding-top:14px;">
+          <button type="button" class="btn btn-secondary" onclick="window.NextBrightIGPosts?.closeModal()">Cancel</button>
+          <button type="submit" class="btn btn-secondary" data-action="draft"><i data-feather="file-text"></i> Save Draft</button>
+          <button type="submit" class="btn btn-primary" data-action="schedule"><i data-feather="calendar"></i> Schedule Post</button>
+          <button type="submit" class="btn btn-primary" data-action="publish" style="background:#dc2743;border-color:#dc2743;"><i data-feather="send"></i> Publish Now</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- CREATE WA CAMPAIGN MODAL -->
+  <div class="modal-backdrop" id="modal-create-wa-campaign" style="display:none;align-items:center;justify-content:center;z-index:2000;">
+    <div class="card" style="width:100%;max-width:600px;padding:24px;box-shadow:var(--shadow-xl);max-height:90vh;overflow-y:auto;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <strong style="font-size:1.15rem;display:flex;align-items:center;gap:8px;color:#25d366;">
+          <i data-feather="send"></i> New WhatsApp Campaign
+        </strong>
+        <button type="button" class="icon-btn" onclick="window.NextBrightWACampaigns?.closeModal()"><i data-feather="x"></i></button>
+      </div>
+      <form id="form-create-wa-campaign">
+        <div style="margin-bottom:12px;">
+          <label class="form-label" style="font-size:0.85rem;font-weight:600;">Campaign Name</label>
+          <input type="text" id="camp-name-input" class="form-control" placeholder="e.g. Festive Flash Sale Announcement" required>
+        </div>
+        <div style="margin-bottom:12px;">
+          <label class="form-label" style="font-size:0.85rem;font-weight:600;">Target Audience</label>
+          <select id="camp-audience-select" class="form-control">
+            <option value="All Leads (320 contacts)">All Leads (320 contacts)</option>
+            <option value="High Value Leads (150 contacts)">High Value Leads (150 contacts)</option>
+            <option value="Hot Opportunities (45 contacts)">Hot Opportunities (45 contacts)</option>
+            <option value="New Inbound Contacts (85 contacts)">New Inbound Contacts (85 contacts)</option>
+          </select>
+        </div>
+        <div style="margin-bottom:12px;">
+          <label class="form-label" style="font-size:0.85rem;font-weight:600;">Approved WhatsApp Template</label>
+          <select id="camp-template-select" class="form-control" required>
+            <option value="exclusive_festive_offer">exclusive_festive_offer (Marketing)</option>
+            <option value="lead_welcome_v2">lead_welcome_v2 (Utility)</option>
+            <option value="appointment_reminder">appointment_reminder (Utility)</option>
+          </select>
+        </div>
+        <div id="camp-template-preview" style="margin-bottom:14px;">
+          <div style="background:var(--navy-50);padding:12px;border-radius:8px;font-size:0.85rem;border:1px solid var(--border-light);">
+            <span class="badge badge-info" style="margin-bottom:6px;">MARKETING</span>
+            <p style="margin:0;color:var(--text-dark);line-height:1.4;">Hi {{name}}, get {{discount}}% off on NextBright CRM enterprise plans this week only! Reply YES to claim.</p>
+          </div>
+        </div>
+        <div style="margin-bottom:16px;">
+          <label class="form-label" style="font-size:0.85rem;font-weight:600;">Schedule Launch Time</label>
+          <input type="datetime-local" id="camp-schedule-input" class="form-control">
+          <small style="color:var(--text-muted);font-size:0.75rem;">Leave empty to launch immediately</small>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--border-light);padding-top:14px;">
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-test-send-campaign"><i data-feather="zap"></i> Send Test to Me</button>
+          <div style="display:flex;gap:10px;">
+            <button type="button" class="btn btn-secondary" onclick="window.NextBrightWACampaigns?.closeModal()">Cancel</button>
+            <button type="submit" class="btn btn-primary" style="background:#25d366;border-color:#25d366;"><i data-feather="send"></i> Launch Campaign</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- UPLOAD MEDIA MODAL (Content Library) -->
+  <div class="modal-backdrop" id="modal-upload-media" style="display:none;align-items:center;justify-content:center;z-index:2000;">
+    <div class="card" style="width:100%;max-width:540px;padding:24px;box-shadow:var(--shadow-xl);max-height:90vh;overflow-y:auto;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <strong style="font-size:1.15rem;display:flex;align-items:center;gap:8px;">
+          <i data-feather="upload-cloud"></i> Upload Media Asset
+        </strong>
+        <button type="button" class="icon-btn" onclick="window.NextBrightLibrary?.closeModal()"><i data-feather="x"></i></button>
+      </div>
+      <form id="form-upload-media">
+        <div style="margin-bottom:12px;">
+          <label class="form-label" style="font-size:0.85rem;font-weight:600;">Asset Title</label>
+          <input type="text" id="upload-media-title" class="form-control" placeholder="e.g. Diwali Banner 2026" required>
+        </div>
+        <div style="margin-bottom:12px;">
+          <label class="form-label" style="font-size:0.85rem;font-weight:600;">Asset Type</label>
+          <select id="upload-media-type" class="form-control">
+            <option value="image">Image (JPG, PNG, WebP)</option>
+            <option value="video">Video (MP4)</option>
+            <option value="document">Document (PDF)</option>
+          </select>
+        </div>
+        <div style="margin-bottom:12px;">
+          <label class="form-label" style="font-size:0.85rem;font-weight:600;">Folder Category</label>
+          <select id="upload-media-folder" class="form-control">
+            <option value="marketing">Marketing</option>
+            <option value="templates">Templates</option>
+            <option value="reels">Reels &amp; Video</option>
+            <option value="brand">Brand Assets</option>
+          </select>
+        </div>
+        <div style="margin-bottom:12px;">
+          <label class="form-label" style="font-size:0.85rem;font-weight:600;">Direct File URL or Public Link</label>
+          <input type="url" id="upload-media-url" class="form-control" placeholder="https://images.unsplash.com/photo-..." required>
+        </div>
+        <div style="margin-bottom:16px;">
+          <label class="form-label" style="font-size:0.85rem;font-weight:600;">Tags (comma-separated)</label>
+          <input type="text" id="upload-media-tags" class="form-control" placeholder="banner, sale, product">
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:10px;">
+          <button type="button" class="btn btn-secondary" onclick="window.NextBrightLibrary?.closeModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary"><i data-feather="check"></i> Save to Library</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- CREATE FOLDER MODAL (Content Library) -->
+  <div class="modal-backdrop" id="modal-create-folder" style="display:none;align-items:center;justify-content:center;z-index:2000;">
+    <div class="card" style="width:100%;max-width:420px;padding:24px;box-shadow:var(--shadow-xl);">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <strong style="font-size:1.1rem;display:flex;align-items:center;gap:6px;">
+          <i data-feather="folder-plus"></i> New Folder
+        </strong>
+        <button type="button" class="icon-btn" onclick="document.getElementById('modal-create-folder').style.display='none'"><i data-feather="x"></i></button>
+      </div>
+      <form id="form-create-folder">
+        <div style="margin-bottom:16px;">
+          <label class="form-label" style="font-size:0.85rem;font-weight:600;">Folder Name</label>
+          <input type="text" id="new-folder-name-input" class="form-control" placeholder="e.g. Festive 2026" required>
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:10px;">
+          <button type="button" class="btn btn-secondary" onclick="document.getElementById('modal-create-folder').style.display='none'">Cancel</button>
+          <button type="submit" class="btn btn-primary"><i data-feather="plus"></i> Create Folder</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- CREATE AUDIENCE SEGMENT MODAL -->
+  <div class="modal-backdrop" id="modal-create-segment" style="display:none;align-items:center;justify-content:center;z-index:2000;">
+    <div class="card" style="width:100%;max-width:540px;padding:24px;box-shadow:var(--shadow-xl);max-height:90vh;overflow-y:auto;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <strong style="font-size:1.15rem;display:flex;align-items:center;gap:6px;">
+          <i data-feather="filter"></i> Create Audience Segment
+        </strong>
+        <button type="button" class="icon-btn" onclick="window.NextBrightWABroadcast?.closeModal()"><i data-feather="x"></i></button>
+      </div>
+      <form id="form-create-segment">
+        <div style="margin-bottom:12px;">
+          <label class="form-label" style="font-size:0.85rem;font-weight:600;">Segment Name</label>
+          <input type="text" id="segment-name-input" class="form-control" placeholder="e.g. Enterprise Leads (High Score)" required>
+        </div>
+        <div style="margin-bottom:12px;">
+          <label class="form-label" style="font-size:0.85rem;font-weight:600;">Description</label>
+          <input type="text" id="segment-desc-input" class="form-control" placeholder="Contacts with score &gt; 70 and qualified status">
+        </div>
+        <div style="margin-bottom:16px;">
+          <label class="form-label" style="font-size:0.85rem;font-weight:600;">Matching Criteria Rule</label>
+          <select id="segment-criteria-select" class="form-control">
+            <option value="Score &gt; 80 AND Status == 'Hot'">Lead Score &gt; 80 AND Status is Hot</option>
+            <option value="Source == 'WhatsApp Webhook'">Source is WhatsApp Incoming Webhook</option>
+            <option value="Status == 'New' AND Created &gt; 7d">New Leads created in last 7 days</option>
+            <option value="All Contacts">All Active Contacts</option>
+          </select>
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:10px;">
+          <button type="button" class="btn btn-secondary" onclick="window.NextBrightWABroadcast?.closeModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary"><i data-feather="check"></i> Save Segment</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- CREATE BROADCAST MODAL -->
+  <div class="modal-backdrop" id="modal-create-broadcast" style="display:none;align-items:center;justify-content:center;z-index:2000;">
+    <div class="card" style="width:100%;max-width:560px;padding:24px;box-shadow:var(--shadow-xl);max-height:90vh;overflow-y:auto;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <strong style="font-size:1.15rem;display:flex;align-items:center;gap:6px;color:#25d366;">
+          <i data-feather="send"></i> Dispatch WhatsApp Broadcast
+        </strong>
+        <button type="button" class="icon-btn" onclick="document.getElementById('modal-create-broadcast').style.display='none'"><i data-feather="x"></i></button>
+      </div>
+      <form id="form-create-broadcast">
+        <div style="margin-bottom:12px;">
+          <label class="form-label" style="font-size:0.85rem;font-weight:600;">Broadcast Title</label>
+          <input type="text" id="broadcast-name-input" class="form-control" placeholder="e.g. Weekend Flash Announcement" required>
+        </div>
+        <div style="margin-bottom:12px;">
+          <label class="form-label" style="font-size:0.85rem;font-weight:600;">Target Segment</label>
+          <select id="broadcast-segment-select" class="form-control" required>
+            <option value="seg-1">High Score Hot Leads (85 contacts)</option>
+            <option value="seg-2">Inbound Webhook Leads (240 contacts)</option>
+            <option value="seg-3">Unqualified Follow-up List (42 contacts)</option>
+          </select>
+        </div>
+        <div style="margin-bottom:12px;">
+          <label class="form-label" style="font-size:0.85rem;font-weight:600;">Message Template</label>
+          <select id="broadcast-template-select" class="form-control">
+            <option value="exclusive_festive_offer">exclusive_festive_offer</option>
+            <option value="lead_welcome_v2">lead_welcome_v2</option>
+            <option value="appointment_reminder">appointment_reminder</option>
+          </select>
+        </div>
+        <div style="margin-bottom:16px;">
+          <label class="form-label" style="font-size:0.85rem;font-weight:600;">Send Timing</label>
+          <select id="broadcast-timing-select" class="form-control">
+            <option value="now">Send Immediately</option>
+            <option value="scheduled">Schedule for Later</option>
+          </select>
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:10px;">
+          <button type="button" class="btn btn-secondary" onclick="document.getElementById('modal-create-broadcast').style.display='none'">Cancel</button>
+          <button type="submit" class="btn btn-primary" style="background:#25d366;border-color:#25d366;"><i data-feather="send"></i> Dispatch Now</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- COMPOSE INSTAGRAM DM MODAL -->
+  <div class="modal-backdrop" id="modal-social-compose" style="display:none;align-items:center;justify-content:center;z-index:2000;">
+    <div class="card" style="width:100%;max-width:480px;padding:24px;box-shadow:var(--shadow-xl);max-height:90vh;overflow-y:auto;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <strong style="font-size:1.1rem;display:flex;align-items:center;gap:6px;">
+          <i data-feather="edit-2"></i> New Instagram Direct Message
+        </strong>
+        <button type="button" class="icon-btn" onclick="document.getElementById('modal-social-compose').style.display='none'"><i data-feather="x"></i></button>
+      </div>
+      <form id="form-social-compose">
+        <div style="margin-bottom:12px;">
+          <label class="form-label" style="font-size:0.85rem;font-weight:600;">Recipient Username</label>
+          <div style="display:flex;align-items:center;position:relative;">
+            <span style="position:absolute;left:10px;color:var(--text-muted);font-weight:600;">@</span>
+            <input type="text" id="social-compose-username" class="form-control" style="padding-left:26px;" placeholder="instagram_user" required>
+          </div>
+        </div>
+        <div style="margin-bottom:16px;">
+          <label class="form-label" style="font-size:0.85rem;font-weight:600;">Message</label>
+          <textarea id="social-compose-text" class="form-control" rows="4" placeholder="Type your message..." required></textarea>
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:10px;">
+          <button type="button" class="btn btn-secondary" onclick="document.getElementById('modal-social-compose').style.display='none'">Cancel</button>
+          <button type="submit" class="btn btn-primary"><i data-feather="send"></i> Send Message</button>
         </div>
       </form>
     </div>

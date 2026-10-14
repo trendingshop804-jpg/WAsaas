@@ -1,8 +1,8 @@
 /* =============================================================================
    social-calendar.js — NextBright CRM
    Unified Social & Messaging Content Calendar View
+   Aggregates scheduled Instagram posts, Reels, and WhatsApp Campaigns
    ============================================================================= */
-
 'use strict';
 
 (function () {
@@ -15,44 +15,44 @@
   }
 
   function setupEventListeners() {
-    const prevBtn = document.getElementById('cal-prev-month');
-    const nextBtn = document.getElementById('cal-next-month');
-    const todayBtn = document.getElementById('cal-today');
+    const prevBtn = document.getElementById('social-cal-prev') || document.getElementById('cal-prev-month');
+    const nextBtn = document.getElementById('social-cal-next') || document.getElementById('cal-next-month');
+    const todayBtn = document.getElementById('social-cal-today') || document.getElementById('cal-today');
 
     if (prevBtn) {
-      prevBtn.addEventListener('click', () => {
+      prevBtn.onclick = () => {
         currentDate.setMonth(currentDate.getMonth() - 1);
         renderCalendar();
-      });
+      };
     }
 
     if (nextBtn) {
-      nextBtn.addEventListener('click', () => {
+      nextBtn.onclick = () => {
         currentDate.setMonth(currentDate.getMonth() + 1);
         renderCalendar();
-      });
+      };
     }
 
     if (todayBtn) {
-      todayBtn.addEventListener('click', () => {
+      todayBtn.onclick = () => {
         currentDate = new Date();
         renderCalendar();
-      });
+      };
     }
 
-    const channelSelect = document.getElementById('cal-filter-channel');
+    const channelSelect = document.getElementById('social-cal-filter-channel') || document.getElementById('cal-filter-channel');
     if (channelSelect) {
-      channelSelect.addEventListener('change', (e) => {
+      channelSelect.onchange = (e) => {
         filterChannel = e.target.value;
         renderCalendar();
-      });
+      };
     }
   }
 
   function getAllScheduledItems() {
     const items = [];
 
-    // Instagram posts from localStorage
+    // Instagram posts
     try {
       const igPosts = JSON.parse(localStorage.getItem('nb_instagram_posts') || '[]');
       igPosts.forEach(post => {
@@ -60,16 +60,18 @@
           items.push({
             id: post.id,
             channel: 'instagram',
-            title: `IG (${post.type}): ${post.caption.substring(0, 30)}...`,
+            type: post.type || 'post',
+            title: `IG: ${(post.caption || 'Post').substring(0, 28)}...`,
             date: new Date(post.scheduled_at),
             status: post.status,
-            media_url: post.media_url
+            media_url: post.media_url,
+            raw: post
           });
         }
       });
     } catch (e) {}
 
-    // WhatsApp campaigns from localStorage
+    // WhatsApp campaigns
     try {
       const waCamps = JSON.parse(localStorage.getItem('nb_wa_campaigns') || '[]');
       waCamps.forEach(camp => {
@@ -77,9 +79,11 @@
           items.push({
             id: camp.id,
             channel: 'whatsapp',
-            title: `WA Camp: ${camp.name}`,
+            type: 'campaign',
+            title: `WA: ${camp.name}`,
             date: new Date(camp.scheduled_at),
-            status: camp.status
+            status: camp.status,
+            raw: camp
           });
         }
       });
@@ -89,8 +93,8 @@
   }
 
   function renderCalendar() {
-    const monthYearLabel = document.getElementById('cal-month-year');
-    const gridContainer = document.getElementById('social-calendar-grid');
+    const monthYearLabel = document.getElementById('social-cal-month') || document.getElementById('cal-month-year');
+    const gridContainer = document.getElementById('social-cal-grid') || document.getElementById('social-calendar-grid');
     if (!gridContainer) return;
 
     const year = currentDate.getFullYear();
@@ -101,61 +105,50 @@
       monthYearLabel.textContent = `${monthNames[month]} ${year}`;
     }
 
-    const firstDayIndex = new Date(year, month, 1).getDay();
-    const totalDays = new Date(year, month + 1, 0).getDate();
-    const prevMonthDays = new Date(year, month, 0).getDate();
-
     let items = getAllScheduledItems();
     if (filterChannel !== 'all') {
-      items = items.filter(i => i.channel === filterChannel);
+      items = items.filter(it => it.channel === filterChannel);
     }
+
+    const firstDay = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
 
     let html = '';
     const dayHeaders = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
-    // Headers
-    dayHeaders.forEach(dh => {
-      html += `<div style="font-weight: 600; text-align: center; padding: 10px; font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase;">${dh}</div>`;
+    dayHeaders.forEach(d => {
+      html += `<div style="text-align:center;font-weight:700;font-size:0.75rem;color:var(--text-muted);padding:8px 0;">${d}</div>`;
     });
 
-    // Previous month padding cells
-    for (let x = firstDayIndex; x > 0; x--) {
-      const dayNum = prevMonthDays - x + 1;
-      html += `
-        <div style="background: var(--navy-50); opacity: 0.4; padding: 8px; min-height: 90px; border: 1px solid var(--border-light); font-size: 0.75rem;">
-          <span style="font-weight: 600; color: var(--text-muted);">${dayNum}</span>
-        </div>
-      `;
+    for (let i = 0; i < firstDay; i++) {
+      html += `<div class="cal-cell empty" style="min-height:95px;background:var(--navy-50,#f8fafc);border:1px solid var(--border-light);border-radius:6px;opacity:0.4;"></div>`;
     }
 
-    const todayStr = new Date().toDateString();
+    const today = new Date();
 
-    // Days of current month
-    for (let day = 1; day <= totalDays; day++) {
+    for (let day = 1; day <= daysInMonth; day++) {
       const cellDate = new Date(year, month, day);
-      const isToday = cellDate.toDateString() === todayStr;
+      const isToday = cellDate.toDateString() === today.toDateString();
 
-      // Find items matching this day
-      const dayItems = items.filter(item => item.date.toDateString() === cellDate.toDateString());
+      const dayItems = items.filter(item => {
+        const d = item.date;
+        return d.getFullYear() === year && d.getMonth() === month && d.getDate() === day;
+      });
 
       html += `
-        <div class="cal-day-cell" style="background: ${isToday ? '#f0f7ff' : 'white'}; padding: 8px; min-height: 100px; border: 1px solid var(--border-light); border-radius: 6px; display: flex; flex-direction: column; justify-content: space-between; position: relative;">
-          <div style="display: flex; justify-content: space-between; align-items: center;">
-            <span style="font-weight: 700; font-size: 0.85rem; ${isToday ? 'color: var(--primary); background: rgba(59,130,246,0.15); padding: 2px 6px; border-radius: 4px;' : 'color: var(--text-dark);'}">
-              ${day}
-            </span>
-            ${dayItems.length > 0 ? `<span class="badge badge-primary" style="font-size: 0.65rem;">${dayItems.length}</span>` : ''}
+        <div class="cal-cell ${isToday ? 'today' : ''}" style="min-height:95px;background:#fff;border:1px solid var(--border-light);border-radius:6px;padding:6px;display:flex;flex-direction:column;gap:4px;position:relative;">
+          <div style="font-size:0.75rem;font-weight:${isToday ? '800' : '600'};color:${isToday ? 'var(--brand-primary)' : 'var(--text-primary)'};display:flex;justify-content:space-between;align-items:center;">
+            <span>${day}</span>
+            ${isToday ? '<span style="font-size:0.6rem;background:var(--brand-primary);color:#fff;padding:1px 4px;border-radius:3px;">TODAY</span>' : ''}
           </div>
-
-          <div style="margin-top: 6px; display: flex; flex-direction: column; gap: 4px; flex: 1; overflow-y: auto; max-height: 70px;">
+          <div style="display:flex;flex-direction:column;gap:3px;overflow-y:auto;max-height:70px;">
             ${dayItems.map(item => {
               const isWA = item.channel === 'whatsapp';
               const color = isWA ? '#25d366' : '#e1306c';
               const bg = isWA ? 'rgba(37, 211, 102, 0.12)' : 'rgba(225, 48, 108, 0.12)';
 
               return `
-                <div style="background: ${bg}; border-left: 3px solid ${color}; padding: 3px 6px; border-radius: 3px; font-size: 0.7rem; font-weight: 500; color: var(--text-dark); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${item.title}">
-                  ${item.title}
+                <div style="background:${bg};border-left:3px solid ${color};padding:3px 5px;border-radius:3px;font-size:0.68rem;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(item.title)}" onclick="alert('${escapeHtml(item.title)}\\nChannel: ${item.channel.toUpperCase()}\\nStatus: ${item.status}\\nTime: ${item.date.toLocaleTimeString()}')">
+                  <span style="font-weight:700;">${isWA ? '💬' : '📸'}</span> ${escapeHtml(item.title)}
                 </div>
               `;
             }).join('')}
@@ -165,6 +158,12 @@
     }
 
     gridContainer.innerHTML = html;
+    if (typeof feather !== 'undefined') feather.replace();
+  }
+
+  function escapeHtml(str) {
+    if (!str) return '';
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
   window.NextBrightCalendar = {

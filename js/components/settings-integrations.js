@@ -730,6 +730,9 @@ class SettingsIntegrationsComponent {
       return;
     }
 
+    /* ── Auth guard: require sign-in before persisting credentials ─── */
+    if (!this._requireAuthToSave(`Save ${ig.name} key`, () => this._saveKey(integrationId))) return;
+
     if (saveBtn) {
       saveBtn.disabled = true;
       saveBtn.innerHTML = `<span class="spinner-xs"></span> Saving…`;
@@ -1168,6 +1171,9 @@ class SettingsIntegrationsComponent {
   async _handleEmbeddedSignup() {
     console.log('[FB Connect] Button clicked, starting connection...');
 
+    /* ── Auth guard: require sign-in before launching Meta OAuth flow ── */
+    if (!this._requireAuthToSave('Connect WhatsApp Business via Meta', () => this._handleEmbeddedSignup())) return;
+
     if (!META_APP_ID || !META_CONFIG_ID) {
       console.error('[FB Connect] Meta App ID or Config ID not configured');
       this._toast('Meta App credentials not configured. Please set META_APP_ID and META_CONFIG_ID.', 'error');
@@ -1179,6 +1185,7 @@ class SettingsIntegrationsComponent {
       this._toast('Supabase not configured. Please set up your environment.', 'error');
       return;
     }
+
 
     const btn = document.getElementById('btn-oauth-whatsapp_business');
     const originalBtnText = btn ? btn.innerHTML : '';
@@ -1283,6 +1290,9 @@ class SettingsIntegrationsComponent {
      ══════════════════════════════════════════════════════════════════════ */
   async _handleInstagramEmbeddedSignup() {
     console.log('[IG Connect] Button clicked, starting Instagram connection...');
+
+    /* ── Auth guard: require sign-in before launching Instagram OAuth ── */
+    if (!this._requireAuthToSave('Connect Instagram Business', () => this._handleInstagramEmbeddedSignup())) return;
 
     const metaAppId = window.supabaseConfig?.metaAppId || META_APP_ID || '1480548923617105';
     const igConfigId = window.supabaseConfig?.instagramConfigId || META_IG_CONFIG_ID || '4616502125294134';
@@ -1442,6 +1452,206 @@ class SettingsIntegrationsComponent {
       this._toast(err.message || 'Failed to start Instagram connection', 'error');
       restoreBtn();
     }
+  }
+
+  /* ══════════════════════════════════════════════════════════════════════
+     AUTH GUARD — Sign in to save integration credentials
+     ══════════════════════════════════════════════════════════════════════ */
+
+  /**
+   * Returns true if the user is already authenticated.
+   * Returns false AND shows the sign-in modal if they are not.
+   * @param {string} actionLabel - Human-readable description of the gated action.
+   * @param {Function} retryFn   - Called automatically after successful sign-in.
+   */
+  _requireAuthToSave(actionLabel, retryFn) {
+    if (window.authService?.isAuthenticated()) return true;   // Already signed in ✓
+    this._showSignInModal(actionLabel, retryFn);
+    return false;
+  }
+
+  /** Inject and display the sign-in gate modal (idempotent). */
+  _showSignInModal(actionLabel = 'Save credentials', retryFn = null) {
+    // Remove any existing instance
+    document.getElementById('integration-signin-gate')?.remove();
+
+    const gate = document.createElement('div');
+    gate.id = 'integration-signin-gate';
+    gate.setAttribute('role', 'dialog');
+    gate.setAttribute('aria-modal', 'true');
+    gate.setAttribute('aria-label', 'Sign in to save integration credentials');
+    gate.innerHTML = `
+      <div class="integration-signin-card">
+        <button class="integration-signin-close" id="integration-signin-close-btn" aria-label="Close" title="Cancel">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+
+        <div class="integration-signin-lock-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+          </svg>
+        </div>
+
+        <div class="integration-signin-title">Sign in to save credentials</div>
+        <div class="integration-signin-subtitle">
+          You need to be signed in to <strong>securely save</strong> your integration credentials to the cloud.
+        </div>
+
+        ${actionLabel ? `
+        <div class="integration-signin-pending-badge">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+          <span>After sign-in, your action will resume automatically: <strong>${this._escHtml(actionLabel)}</strong></span>
+        </div>` : ''}
+
+        <form class="integration-signin-form" id="integration-signin-form" autocomplete="on" novalidate>
+          <div class="integration-signin-error" id="integration-signin-error"></div>
+
+          <div class="form-group">
+            <label for="integration-signin-email">Email address</label>
+            <input
+              type="email"
+              id="integration-signin-email"
+              class="form-input"
+              placeholder="you@example.com"
+              autocomplete="email"
+              required
+            />
+          </div>
+
+          <div class="form-group">
+            <label for="integration-signin-password">Password</label>
+            <input
+              type="password"
+              id="integration-signin-password"
+              class="form-input"
+              placeholder="Your password"
+              autocomplete="current-password"
+              required
+            />
+          </div>
+
+          <button type="submit" class="btn-integration-signin" id="integration-signin-submit-btn">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
+              <polyline points="10 17 15 12 10 7"/>
+              <line x1="15" y1="12" x2="3" y2="12"/>
+            </svg>
+            Sign in to NexusLead
+          </button>
+        </form>
+
+        <div class="integration-signin-footer">
+          Don't have an account? <a href="#" id="integration-signin-goto-signup">Create a free account →</a>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(gate);
+
+    // Animate in
+    requestAnimationFrame(() => gate.classList.add('active'));
+
+    // Focus the email field
+    setTimeout(() => document.getElementById('integration-signin-email')?.focus(), 80);
+
+    // ── Bind events ──────────────────────────────────────────────────────
+
+    // Close on backdrop click
+    gate.addEventListener('click', (e) => {
+      if (e.target === gate) this._hideSignInModal();
+    });
+
+    // Close button
+    document.getElementById('integration-signin-close-btn')?.addEventListener('click', () => {
+      this._hideSignInModal();
+    });
+
+    // Escape key
+    const onKeydown = (e) => {
+      if (e.key === 'Escape') { this._hideSignInModal(); document.removeEventListener('keydown', onKeydown); }
+    };
+    document.addEventListener('keydown', onKeydown);
+
+    // "Create account" link → navigate to the app auth screen
+    document.getElementById('integration-signin-goto-signup')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      this._hideSignInModal();
+      if (window.authComponent?.switchAuthMode) {
+        window.authComponent.showAuthScreen();
+        window.authComponent.switchAuthMode('signup');
+      }
+    });
+
+    // Form submit
+    const form = document.getElementById('integration-signin-form');
+    form?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email    = document.getElementById('integration-signin-email')?.value.trim();
+      const password = document.getElementById('integration-signin-password')?.value;
+      const submitBtn = document.getElementById('integration-signin-submit-btn');
+      const errorEl   = document.getElementById('integration-signin-error');
+
+      const showErr = (msg) => {
+        if (errorEl) { errorEl.textContent = msg; errorEl.classList.add('visible'); }
+      };
+      const clearErr = () => { if (errorEl) errorEl.classList.remove('visible'); };
+
+      if (!email || !password) { showErr('Please enter your email and password.'); return; }
+      clearErr();
+
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = `<span class="spinner-xs"></span> Signing in…`;
+      }
+
+      try {
+        await window.authService.signIn({ email, password });
+
+        /* Success — close modal and retry the original gated action */
+        this._hideSignInModal();
+        this._toast('Signed in successfully. Resuming your action…', 'success');
+
+        /* Brief pause so the toast is visible, then retry */
+        setTimeout(() => {
+          try { retryFn?.(); } catch (err) { console.error('[SignInGate] Retry failed:', err); }
+        }, 600);
+
+        /* Also update the app shell if the auth component knows how */
+        if (window.authComponent?.enterApplication) {
+          window.authComponent.enterApplication();
+        }
+      } catch (err) {
+        let msg = err.message || 'Sign-in failed. Please check your credentials.';
+        if (msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
+          msg = 'Unable to reach the authentication server. Check your internet connection.';
+        }
+        showErr(msg);
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.innerHTML = `
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
+              <polyline points="10 17 15 12 10 7"/>
+              <line x1="15" y1="12" x2="3" y2="12"/>
+            </svg>
+            Sign in to NexusLead`;
+        }
+      }
+    });
+  }
+
+  /** Hide and remove the sign-in gate modal. */
+  _hideSignInModal() {
+    const gate = document.getElementById('integration-signin-gate');
+    if (!gate) return;
+    gate.classList.remove('active');
+    // Wait for fade-out transition then remove from DOM
+    setTimeout(() => gate.remove(), 260);
   }
 
   /* ══════════════════════════════════════════════════════════════════════

@@ -184,6 +184,7 @@
       connected_at: new Date().toISOString()
     };
     localStorage.setItem('nb_instagram_conn', JSON.stringify(conn));
+    localStorage.setItem('nb_ig_connection', JSON.stringify(conn));
 
     try {
       const headers = { 'Content-Type': 'application/json' };
@@ -233,6 +234,7 @@
       connected_at: new Date().toISOString()
     };
     localStorage.setItem('nb_whatsapp_conn', JSON.stringify(conn));
+    localStorage.setItem('nb_wa_connection', JSON.stringify(conn));
 
     try {
       const headers = { 'Content-Type': 'application/json' };

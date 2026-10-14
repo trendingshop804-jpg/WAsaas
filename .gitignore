@@ -65,3 +65,4 @@ supabase/.temp/
 backups/
 *.sql.gz
 scratch/
+.playwright-mcp/

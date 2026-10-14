@@ -16,30 +16,34 @@
   function fmt(n) { return Number(n || 0).toLocaleString('en-IN'); }
   function toast(msg, type) { if (typeof window.showToast === 'function') window.showToast(msg, type); }
 
-  /* ---- Connection state (read from localStorage set by social-integrations.js) ---- */
+  /* ---- Connection state ---- */
   function getIgConnection() {
-    try { return JSON.parse(localStorage.getItem('nb_ig_connection') || 'null'); } catch { return null; }
+    try {
+      return JSON.parse(localStorage.getItem('nb_ig_connection') || localStorage.getItem('nb_instagram_conn') || 'null');
+    } catch { return null; }
   }
   function getWaConnection() {
-    try { return JSON.parse(localStorage.getItem('nb_wa_connection') || 'null'); } catch { return null; }
+    try {
+      return JSON.parse(localStorage.getItem('nb_wa_connection') || localStorage.getItem('nb_whatsapp_conn') || 'null');
+    } catch { return null; }
   }
 
-  /* ---- Load campaign stats from localStorage (set by wa-campaigns.js) ---- */
+  /* ---- Load campaign stats from localStorage ---- */
   function getCampaignStats() {
     const camps = JSON.parse(localStorage.getItem('nb_wa_campaigns') || '[]');
     return {
       total: camps.length,
-      active: camps.filter(c => c.status === 'running').length,
-      totalSent: camps.reduce((s, c) => s + (c.sent_count || 0), 0),
-      totalDelivered: camps.reduce((s, c) => s + (c.delivered_count || 0), 0),
-      totalRead: camps.reduce((s, c) => s + (c.read_count || 0), 0),
-      totalFailed: camps.reduce((s, c) => s + (c.failed_count || 0), 0),
+      active: camps.filter(c => c.status === 'running' || c.status === 'scheduled').length,
+      totalSent: camps.reduce((s, c) => s + (c.sent || c.sent_count || 0), 0),
+      totalDelivered: camps.reduce((s, c) => s + (c.delivered || c.delivered_count || 0), 0),
+      totalRead: camps.reduce((s, c) => s + (c.read || c.read_count || 0), 0),
+      totalFailed: camps.reduce((s, c) => s + (c.failed || c.failed_count || 0), 0),
     };
   }
 
-  /* ---- Load scheduled posts from localStorage (set by instagram-posts.js) ---- */
+  /* ---- Load scheduled posts from localStorage ---- */
   function getScheduledPosts() {
-    const posts = JSON.parse(localStorage.getItem('nb_scheduled_posts') || '[]');
+    const posts = JSON.parse(localStorage.getItem('nb_instagram_posts') || localStorage.getItem('nb_scheduled_posts') || '[]');
     const now = new Date();
     return {
       total: posts.length,
@@ -47,7 +51,7 @@
       published: posts.filter(p => p.status === 'published').length,
       failed: posts.filter(p => p.status === 'failed').length,
       upcoming: posts
-        .filter(p => p.status === 'scheduled' && p.scheduled_at && new Date(p.scheduled_at) > now)
+        .filter(p => (p.status === 'scheduled' || p.status === 'draft') && p.scheduled_at)
         .sort((a, b) => new Date(a.scheduled_at) - new Date(b.scheduled_at))
         .slice(0, 5),
     };
@@ -59,7 +63,7 @@
     return {
       total: convs.length,
       unread: convs.reduce((s, c) => s + (c.unread_count || 0), 0),
-      open: convs.filter(c => c.status === 'open').length,
+      open: convs.filter(c => c.status === 'open' || !c.status).length,
     };
   }
 
@@ -249,5 +253,6 @@
   };
 
   window.socialDashboard = { render, init };
+  window.NextBrightDashboard = { render, init };
 
 })();

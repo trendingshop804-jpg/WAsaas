@@ -49,7 +49,15 @@
         ...(options.headers || {})
       };
 
-      const token = window.supabaseConfig?.accessToken || localStorage.getItem('sb-access-token') || '';
+      let token = '';
+      if (window.NB_AUTH?.getAccessToken) {
+        try {
+          token = await window.NB_AUTH.getAccessToken();
+        } catch (_) {}
+      }
+      if (!token) {
+        token = window.supabaseConfig?.accessToken || localStorage.getItem('sb-access-token') || '';
+      }
       if (token && !headers['Authorization']) {
         headers['Authorization'] = `Bearer ${token}`;
       }
@@ -60,8 +68,10 @@
         if (!res.ok) throw new Error(data.error || data.message || `Request failed (HTTP ${res.status})`);
         return data;
       } catch (err) {
-        console.warn(`[IntegrationsManager] API fallback for ${endpoint}:`, err.message);
-        return this._localFallback(endpoint, credentialsFallback(options));
+        if (err.message && !err.message.includes('Unauthorized')) {
+          console.warn(`[IntegrationsManager] API fallback for ${endpoint}:`, err.message);
+        }
+        return this._localFallback(endpoint, options || {});
       }
     }
 
