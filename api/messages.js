@@ -422,7 +422,7 @@ async function getTenantWhatsAppCredentials(supabase, organizationId) {
 
   const { data: conn, error } = await supabase
     .from('whatsapp_connections')
-    .select('phone_number_id, waba_id, access_token_encrypted, access_token')
+    .select('phone_number_id, waba_id, access_token_encrypted')
     .eq('organization_id', organizationId)
     .eq('is_active', true)
     .order('updated_at', { ascending: false })
@@ -438,10 +438,6 @@ async function getTenantWhatsAppCredentials(supabase, organizationId) {
       accessToken = await decryptToken(conn.access_token_encrypted);
     } catch (_) { accessToken = null; }
   }
-  if (!accessToken && conn.access_token) {
-    accessToken = conn.access_token;
-  }
-
   if (!accessToken) return null;
   return { phoneNumberId: conn.phone_number_id, wabaId: conn.waba_id || null, accessToken };
 }
