@@ -1,4 +1,4 @@
-// meta-webhook Edge Function (Supabase)
+﻿// meta-webhook Edge Function (Supabase)
 // Handles:
 //   - Inbound messages from WhatsApp customers
 //   - Delivery status updates (sent, delivered, read, failed) from Meta
@@ -49,7 +49,7 @@ function fallbackReply(message: string): string {
     return "Thanks for asking! I can share the right pricing once I understand what you need. What are you looking to achieve?";
   }
   if (/\b(demo|call|meeting|book)\b/.test(normalized)) {
-    return "Absolutely — I'd be happy to arrange a quick demo. What day and time work best for you?";
+    return "Absolutely â€” I'd be happy to arrange a quick demo. What day and time work best for you?";
   }
   return "Hi! Thanks for getting in touch. How can I help you today?";
 }
@@ -66,7 +66,7 @@ async function generateAIReply(organization: Record<string, unknown>, history: A
   const pricingSummary    = organization?.pricing_summary || 'contact us for pricing details';
   const bookingLink       = organization?.booking_link || '';
 
-  const systemPrompt = `You are ${businessName}'s WhatsApp assistant. Your job is to greet inbound leads, qualify them, and either book them in or hand them off to a human — all inside a normal WhatsApp chat.
+  const systemPrompt = `You are ${businessName}'s WhatsApp assistant. Your job is to greet inbound leads, qualify them, and either book them in or hand them off to a human â€” all inside a normal WhatsApp chat.
 
 ## Voice & format
 - Sound like a helpful person on WhatsApp, not a form. Short messages (1-3 lines max).
@@ -75,8 +75,8 @@ async function generateAIReply(organization: Record<string, unknown>, history: A
 - Reply in the language the lead writes in (English, Tamil, Malayalam, or mixed).
 
 ## Conversation flow
-1. Greet + discover intent — Ask what brought them here in one friendly line.
-2. Qualify — Naturally collect, over the course of the chat (not as a checklist):
+1. Greet + discover intent â€” Ask what brought them here in one friendly line.
+2. Qualify â€” Naturally collect, over the course of the chat (not as a checklist):
    - Name
    - Business/industry
    - What problem they're trying to solve / what they're interested in
@@ -84,13 +84,13 @@ async function generateAIReply(organization: Record<string, unknown>, history: A
    - Timeline (immediate / this month / just exploring)
 3. Score the lead internally as HOT (ready to buy, has budget + timeline), WARM (interested, needs nurturing), or COLD (just browsing/no fit).
 4. Route:
-   - HOT → offer to book a call/demo right away, share ${bookingLink}, and flag for human follow-up.
-   - WARM → answer their questions, share relevant info/pricing, ask if they'd like a callback.
-   - COLD → answer politely, add to nurture list, don't push for a call.
-5. Handoff — If the lead asks something you're unsure of, asks for a human, or gets frustrated, say so plainly and tag for human takeover. Never pretend to be human if directly asked.
+   - HOT â†’ offer to book a call/demo right away, share ${bookingLink}, and flag for human follow-up.
+   - WARM â†’ answer their questions, share relevant info/pricing, ask if they'd like a callback.
+   - COLD â†’ answer politely, add to nurture list, don't push for a call.
+5. Handoff â€” If the lead asks something you're unsure of, asks for a human, or gets frustrated, say so plainly and tag for human takeover. Never pretend to be human if directly asked.
 
 ## Hard rules
-- Never invent pricing, features, or timelines you weren't given — say you'll confirm and get back to them.
+- Never invent pricing, features, or timelines you weren't given â€” say you'll confirm and get back to them.
 - Never ask for sensitive info (passwords, OTPs, card numbers) over chat.
 - Don't repeat a question the lead already answered earlier in the chat.
 - If the lead goes silent, don't follow up more than twice.
@@ -136,7 +136,7 @@ After each exchange, also produce:
 }
 
 async function sendWhatsAppReply(phoneNumberId: string, to: string, body: string) {
-  // Access token read from environment — NEVER logged
+  // Access token read from environment â€” NEVER logged
   const accessToken = Deno.env.get("WHATSAPP_ACCESS_TOKEN");
   if (!accessToken || !phoneNumberId || !to) {
     throw new Error("WhatsApp token, phone number ID, or recipient is missing");
@@ -399,7 +399,7 @@ async function handleDeliveryStatuses(
       .eq("whatsapp_message_id", waMsgId);
 
     if (fupErr) {
-      // Non-fatal — follow_up_messages row may not exist for all outbound messages
+      // Non-fatal â€” follow_up_messages row may not exist for all outbound messages
       console.warn(`[Webhook] follow_up_messages status update skipped for ${waMsgId}:`, fupErr.message);
     }
 
@@ -471,7 +471,7 @@ async function handler(request: Request): Promise<Response> {
 
       const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
       if (!serviceRoleKey) {
-        console.error("[Webhook] SUPABASE_SERVICE_ROLE_KEY not configured — cannot persist messages");
+        console.error("[Webhook] SUPABASE_SERVICE_ROLE_KEY not configured â€” cannot persist messages");
         return new Response(null, { status: 200 });
       }
 
@@ -481,13 +481,13 @@ async function handler(request: Request): Promise<Response> {
         { db: { schema: "public" }, auth: { persistSession: false } },
       );
 
-      // ── Handle delivery status updates ──────────────────────────────────
+      // â”€â”€ Handle delivery status updates â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       // Process statuses FIRST so they're recorded even if message processing fails
       if (statuses.length > 0) {
         await handleDeliveryStatuses(supabaseAdmin, statuses);
       }
 
-      // ── Handle inbound messages ─────────────────────────────────────────
+      // â”€â”€ Handle inbound messages â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       if (messages.length === 0) {
         return new Response(null, { status: 200 });
       }
@@ -540,22 +540,22 @@ async function handler(request: Request): Promise<Response> {
           displayContent = msg.button?.text || msg.button?.payload || "Button Reply";
         } else if (type === "location") {
           const loc = msg.location;
-          displayContent = loc ? `📍 Location: ${loc.name || loc.address || (loc.latitude + ', ' + loc.longitude)}` : "📍 Shared Location";
+          displayContent = loc ? `ðŸ“ Location: ${loc.name || loc.address || (loc.latitude + ', ' + loc.longitude)}` : "ðŸ“ Shared Location";
         } else if (type === "contacts") {
           const c = msg.contacts?.[0];
-          displayContent = c ? `👤 Contact: ${c.name?.formatted_name || c.phones?.[0]?.phone || 'Shared Contact'}` : "👤 Shared Contact";
+          displayContent = c ? `ðŸ‘¤ Contact: ${c.name?.formatted_name || c.phones?.[0]?.phone || 'Shared Contact'}` : "ðŸ‘¤ Shared Contact";
         } else if (type === "reaction") {
           displayContent = msg.reaction?.emoji ? `Reaction: ${msg.reaction.emoji}` : "Reaction";
         } else if (isMedia) {
           mediaInfo      = await processInboundMedia(msg, type, supabaseAdmin);
           caption        = msg[type]?.caption || "";
-          displayContent = caption || (type === "audio" || type === "voice" ? "🎤 Voice message" : type === "sticker" ? "🩷 Sticker" : `📎 ${type} message`);
+          displayContent = caption || (type === "audio" || type === "voice" ? "ðŸŽ¤ Voice message" : type === "sticker" ? "ðŸ©· Sticker" : `ðŸ“Ž ${type} message`);
         } else {
-          displayContent = msg.text?.body || "📩 Inbound message";
+          displayContent = msg.text?.body || "ðŸ“© Inbound message";
         }
 
         if (!displayContent) {
-          displayContent = "📩 Inbound message";
+          displayContent = "ðŸ“© Inbound message";
         }
 
         let leadId: string | null = null;
@@ -574,7 +574,7 @@ async function handler(request: Request): Promise<Response> {
         }
 
         if (!conversationId) {
-          console.error("[Webhook] Skipping message — no conversation_id available");
+          console.error("[Webhook] Skipping message â€” no conversation_id available");
           continue;
         }
 
@@ -598,11 +598,11 @@ async function handler(request: Request): Promise<Response> {
         const { error } = await supabaseAdmin.from("messages").insert(messageRecord);
         if (error) console.error("[Webhook] Supabase insert error:", error);
 
-        // ── Pause follow-up automation when customer replies ──────────────
+        // â”€â”€ Pause follow-up automation when customer replies â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         // Any inbound message pauses the scheduled follow-up sequence.
         await pauseLeadFollowUp(supabaseAdmin, leadId);
 
-        // ── Opt-out compliance ─────────────────────────────────────────────
+        // â”€â”€ Opt-out compliance â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         if (isOptOut(content) && leadId) {
           try {
             await supabaseAdmin
@@ -623,8 +623,8 @@ async function handler(request: Request): Promise<Response> {
           }
         }
 
-        // ── AI auto-reply (text messages only, non-opt-outs) ───────────────
-        if (type === "text" && content.trim() && !isOptOut(content)) {
+        // â”€â”€ AI auto-reply (text messages only, non-opt-outs) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        if (false && type === "text" && content.trim() && !isOptOut(content)) {
           try {
             const aiRaw    = await generateAIReply(orgSettings, chatHistory, content);
             const parsed   = parseAIResponse(aiRaw);

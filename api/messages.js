@@ -1,4 +1,4 @@
-// api/messages.js
+﻿// api/messages.js
 // Reads and sends WhatsApp text and media messages for the signed-in user's organization.
 //
 // SECURITY
@@ -1227,10 +1227,12 @@ export default async function handler(req, res) {
 
     const byThread = new Map();
     messages.forEach(msg => {
-      const key = msg.sender_number || msg.lead_id || msg.conversation_id || 'unknown';
+      const key = msg.conversation_id || ('legacy:' + (msg.sender_number || msg.lead_id || msg.id));
       if (!byThread.has(key)) byThread.set(key, []);
       byThread.get(key).push({
         id: msg.id,
+        conversationId: msg.conversation_id || null,
+        senderNumber: msg.sender_number || null,
         dir: toDirection(msg),
         text: pickText(msg),
         time: pickTime(msg),
@@ -1246,17 +1248,20 @@ export default async function handler(req, res) {
     const conversations = [...byThread.entries()].map(([key, msgs]) => {
       const ordered = [...msgs].reverse();
       const last = ordered[ordered.length - 1];
-      const displayName = nameByDigits.get(normalizePhone(key)) || nameByDigits.get(digitsOnly(key)) || key;
+      const senderNumber = msgs.find(m => m.senderNumber)?.senderNumber || null;
+      const displayName = nameByDigits.get(normalizePhone(senderNumber)) || nameByDigits.get(digitsOnly(senderNumber)) || senderNumber || 'Unknown contact';
       const threadChannel = msgs.find(m => m.channel)?.channel || 'whatsapp';
       return {
+        id: key,
         key,
-        phone: key,
+        sender_number: senderNumber,
+        phone: senderNumber,
         name: displayName,
         initials: initialsFromName(displayName, key),
         channel: threadChannel,
         preview: last?.text || (last?.messageType === 'text' ? '' : `[${last?.messageType || 'media'}]`),
         time: last?.time || null,
-        messages: ordered
+        messages: ordered.map(message => ({ ...message, direction: message.dir, content: message.text, media_url: message.mediaUrl, message_type: message.messageType }))
       };
     });
 
@@ -1275,3 +1280,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: err.message, messages: [] });
   }
 }
+
+
