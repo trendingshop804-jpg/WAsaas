@@ -554,7 +554,7 @@ class InboxComponent {
         console.error('Inbox message send failed:', error);
         const message = window.whatsappService?.getErrorMessage?.(error, 'Unable to send message.')
           || 'Unable to send message.';
-        if (error?.message?.includes('TEMPLATE_REQUIRED') || error?.message?.includes('24-Hour Conversation Window Expired')) this.openApprovedTemplateSelector(text);
+        if (error?.code === 'TEMPLATE_REQUIRED' || error?.code === 131047 || error?.message?.includes('24-Hour Conversation Window Expired')) this.openApprovedTemplateSelector(text);
         else if (typeof window.showToast === 'function') window.showToast(message, 'error');
         else alert(message);
       });

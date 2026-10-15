@@ -397,7 +397,10 @@ class WhatsAppService {
 
     const sendBody = await sendResponse.json().catch(() => ({}));
     if (!sendResponse.ok || !sendBody?.success) {
-      throw new Error(this.getErrorMessage(sendBody, `Unable to send the WhatsApp message (HTTP ${sendResponse.status}).`));
+      const error = new Error(this.getErrorMessage(sendBody, `Unable to send the WhatsApp message (HTTP ${sendResponse.status}).`));
+      error.code = sendBody?.code || null;
+      error.windowOpen = sendBody?.windowOpen;
+      throw error;
     }
     const metaMessageId = sendBody.messageId || sendBody.message?.wa_message_id || null;
     const now = new Date();
