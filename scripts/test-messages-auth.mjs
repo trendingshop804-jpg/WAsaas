@@ -139,7 +139,7 @@ function fakePostgrest(url, options = {}) {
   calls.push({ table, method, filters, url: String(url), body: requestBody });
 
 const WHATSAPP_CONNECTIONS = [
-  { organization_id: ORG, phone_number_id: '1234567890', is_active: true, access_token: 'mock-whatsapp-token' }
+  { organization_id: ORG, phone_number_id: '1234567890', is_active: true, access_token_encrypted: 'EAAmock-whatsapp-token', waba_id: 'WABA_TEST' }
 ];
 
   let rows = { organization_users: ORGANIZATION_USERS, messages: MESSAGES, leads: LEADS, whatsapp_connections: WHATSAPP_CONNECTIONS }[table];
@@ -216,7 +216,10 @@ globalThis.fetch = async (url, options = {}) => {
   if (u.includes('/rest/v1/')) return fakePostgrest(u, options);
 
   if (u.includes('graph.facebook.com')) {
-    graphCalls.push({ url: u, body: JSON.parse(options.body) });
+    if (u.includes('/message_templates')) {
+      return jsonRes({ data: [{ name: 'nb_followup', language: 'en_US', status: 'APPROVED', components: [] }] });
+    }
+    graphCalls.push({ url: u, body: options.body ? JSON.parse(options.body) : null });
     return jsonRes({ messaging_product: 'whatsapp', contacts: [{ wa_id: OWN_PHONE }], messages: [{ id: 'wamid.MOCK' }] });
   }
 
@@ -348,7 +351,7 @@ await t('POST outside the 24h window with no template -> 422, nothing sent', asy
 await t('POST outside the 24h window with a template -> approved-template send', async () => {
   process.env.WHATSAPP_TEMPLATE_NAME = 'nb_followup';
   const { res, graphCalls } = await call(authed({
-    method: 'POST', body: { phone: STALE_PHONE, text: 'following up', templateParams: ['Ada'] }
+    method: 'POST', body: { phone: STALE_PHONE, text: 'following up', templateName: 'nb_followup', templateLanguage: 'en_US', templateConsent: true, templateParams: ['Ada'] }
   }));
   delete process.env.WHATSAPP_TEMPLATE_NAME;
   assert.equal(res._status, 200);

@@ -1069,6 +1069,7 @@ const INTEGRATION_STATUS_KEYS = ['whatsapp', 'instagram', 'twilio', 'stripe'];
 const INTEGRATION_STATUS_POLL_MS = 30_000;
 let integrationStatusPromise = null;
 let integrationStatusPollTimer = null;
+const integrationServerConfigs = Object.create(null);
 
 function getIntegrationStatusElements(key) {
   const badge = document.querySelector(`[data-integration-status="${key}"]`);
@@ -1086,6 +1087,11 @@ function formatCheckedAt(value) {
 
 function setIntegrationStatus(key, statusInfo = {}) {
   const status = String(statusInfo.status || 'unavailable');
+  if (statusInfo.config && typeof statusInfo.config === 'object') {
+    integrationServerConfigs[key] = { ...statusInfo.config };
+  } else if (status === 'not_configured' || status === 'unavailable') {
+    delete integrationServerConfigs[key];
+  }
   const labels = {
     connected: 'Connected',
     not_configured: 'Not configured',
@@ -1141,7 +1147,8 @@ async function fetchIntegrationStatuses(keys = INTEGRATION_STATUS_KEYS, options 
 
   integrationStatusPromise = (async () => {
     try {
-      const response = await fetch(endpoint, { cache: 'no-store', headers: { Accept: 'application/json' } });
+      if (!window.NB_AUTH?.apiFetch) throw new Error('Sign in to check integration status.');
+      const response = await window.NB_AUTH.apiFetch(endpoint, { cache: 'no-store' });
       if (!response.ok) throw new Error(`Status API returned HTTP ${response.status}`);
       const payload = await response.json();
       if (!payload.success || !payload.integrations) throw new Error('Status API returned an invalid response');
@@ -1175,7 +1182,9 @@ async function fetchIntegrationStatuses(keys = INTEGRATION_STATUS_KEYS, options 
     } catch (error) {
       selectedKeys.forEach(key => setIntegrationStatus(key, {
         status: 'unavailable',
-        message: 'Live status API is unavailable. Start the API server and configure provider secrets on the server.',
+        message: error?.status === 403
+          ? 'You do not have access to this organization integration.'
+          : (error?.message || 'Live integration status is unavailable.'),
         checkedAt: new Date().toISOString()
       }));
       console.warn('[Integration Status]', error.message);
@@ -1250,9 +1259,10 @@ async function testIntegrationConnection(key, candidateValues = null) {
       try { token = await window.NB_AUTH.getAccessToken(); } catch (_) {}
     }
     if (!token) {
-      token = window.supabaseConfig?.accessToken || localStorage.getItem('sb-access-token') || '';
+      showToast('Sign in to test integration credentials.', 'error');
+      return { success: false, code: 'AUTH_REQUIRED', message: 'Sign in to test integration credentials.' };
     }
-    if (token) headers['Authorization'] = `Bearer ${token}`;
+    headers['Authorization'] = `Bearer ${token}`;
 
     const res = await fetch('/api/integration-status?route=test-connection', {
       method: 'POST',
@@ -1350,7 +1360,9 @@ function openIntegrationEditor(key) {
     } else {
       input = document.createElement('input');
       input.type = field.type || 'text';
-      input.placeholder = field.placeholder || '';
+      const hasSavedSecret = field.type === 'password' && integrationServerConfigs[key]?.hasToken;
+      input.placeholder = hasSavedSecret ? 'Saved securely — leave blank to keep' : (field.placeholder || '');
+      if (hasSavedSecret) input.dataset.savedSecret = 'true';
     }
     input.className = 'form-input';
     input.id = `integration-${field.id}`;
@@ -1474,7 +1486,7 @@ function initIntegrationEditor() {
           payload.status?.connected
             ? `${definition.title} connected and saved successfully.`
             : `${definition.title} saved successfully. ${payload.status?.message || ''}`,
-          payload.status?.connected ? 'success' : 'success'
+          payload.status?.connected ? 'success' : 'error'
         );
         return;
       } catch (error) {
@@ -1488,7 +1500,12 @@ function initIntegrationEditor() {
       }
     }
 
-    // Local-only fallback for non-server managed integrations
+    // Integrations with secrets must be validated and stored by a server endpoint.
+    if (definition.fields.some(field => field.type === 'password' || field.serverEnv)) {
+      showToast(definition.title + ' cannot be saved until its secure server integration is available. Nothing was saved.', 'error');
+      return;
+    }
+
     const localOnly = {};
     Object.entries(values).forEach(([fieldId, value]) => {
       const field = definition.fields.find(f => f.id === fieldId);

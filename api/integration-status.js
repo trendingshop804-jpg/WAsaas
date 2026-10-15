@@ -8,7 +8,7 @@ import {
   checkTwilio
 } from './_integration-status.js';
 import { createSupabaseAdminClient, requireOrgAccess } from './_supabase.js';
-import { encryptToken } from './_crypto.js';
+import { decryptToken, encryptToken } from './_crypto.js';
 
 /**
  * GET  /api/integration-status[?integration=whatsapp]
@@ -21,6 +21,21 @@ import { encryptToken } from './_crypto.js';
  */
 const TWILIO_SID_PATTERN = /^AC[0-9a-fA-F]{32}$/;
 const ALLOWED_TWILIO_REGIONS = new Set(['US1', 'IE1', 'IN1', 'AU1', 'JP1', 'BR1', 'DE1', 'SG1']);
+
+function validationHttpStatus(status = {}) {
+  if (status.code === 'INVALID_CREDENTIALS' || status.status === 'token_expired') return 401;
+  if (status.code === 'PERMISSION_ERROR' || status.status === 'permission_missing') return 403;
+  if (status.code === 'CONNECTION_ERROR' || status.status === 'unavailable') return 504;
+  return 400;
+}
+
+function rejectInvalidCredentials(res, status) {
+  return res.status(validationHttpStatus(status)).json({
+    success: false,
+    error: status?.message || 'Provider credentials could not be verified. Nothing was saved.',
+    status
+  });
+}
 
 /**
  * POST /api/integration-status
@@ -90,6 +105,20 @@ async function saveCredentials(req, res) {
 
     const authTokenRaw = String(body.authToken || body.auth_token || body['auth-token'] || '').trim();
     let authTokenEncrypted = existing?.auth_token_encrypted || null;
+    const validationToken = authTokenRaw || (authTokenEncrypted ? await decryptToken(authTokenEncrypted) : '');
+
+    if (!validationToken) {
+      return res.status(400).json({ error: 'Auth token is required for a new Twilio connection.' });
+    }
+
+    const validation = await checkTwilio({
+      accountSid,
+      authToken: validationToken,
+      fromNumber,
+      organizationId: access.organizationId,
+      testingCandidate: true
+    });
+    if (!validation?.connected) return rejectInvalidCredentials(res, validation);
 
     if (authTokenRaw) {
       try {
@@ -97,10 +126,6 @@ async function saveCredentials(req, res) {
       } catch (error) {
         return res.status(500).json({ error: 'Could not secure the auth token. Check server encryption secret.' });
       }
-    }
-
-    if (!authTokenEncrypted) {
-      return res.status(400).json({ error: 'Auth token is required for a new Twilio connection.' });
     }
 
     const row = {
@@ -123,8 +148,7 @@ async function saveCredentials(req, res) {
       return res.status(500).json({ error: `Could not save Twilio connection: ${saveError.message}` });
     }
 
-    const status = await getIntegrationStatus('twilio', { organizationId: access.organizationId });
-    return res.status(200).json({ success: true, connection: saved, status });
+    return res.status(200).json({ success: true, connection: saved, status: validation });
   }
 
   // ── 2. WHATSAPP CLOUD API SAVE ───────────────────────────────────────────
@@ -147,6 +171,20 @@ async function saveCredentials(req, res) {
       .maybeSingle();
 
     let accessTokenEncrypted = existing?.access_token_encrypted || null;
+    const validationToken = accessTokenRaw || (accessTokenEncrypted ? await decryptToken(accessTokenEncrypted) : '');
+
+    if (!validationToken) {
+      return res.status(400).json({ error: 'WhatsApp Permanent Access Token is required.' });
+    }
+
+    const validation = await checkWhatsApp({
+      accessToken: validationToken,
+      phoneNumberId,
+      wabaId,
+      organizationId: access.organizationId,
+      testingCandidate: true
+    });
+    if (!validation?.connected) return rejectInvalidCredentials(res, validation);
 
     if (accessTokenRaw) {
       try {
@@ -154,10 +192,6 @@ async function saveCredentials(req, res) {
       } catch (error) {
         return res.status(500).json({ error: 'Could not secure WhatsApp token.' });
       }
-    }
-
-    if (!accessTokenEncrypted) {
-      return res.status(400).json({ error: 'WhatsApp Permanent Access Token is required.' });
     }
 
     const row = {
@@ -181,8 +215,7 @@ async function saveCredentials(req, res) {
       return res.status(500).json({ error: `Could not save WhatsApp connection: ${saveError.message}` });
     }
 
-    const status = await getIntegrationStatus('whatsapp', { organizationId: access.organizationId });
-    return res.status(200).json({ success: true, connection: saved, status });
+    return res.status(200).json({ success: true, connection: saved, status: validation });
   }
 
   // ── 3. INSTAGRAM GRAPH API SAVE ──────────────────────────────────────────
@@ -243,6 +276,21 @@ async function saveCredentials(req, res) {
       .maybeSingle();
 
     let accessTokenEncrypted = existing?.access_token_encrypted || null;
+    const validationToken = accessTokenRaw || (accessTokenEncrypted ? await decryptToken(accessTokenEncrypted) : '');
+
+    if (!validationToken) {
+      return res.status(400).json({ error: 'Instagram Access Token is required.' });
+    }
+
+    const validation = await checkInstagram({
+      accessToken: validationToken,
+      accountId: instagramBusinessId,
+      username,
+      pageId,
+      organizationId: access.organizationId,
+      testingCandidate: true
+    });
+    if (!validation?.connected) return rejectInvalidCredentials(res, validation);
 
     if (accessTokenRaw) {
       try {
@@ -250,10 +298,6 @@ async function saveCredentials(req, res) {
       } catch (error) {
         return res.status(500).json({ error: 'Could not secure Instagram token.' });
       }
-    }
-
-    if (!accessTokenEncrypted) {
-      return res.status(400).json({ error: 'Instagram Access Token is required.' });
     }
 
     const row = {
@@ -276,11 +320,10 @@ async function saveCredentials(req, res) {
       return res.status(500).json({ error: `Could not save Instagram connection: ${saveError.message}` });
     }
 
-    const status = await getIntegrationStatus('instagram', { organizationId: access.organizationId });
     return res.status(200).json({
       success: true,
       connection: saved,
-      status,
+      status: validation,
       configured: true,
       businessId: saved?.instagram_business_id || instagramBusinessId,
       username: saved?.instagram_username || username || null,
@@ -341,14 +384,9 @@ export default async function handler(req, res) {
         ''
       ).trim();
 
-      let organizationId = body.organizationId || query.organizationId || null;
-      try {
-        const { getBearerToken, verifyOrgAccess } = await import('./_supabase.js');
-        if (getBearerToken(req)) {
-          const access = await verifyOrgAccess(req);
-          if (access?.organizationId) organizationId = access.organizationId;
-        }
-      } catch (e) {}
+      const access = await requireOrgAccess(req, res, null);
+      if (!access) return;
+      const organizationId = access.organizationId;
 
       let result = null;
       if (normalizedKey === 'whatsapp') {
@@ -447,14 +485,9 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
-  let organizationId = null;
-  try {
-    const { getBearerToken, verifyOrgAccess } = await import('./_supabase.js');
-    if (getBearerToken(req)) {
-      const access = await verifyOrgAccess(req);
-      if (access?.organizationId) organizationId = access.organizationId;
-    }
-  } catch (e) {}
+  const access = await requireOrgAccess(req, res, null);
+  if (!access) return;
+  const organizationId = access.organizationId;
 
   const requested = query.integration || new URL(req.url || '/api/integration-status', 'http://localhost').searchParams.get('integration');
   let keys = INTEGRATION_KEYS;

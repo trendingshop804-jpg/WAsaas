@@ -22,7 +22,7 @@ const ORG = '11111111-1111-4111-8111-111111111111';
 const OTHER_ORG = '22222222-2222-4222-8222-222222222222';
 const USER = '764e9eab-26e5-4cdd-b554-25a41a25ea35';
 const TENANT_PHONE_NUMBER_ID = '5550001111';
-const TENANT_TOKEN = 'tenant-scoped-token';
+const TENANT_TOKEN = 'EAAtenant-scoped-token';
 
 const calls = { mediaUpload: [], messages: [], storage: [], insert: [], metaAuth: [] };
 
@@ -66,7 +66,7 @@ globalThis.fetch = async (input, init = {}) => {
     return json([{
       organization_id: ORG,
       phone_number_id: TENANT_PHONE_NUMBER_ID,
-      access_token: mode.tenantToken,      // plaintext branch, avoids crypto setup
+      access_token_encrypted: mode.tenantToken,
       is_active: true
     }]);
   }

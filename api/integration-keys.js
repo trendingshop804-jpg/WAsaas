@@ -27,6 +27,54 @@ function requireAdmin(access, res) {
   res.status(403).json({ error: 'Only an Owner or Admin can manage integration API keys.' });
   return false;
 }
+function validatedHttpsUrl(value) {
+  let url;
+  try { url = new URL(String(value || '').trim()); } catch { return null; }
+  if (url.protocol !== 'https:' || url.username || url.password) return null;
+  const host = url.hostname.toLowerCase();
+  if (host === 'localhost' || host === '127.0.0.1' || host === '::1' || host.endsWith('.local')) return null;
+  if (/^(10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.)/.test(host)) return null;
+  return url.toString();
+}
+
+async function verifyExternalConnection(baseUrl, apiKey) {
+  const safeUrl = validatedHttpsUrl(baseUrl);
+  if (!safeUrl) {
+    return { ok: false, httpStatus: 400, message: 'A public HTTPS API base URL is required for live validation.' };
+  }
+  if (!apiKey) {
+    return { ok: false, httpStatus: 400, message: 'API key or access token is required.' };
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 7000);
+  try {
+    const response = await fetch(safeUrl, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'X-API-Key': apiKey,
+        'User-Agent': 'NextBright-CRM-Connector/2.0'
+      },
+      redirect: 'error',
+      signal: controller.signal
+    });
+    if (!response.ok) {
+      return {
+        ok: false,
+        httpStatus: response.status,
+        message: response.status === 401 || response.status === 403
+          ? `Provider rejected the API key (HTTP ${response.status}). Nothing was saved.`
+          : `Provider validation failed with HTTP ${response.status}. Nothing was saved.`
+      };
+    }
+    return { ok: true, httpStatus: response.status, message: `Connection verified successfully (HTTP ${response.status}).` };
+  } catch (error) {
+    return { ok: false, httpStatus: 502, message: `Endpoint validation failed: ${error?.name === 'AbortError' ? 'request timed out' : (error.message || 'unreachable endpoint')}. Nothing was saved.` };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
@@ -71,13 +119,16 @@ export default async function handler(req, res) {
   if (req.method === 'POST' && body.action === 'save-connection') {
     const name = safeName(body.name);
     const rawKey = String(body.apiKey || '').trim();
-    const baseUrl = String(body.baseUrl || '').trim().slice(0, 500) || null;
+    const baseUrl = String(body.baseUrl || '').trim().slice(0, 500);
 
     if (!name) return res.status(400).json({ error: 'Software or CRM name is required.' });
     if (!rawKey) return res.status(400).json({ error: 'API key or access token is required.' });
-    if (baseUrl && !/^https?:\/\//i.test(baseUrl)) {
-      return res.status(400).json({ error: 'Base URL must start with https://' });
+    if (!validatedHttpsUrl(baseUrl)) {
+      return res.status(400).json({ error: 'A public HTTPS API base URL is required to validate the key.' });
     }
+
+    const validation = await verifyExternalConnection(baseUrl, rawKey);
+    if (!validation.ok) return res.status(validation.httpStatus >= 500 ? 502 : 400).json({ error: validation.message, validation });
 
     try {
       const encrypted = await encryptToken(rawKey);
@@ -126,45 +177,14 @@ export default async function handler(req, res) {
       }
     }
 
-    if (!baseUrl) {
-      return res.status(200).json({
-        success: true,
-        status: 'valid_key_format',
-        message: 'API key is formatted properly. (Add a base URL to test live HTTP ping).'
-      });
-    }
-
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 7000);
-      const testRes = await fetch(baseUrl, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'X-API-Key': apiKey,
-          'User-Agent': 'NexusLead-CRM-Connector/2.0'
-        },
-        signal: controller.signal
-      });
-      clearTimeout(timeout);
-
-      return res.status(200).json({
-        success: true,
-        status: testRes.ok ? 'connected' : 'reachable_auth_check',
-        httpStatus: testRes.status,
-        message: testRes.ok
-          ? `✓ Successfully connected to ${baseUrl} (HTTP ${testRes.status})`
-          : `Connected to server (${baseUrl}), responded with HTTP ${testRes.status}. Key stored.`
-      });
-    } catch (err) {
-      return res.status(200).json({
-        success: false,
-        status: 'unreachable',
-        message: `Endpoint check failed: ${err.message || 'Host unreachable or network timeout'}`
-      });
-    }
+    const validation = await verifyExternalConnection(baseUrl, apiKey);
+    return res.status(validation.ok ? 200 : (validation.httpStatus >= 500 ? 502 : 400)).json({
+      success: validation.ok,
+      status: validation.ok ? 'connected' : 'validation_failed',
+      httpStatus: validation.httpStatus,
+      message: validation.message
+    });
   }
-
   // POST action: generate-api-key (Create platform API key for external apps to call our SaaS)
   if (req.method === 'POST' && body.action === 'generate-api-key') {
     const name = safeName(body.name);

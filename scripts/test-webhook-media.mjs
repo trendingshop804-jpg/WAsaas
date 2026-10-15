@@ -19,7 +19,7 @@ const state = {
   selectResult: [],
   leadsInDb: [],
   conversationsInDb: [],
-  connectionsInDb: [{ organization_id: 'org_1', phone_number_id: '1234567890', is_active: true, access_token: 'test-tenant-token' }],
+  connectionsInDb: [{ organization_id: 'org_1', phone_number_id: '1234567890', is_active: true, access_token_encrypted: 'EAAtest-tenant-token' }],
   rows: [],
 };
 
@@ -305,7 +305,7 @@ await test('media download sends the bearer token to lookaside', async () => {
   await webhook({ method: 'POST', body: mediaPayload('document', 'MEDIA_1') }, res);
   assert.equal(res.statusCode, 200);
   assert.equal(state.mediaDownload.length, 1, 'expected one binary download');
-  assert.equal(state.mediaDownload[0].headers.Authorization, 'Bearer test-tenant-token');
+  assert.equal(state.mediaDownload[0].headers.Authorization, 'Bearer EAAtest-tenant-token');
   assert.notEqual(
     state.mediaDownload[0].headers.Authorization,
     `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`,
@@ -417,7 +417,7 @@ await test('an inbound message after a receipt change in the same Meta delivery 
   state.selectResult = [];
   state.leadsInDb = [];
   state.conversationsInDb = [];
-  state.connectionsInDb = [{ organization_id: 'org_1', phone_number_id: '1234567890', is_active: true, access_token: 'test-tenant-token' }];
+  state.connectionsInDb = [{ organization_id: 'org_1', phone_number_id: '1234567890', is_active: true, access_token_encrypted: 'EAAtest-tenant-token' }];
 
   const batch = {
     entry: [{
@@ -499,7 +499,7 @@ await test('unknown phone_number_id is dropped and writes nothing (fail closed)'
   state.selectResult = [];
   state.leadsInDb = [];
   state.conversationsInDb = [];
-  state.connectionsInDb = [{ organization_id: 'org_1', phone_number_id: '1234567890', is_active: true, access_token: 'test-tenant-token' }];
+  state.connectionsInDb = [{ organization_id: 'org_1', phone_number_id: '1234567890', is_active: true, access_token_encrypted: 'EAAtest-tenant-token' }];
 
   const res = mockRes();
   await webhook({ method: 'POST', body: textPayload('unmapped number', 'MSG_UNMAPPED_1', '918111986637', '9999999999') }, res);
@@ -515,8 +515,8 @@ await test('phone_number_id resolves to its own org, never a guessed one', async
   state.leadsInDb = [];
   state.conversationsInDb = [];
   state.connectionsInDb = [
-    { organization_id: 'org_1', phone_number_id: '1234567890', is_active: true, access_token: 'test-tenant-token' },
-    { organization_id: 'org_2', phone_number_id: '5555555555', is_active: true, access_token: 'other-tenant-token' },
+    { organization_id: 'org_1', phone_number_id: '1234567890', is_active: true, access_token_encrypted: 'EAAtest-tenant-token' },
+    { organization_id: 'org_2', phone_number_id: '5555555555', is_active: true, access_token_encrypted: 'EAAother-tenant-token' },
   ];
 
   const res = mockRes();
@@ -535,7 +535,7 @@ await test('an inactive connection is not used to resolve a tenant', async () =>
   state.leadsInDb = [];
   state.conversationsInDb = [];
   state.connectionsInDb = [
-    { organization_id: 'org_1', phone_number_id: '1234567890', is_active: false, access_token: 'test-tenant-token' },
+    { organization_id: 'org_1', phone_number_id: '1234567890', is_active: false, access_token_encrypted: 'EAAtest-tenant-token' },
   ];
 
   const res = mockRes();
@@ -553,7 +553,7 @@ await test('a lead stored with a leading 0 still matches the full international 
   state.conversationsInDb = [
     { id: 'conv_zero_1', organization_id: 'org_1', lead_id: 'lead_zero_1', channel: 'whatsapp' }
   ];
-  state.connectionsInDb = [{ organization_id: 'org_1', phone_number_id: '1234567890', is_active: true, access_token: 'test-tenant-token' }];
+  state.connectionsInDb = [{ organization_id: 'org_1', phone_number_id: '1234567890', is_active: true, access_token_encrypted: 'EAAtest-tenant-token' }];
 
   const res = mockRes();
   await webhook({ method: 'POST', body: textPayload('zero prefixed', 'MSG_ZERO_1') }, res);
@@ -574,7 +574,7 @@ await test('a non-Indian lead number is matched without a 91 prefix being invent
   state.conversationsInDb = [
     { id: 'conv_us_1', organization_id: 'org_1', lead_id: 'lead_us_1', channel: 'whatsapp' }
   ];
-  state.connectionsInDb = [{ organization_id: 'org_1', phone_number_id: '1234567890', is_active: true, access_token: 'test-tenant-token' }];
+  state.connectionsInDb = [{ organization_id: 'org_1', phone_number_id: '1234567890', is_active: true, access_token_encrypted: 'EAAtest-tenant-token' }];
 
   const res = mockRes();
   await webhook({ method: 'POST', body: textPayload('hello from the US', 'MSG_US_1', '14155551234') }, res);
@@ -595,7 +595,7 @@ await test('distinct numbers sharing their last 7 digits are NOT treated as one 
   state.conversationsInDb = [
     { id: 'conv_a', organization_id: 'org_1', lead_id: 'lead_a', channel: 'whatsapp' },
   ];
-  state.connectionsInDb = [{ organization_id: 'org_1', phone_number_id: '1234567890', is_active: true, access_token: 'test-tenant-token' }];
+  state.connectionsInDb = [{ organization_id: 'org_1', phone_number_id: '1234567890', is_active: true, access_token_encrypted: 'EAAtest-tenant-token' }];
 
   // Different country prefix, same trailing 7 digits.
   const res = mockRes();
@@ -612,7 +612,7 @@ await test('one bad message does not discard the rest of the batch', async () =>
   state.selectResult = [];
   state.leadsInDb = [];
   state.conversationsInDb = [];
-  state.connectionsInDb = [{ organization_id: 'org_1', phone_number_id: '1234567890', is_active: true, access_token: 'test-tenant-token' }];
+  state.connectionsInDb = [{ organization_id: 'org_1', phone_number_id: '1234567890', is_active: true, access_token_encrypted: 'EAAtest-tenant-token' }];
 
   const batch = textPayload('first', 'MSG_BATCH_1');
   const v = batch.entry[0].changes[0].value;
@@ -657,7 +657,7 @@ await test('a message already stored is not duplicated', async () => {
 });
 
 // restore the default connection for the api/messages.js section
-  state.connectionsInDb = [{ organization_id: 'org_1', phone_number_id: '1234567890', is_active: true, access_token: 'test-tenant-token' }];
+  state.connectionsInDb = [{ organization_id: 'org_1', phone_number_id: '1234567890', is_active: true, access_token_encrypted: 'EAAtest-tenant-token' }];
 
 console.log('=== api/messages.js ===');
 const SESSION = { headers: { Authorization: 'Bearer test-session-token' } };

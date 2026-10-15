@@ -55,84 +55,13 @@
           token = await window.NB_AUTH.getAccessToken();
         } catch (_) {}
       }
-      if (!token) {
-        token = window.supabaseConfig?.accessToken || localStorage.getItem('sb-access-token') || '';
-      }
-      if (token && !headers['Authorization']) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
+      if (!token) throw new Error('Sign in to manage integrations.');
+      if (!headers['Authorization']) headers['Authorization'] = `Bearer ${token}`;
 
-      try {
-        const res = await fetch(endpoint, { credentials: 'omit', ...options, headers });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error || data.message || `Request failed (HTTP ${res.status})`);
-        return data;
-      } catch (err) {
-        if (err.message && !err.message.includes('Unauthorized')) {
-          console.warn(`[IntegrationsManager] API fallback for ${endpoint}:`, err.message);
-        }
-        return this._localFallback(endpoint, options || {});
-      }
-    }
-
-    _localFallback(endpoint, req) {
-      const savedConns = JSON.parse(localStorage.getItem('nl_saved_external_connections') || '[]');
-      const savedKeys = JSON.parse(localStorage.getItem('nl_saved_platform_api_keys') || '[]');
-
-      if (endpoint.includes('/api/integration-keys')) {
-        if (!req.method || req.method === 'GET') {
-          return { connections: savedConns, apiKeys: savedKeys };
-        }
-        if (req.method === 'POST') {
-          const body = req.body || {};
-          if (body.action === 'save-connection') {
-            const row = {
-              id: 'conn_' + Date.now(),
-              name: body.name,
-              base_url: body.baseUrl || null,
-              api_key_hint: body.apiKey ? (body.apiKey.length <= 8 ? '••••••••' : `${body.apiKey.slice(0, 4)}••••${body.apiKey.slice(-4)}`) : '••••••••',
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString()
-            };
-            const existingIdx = savedConns.findIndex(c => c.name.toLowerCase() === body.name.toLowerCase());
-            if (existingIdx >= 0) savedConns[existingIdx] = row;
-            else savedConns.push(row);
-            localStorage.setItem('nl_saved_external_connections', JSON.stringify(savedConns));
-            return { success: true, connection: row };
-          }
-          if (body.action === 'generate-api-key') {
-            const rawKey = `nl_live_${Math.random().toString(36).substring(2)}${Math.random().toString(36).substring(2)}${Date.now()}`;
-            const row = {
-              id: 'key_' + Date.now(),
-              name: body.name || 'API Key',
-              key_prefix: rawKey.slice(0, 12),
-              created_at: new Date().toISOString(),
-              last_used_at: null,
-              revoked_at: null
-            };
-            savedKeys.unshift(row);
-            localStorage.setItem('nl_saved_platform_api_keys', JSON.stringify(savedKeys));
-            return { success: true, apiKey: rawKey, record: row };
-          }
-          if (body.action === 'test-connection') {
-            return { success: false, status: 'error', message: 'Live server connection required to test integrations.' };
-          }
-        }
-        if (req.method === 'DELETE') {
-          const urlParams = new URLSearchParams(endpoint.split('?')[1] || '');
-          const id = urlParams.get('id');
-          const type = urlParams.get('type');
-          if (type === 'connection') {
-            const updated = savedConns.filter(c => c.id !== id);
-            localStorage.setItem('nl_saved_external_connections', JSON.stringify(updated));
-          } else {
-            const updated = savedKeys.filter(k => k.id !== id);
-            localStorage.setItem('nl_saved_platform_api_keys', JSON.stringify(updated));
-          }
-          return { success: true };
-        }
-      }
-      return { success: false, error: 'Operation not supported offline' };
+      const res = await fetch(endpoint, { credentials: 'omit', ...options, headers });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || data.message || `Request failed (HTTP ${res.status})`);
+      return data;
     }
 
     async loadData() {
@@ -143,7 +72,12 @@
         this.renderConnections();
         this.renderApiKeys();
       } catch (err) {
+        this.connections = [];
+        this.apiKeys = [];
+        this.renderConnections();
+        this.renderApiKeys();
         console.error('[IntegrationsManager] Load error:', err);
+        this.toast(err.message || 'Could not load integrations.', 'error');
       }
     }
 
@@ -415,7 +349,7 @@ print(response.json())`,
                     <div style="font-size: 0.72rem; color: var(--text-muted); word-break: break-all;">${conn.base_url ? esc(conn.base_url) : 'Token Only (No Base URL)'}</div>
                   </div>
                 </div>
-                <span class="badge badge-qualified" style="font-size: 0.7rem; flex-shrink: 0;">Encrypted</span>
+                <span class="badge badge-qualified" style="font-size: 0.7rem; flex-shrink: 0;">Connected</span>
               </div>
               
               <div style="background: var(--navy-50); border-radius: 6px; padding: 8px 10px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;">

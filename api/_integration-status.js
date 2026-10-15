@@ -149,9 +149,10 @@ async function checkWhatsApp(customConfig = {}) {
 
   let accessToken = customConfig.accessToken ? String(customConfig.accessToken).trim() : '';
   let phoneNumberId = customConfig.phoneNumberId ? String(customConfig.phoneNumberId).trim() : '';
+  let tenantConfig = null;
 
   if (!isCandidateTest) {
-    const tenantConfig = await getWhatsAppTenantConfig(customConfig.organizationId);
+    tenantConfig = await getWhatsAppTenantConfig(customConfig.organizationId);
     accessToken = accessToken || tenantConfig?.accessToken || firstEnv(
       'WHATSAPP_ACCESS_TOKEN',
       'WA_ACCESS_TOKEN',
@@ -241,7 +242,13 @@ async function checkWhatsApp(customConfig = {}) {
         displayName: verifiedName,
         verifiedName,
         phoneNumberId,
-        qualityRating: payload.quality_rating || 'UNKNOWN'
+        qualityRating: payload.quality_rating || 'UNKNOWN',
+        config: {
+          phoneNumberId,
+          wabaId: customConfig.wabaId || tenantConfig?.wabaId || null,
+          displayName: verifiedName,
+          hasToken: true
+        }
       }
     );
   } catch (error) {
@@ -494,7 +501,8 @@ async function getTwilioTenantConfig(organizationId) {
   return {
     accountSid: data.account_sid,
     authToken,
-    fromNumber: data.from_number || null
+    fromNumber: data.from_number || null,
+    region: data.region || 'US1'
   };
 }
 
@@ -595,7 +603,13 @@ async function checkTwilio(customConfig = {}) {
         displayName:
           payload.friendly_name ||
           payload.account_sid ||
-          null
+          null,
+        config: {
+          accountSid,
+          fromNumber: fromNumber || null,
+          region: customConfig.region || tenantConfig?.region || 'US1',
+          hasToken: true
+        }
       }
     );
   } catch (error) {

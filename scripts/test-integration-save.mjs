@@ -30,6 +30,7 @@ const SESSION_TOKEN = 'mock-session-token';
 
 let membershipRole = 'Owner';
 let membershipError = false;
+let twilioAuthAccepted = true;
 const twilioRows = [];
 const writes = [];
 const lookups = [];
@@ -101,7 +102,9 @@ globalThis.fetch = async (input, options = {}) => {
   }
 
   if (/api\.twilio\.com/.test(url)) {
-    return jsonRes({ account_sid: VALID_SID, friendly_name: 'Test Account' });
+    return twilioAuthAccepted
+      ? jsonRes({ account_sid: VALID_SID, friendly_name: 'Test Account' })
+      : jsonRes({ code: 20003, message: 'Authenticate' }, 401);
   }
 
   throw new Error(`Unexpected fetch to ${url}`);
@@ -135,6 +138,7 @@ const test = async (name, fn) => {
   lookups.length = 0;
   membershipRole = 'Owner';
   membershipError = false;
+  twilioAuthAccepted = true;
   try {
     await fn();
     passed += 1;
@@ -183,6 +187,14 @@ await test('a valid Owner saves the connection for their own org', async () => {
   assert.equal(writes.length, 1);
   assert.equal(writes[0].organization_id, ORG, 'org must come from membership, never the body');
   assert.equal(writes[0].account_sid, VALID_SID);
+});
+await test('provider-rejected credentials are never saved', async () => {
+  twilioAuthAccepted = false;
+  const res = await post({ ...VALID, 'auth-token': 'wrong-token' });
+  assert.equal(res.statusCode, 400, JSON.stringify(res.payload));
+  assert.equal(res.payload.success, false);
+  assert.match(res.payload.error, /rejected|failed|authenticate/i);
+  assert.equal(writes.length, 0, 'invalid provider credentials must not reach the database');
 });
 
 await test('the auth token is encrypted at rest, never stored in plain text', async () => {

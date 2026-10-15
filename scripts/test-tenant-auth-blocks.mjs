@@ -1,4 +1,4 @@
-﻿// scripts/test-tenant-auth-blocks.mjs
+// scripts/test-tenant-auth-blocks.mjs
 // ---------------------------------------------------------------------------
 // Offline authorization tests for the three endpoints that were previously
 // unauthenticated while using the Supabase service-role key with a
@@ -75,7 +75,7 @@ globalThis.fetch = async (url, options = {}) => {
   if (u.includes('/rest/v1/organization_users')) return json(mode.memberships);
   if (u.includes('/rest/v1/whatsapp_connections')) {
     writes.push({ table: 'whatsapp_connections', method: options.method || 'GET' });
-    return json([{ organization_id: ORG, phone_number_id: '5550001111', access_token: 'tenant-token', is_active: true }]);
+    return json([{ organization_id: ORG, phone_number_id: '5550001111', access_token_encrypted: 'EAAtenant-token', is_active: true }]);
   }
   if (u.includes('/rest/v1/instagram_connections')) {
     let org = null;
