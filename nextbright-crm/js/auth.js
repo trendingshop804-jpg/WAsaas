@@ -127,7 +127,9 @@ const NB_AUTH = (() => {
                style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:8px;margin-bottom:14px;font-size:14px">
         <label style="display:block;font-size:12px;font-weight:600;color:#374151;margin-bottom:6px">Password</label>
         <input id="nb-auth-password" type="password" autocomplete="current-password"
-               style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:8px;margin-bottom:16px;font-size:14px">
+               style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:8px;margin-bottom:10px;font-size:14px">
+        <label style="display:block;font-size:12px;font-weight:600;color:#374151;margin-bottom:6px">Organization name <span style="font-weight:400">(for sign up)</span></label>
+        <input id="nb-auth-workspace" type="text" autocomplete="organization" placeholder="Your business name" style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:8px;margin-bottom:16px;font-size:14px">
         <div style="display:flex;gap:8px;margin-bottom:14px">
           <button id="nb-auth-signin"  style="flex:1;padding:10px;border:0;border-radius:8px;background:#2563eb;color:#fff;font-weight:600;cursor:pointer">Sign in</button>
           <button id="nb-auth-signup"  style="flex:1;padding:10px;border:1px solid #d1d5db;border-radius:8px;background:#fff;color:#374151;font-weight:600;cursor:pointer">Sign up</button>
@@ -148,8 +150,10 @@ const NB_AUTH = (() => {
       if (!email || !password) { errEl.textContent = 'Enter your email and password.'; return; }
       try {
         const sb = await getClient();
+        const workspaceName = workspaceEl?.value.trim() || '';
+        if (mode === 'signup' && !workspaceName) { errEl.textContent = 'Enter your organization name.'; return; }
         const { data, error } = mode === 'signup'
-          ? await sb.auth.signUp({ email, password })
+          ? await sb.auth.signUp({ email, password, options: { data: { workspace_name: workspaceName } } })
           : await sb.auth.signInWithPassword({ email, password });
         if (error) { errEl.textContent = error.message; return; }
         if (!data?.session && mode === 'signup') {

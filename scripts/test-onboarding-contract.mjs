@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+const api = fs.readFileSync(new URL('../api/onboarding.js', import.meta.url), 'utf8');
+const ui = fs.readFileSync(new URL('../nextbright-crm/js/mvp.js', import.meta.url), 'utf8');
+const auth = fs.readFileSync(new URL('../nextbright-crm/js/auth.js', import.meta.url), 'utf8');
+assert.match(api, /getAuthenticatedUser/);
+assert.match(api, /getUserOrganizationIds/);
+assert.match(api, /rows\.length.*ALREADY_PROVISIONED/);
+assert.match(api, /owner_id: auth\.user\.id/);
+assert.match(api, /role: 'Owner'/);
+assert.match(ui, /completeBusinessSetup/);
+assert.match(ui, /\/api\/onboarding/);
+assert.match(auth, /workspace_name: workspaceName/);
+console.log('PASS organization onboarding only provisions the authenticated user when membership is absent.');
