@@ -203,32 +203,14 @@ window.renderCustomers = renderCustomers;
 window.openCustomer360 = async function(name) {
   const modal = document.getElementById('modal-customer-360');
   if (!modal) return;
-
-  const c = window.NB.customers.find(item => item.name === name) || { name, phone: '+91 98765 43210', company: 'Client Enterprise', revenue: 'â‚¹45,000' };
-
-  document.getElementById('c360-name').textContent = c.name;
-  document.getElementById('c360-avatar').textContent = window.NB.initials(c.name);
-  document.getElementById('c360-meta').textContent = `${c.company} Â· Phone: ${c.phone} Â· Total Revenue: ${c.revenue}`;
-
-  const timelineEl = document.getElementById('c360-timeline');
-  timelineEl.innerHTML = `
-    <div style="padding:8px 12px;background:var(--bg-card);border:1px solid var(--border-light);border-radius:6px;">
-      <strong style="color:var(--brand-primary)">Lead Created</strong> â€” Source: Instagram DMs (Yesterday 10:30 AM)
-    </div>
-    <div style="padding:8px 12px;background:var(--bg-card);border:1px solid var(--border-light);border-radius:6px;">
-      <strong style="color:var(--status-success)">WhatsApp Conversation</strong> â€” Customer inquired about services (Yesterday 11:00 AM)
-    </div>
-    <div style="padding:8px 12px;background:var(--bg-card);border:1px solid var(--border-light);border-radius:6px;">
-      <strong style="color:var(--status-purple)">Call Completed</strong> â€” Duration 04:12 by Praveenkumar (Today 09:15 AM)
-    </div>
-    <div style="padding:8px 12px;background:var(--bg-card);border:1px solid var(--border-light);border-radius:6px;">
-      <strong style="color:var(--status-warning)">Appointment Scheduled</strong> â€” Consultation booked for 4:00 PM today
-    </div>
-  `;
-
+  const customer = window.NB.customers.find(item => item.name === name);
+  if (!customer) { window.showToast?.('Customer record is unavailable.', 'error'); return; }
+  document.getElementById('c360-name').textContent = customer.name;
+  document.getElementById('c360-avatar').textContent = window.NB.initials(customer.name);
+  document.getElementById('c360-meta').textContent = `${customer.company || '—'} · Phone: ${customer.phone || '—'} · Total Revenue: ${customer.revenue || '—'}`;
+  document.getElementById('c360-timeline').innerHTML = '<div class="empty-state">No customer activity has been loaded.</div>';
   modal.classList.add('open');
 };
-
 /* ============================================================
    DEALS Pipeline
    ============================================================ */

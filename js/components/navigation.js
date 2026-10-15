@@ -70,10 +70,10 @@ class NavigationComponent {
     const org = window.appState.getCurrentOrg();
     const orgNameEl = document.getElementById('current-org-name');
     const orgPlanEl = document.getElementById('current-org-plan');
-    if (orgNameEl) orgNameEl.textContent = org.name;
-    if (orgPlanEl) orgPlanEl.textContent = org.plan;
+    if (orgNameEl) orgNameEl.textContent = org?.name || 'Complete business setup';
+    if (orgPlanEl) orgPlanEl.textContent = org?.plan || 'Workspace unavailable';
 
-    this.updateKillSwitchUI(org.isPaused);
+    this.updateKillSwitchUI(Boolean(org?.isPaused));
   }
 
   updateKillSwitchUI(isPaused) {

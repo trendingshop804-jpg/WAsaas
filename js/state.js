@@ -1,193 +1,54 @@
-/* ==========================================================================
-   NexusLead AI - Central Reactive State Store & Event Bus
-   ========================================================================== */
+/* Tenant-scoped client state. Production never starts from bundled records. */
+(function () {
+  'use strict';
 
-class StateStore {
-  constructor() {
-    this.listeners = new Map();
-    this.state = this.loadInitialState();
+  function emptyState() {
+    return {
+      currentUser: null, currentOrgId: null, organizations: [],
+      leads: [], conversations: [], campaigns: [], products: [], orders: [],
+      followUps: [], tasks: [], aiAgents: [], instagramReplyRules: [],
+      instagramDmRules: [], instagramScheduledPosts: [], auditLogs: [],
+      customers: [], deals: {}, calls: [], activityFeed: [], appointments: []
+    };
   }
 
-  loadInitialState() {
-    const normalizeDigits = (p) => {
-      if (!p) return '';
-      const digits = String(p).replace(/[^0-9]/g, '');
-      return digits.length >= 10 ? digits.slice(-10) : digits;
-    };
-
-    const saved = localStorage.getItem('nexuslead_state_v1');
-    if (saved) {
+  class StateStore {
+    constructor() { this.listeners = new Map(); this.cacheKey = null; this.state = emptyState(); }
+    configureScope({ userId, organization } = {}) {
+      const nextKey = userId && organization?.id ? `nextbright:workspace:v2:${userId}:${organization.id}` : null;
+      if (nextKey === this.cacheKey) return;
+      this.clear({ preserveUser: false });
+      this.cacheKey = nextKey;
+      if (!nextKey) return;
       try {
-        const parsed = JSON.parse(saved);
-        if (parsed.fakeDataCleared) {
-          return {
-            leads: [],
-            conversations: [],
-            campaigns: [],
-            products: [],
-            orders: [],
-            followUps: [],
-            aiAgents: [],
-            instagramReplyRules: [],
-            instagramDmRules: [],
-            instagramScheduledPosts: [],
-            auditLogs: [],
-            ...parsed
-          };
-        }
-
-        if (parsed.organizations && window.DEMO_DATA.organizations) {
-          const primaryOrg = window.DEMO_DATA.organizations[0];
-          const existing = parsed.organizations.find(o => o.id === primaryOrg.id);
-          if (existing) {
-            existing.name = primaryOrg.name;
-            existing.whatsappConnected = primaryOrg.whatsappConnected;
-            existing.whatsappNumber = primaryOrg.whatsappNumber;
-            existing.whatsappProvider = primaryOrg.whatsappProvider;
-            existing.phoneId = primaryOrg.phoneId;
-            existing.whatsappToken = primaryOrg.whatsappToken;
-            existing.wabaId = primaryOrg.wabaId;
-            existing.about = primaryOrg.about;
-            existing.profilePictureUrl = primaryOrg.profilePictureUrl;
-            existing.instagramConnected = primaryOrg.instagramConnected;
-            existing.instagramUsername = primaryOrg.instagramUsername;
-            existing.instagramBusinessId = primaryOrg.instagramBusinessId;
-            existing.instagramPageId = primaryOrg.instagramPageId;
-          }
-        }
-
-        // Merge leads without dropping demo leads
-        const demoLeads = (window.DEMO_DATA.leads || []).slice();
-        const savedLeads = Array.isArray(parsed.leads) ? parsed.leads : [];
-        const mergedLeads = [...savedLeads];
-        for (const dl of demoLeads) {
-          const dlDigits = normalizeDigits(dl.phone);
-          const alreadyExists = mergedLeads.some(l => l.id === dl.id || (dlDigits && normalizeDigits(l.phone) === dlDigits));
-          if (!alreadyExists) {
-            mergedLeads.push(dl);
-          }
-        }
-        parsed.leads = mergedLeads;
-
-        // Deduplicate conversations by normalized phone number
-        if (parsed.conversations && Array.isArray(parsed.conversations)) {
-          const convMap = new Map();
-          for (const c of parsed.conversations) {
-            const phoneKey = normalizeDigits(c.phone) || c.leadId || c.id;
-            if (!convMap.has(phoneKey)) {
-              convMap.set(phoneKey, { ...c, messages: Array.isArray(c.messages) ? [...c.messages] : [] });
-            } else {
-              const existingConv = convMap.get(phoneKey);
-              // Merge messages without duplicates
-              const existingMsgIds = new Set((existingConv.messages || []).map(m => m.id || `${m.text}_${m.timestamp}`));
-              for (const m of (c.messages || [])) {
-                const mKey = m.id || `${m.text}_${m.timestamp}`;
-                if (!existingMsgIds.has(mKey)) {
-                  existingMsgIds.add(mKey);
-                  existingConv.messages.push(m);
-                }
-              }
-              existingConv.lastMessage = c.lastMessage || existingConv.lastMessage;
-              existingConv.lastTimestamp = c.lastTimestamp || existingConv.lastTimestamp;
-              existingConv.unreadCount = Math.max(existingConv.unreadCount || 0, c.unreadCount || 0);
-            }
-          }
-          parsed.conversations = Array.from(convMap.values());
-        }
-
-        return { ...window.DEMO_DATA, ...parsed };
-      } catch (e) {
-        console.warn('Could not parse saved state, using demo data', e);
-      }
+        const saved = JSON.parse(sessionStorage.getItem(nextKey) || 'null');
+        if (saved && typeof saved === 'object') this.state = { ...emptyState(), ...saved };
+      } catch (_) { sessionStorage.removeItem(nextKey); }
+      this.state.currentUser = { id: userId };
+      this.state.currentOrgId = organization.id;
+      this.state.organizations = [organization];
+      this.emit('*', { key: 'workspace', value: organization });
     }
-    return JSON.parse(JSON.stringify(window.DEMO_DATA));
-  }
-
-  saveState() {
-    try {
-      localStorage.setItem('nexuslead_state_v1', JSON.stringify(this.state));
-    } catch (e) {
-      console.error('Failed to save state to localStorage', e);
+    clear({ preserveUser = false } = {}) {
+      const currentUser = preserveUser ? this.state.currentUser : null;
+      this.state = emptyState();
+      this.state.currentUser = currentUser;
+      this.cacheKey = null;
+      this.emit('*', { key: 'workspace-cleared', value: null });
     }
+    saveState() { if (this.cacheKey) sessionStorage.setItem(this.cacheKey, JSON.stringify(this.state)); }
+    get(key) { return this.state[key]; }
+    set(key, value) { this.state[key] = value; this.saveState(); this.emit(key, value); this.emit('*', { key, value }); }
+    update(key, fn) { const value = fn(this.state[key]); this.set(key, value); return value; }
+    on(event, callback) { if (!this.listeners.has(event)) this.listeners.set(event, new Set()); this.listeners.get(event).add(callback); return () => this.listeners.get(event).delete(callback); }
+    emit(event, data) { this.listeners.get(event)?.forEach(callback => { try { callback(data); } catch (error) { console.error('State listener error:', error); } }); }
+    getCurrentOrg() { return this.state.organizations.find(org => org.id === this.state.currentOrgId) || null; }
+    switchOrg(orgId) { if (this.state.organizations.some(org => org.id === orgId)) this.set('currentOrgId', orgId); }
+    addAuditLog(action, entity, details, status = 'Success') { this.update('auditLogs', logs => [{ id: `log_${Date.now()}`, timestamp: new Date().toISOString(), action, entity, details, status, actor: this.state.currentUser?.name || 'System' }, ...(logs || [])]); }
+    toggleKillSwitch() { const org = this.getCurrentOrg(); if (!org) return; org.isPaused = !org.isPaused; this.saveState(); this.emit('killSwitchChanged', org.isPaused); }
   }
 
-  get(key) {
-    return this.state[key];
-  }
-
-  set(key, value) {
-    this.state[key] = value;
-    this.saveState();
-    this.emit(key, value);
-    this.emit('*', { key, value });
-  }
-
-  update(key, fn) {
-    const nextVal = fn(this.state[key]);
-    this.set(key, nextVal);
-    return nextVal;
-  }
-
-  on(event, callback) {
-    if (!this.listeners.has(event)) {
-      this.listeners.set(event, new Set());
-    }
-    this.listeners.get(event).add(callback);
-    return () => this.listeners.get(event).delete(callback);
-  }
-
-  emit(event, data) {
-    if (this.listeners.has(event)) {
-      this.listeners.get(event).forEach(cb => {
-        try {
-          cb(data);
-        } catch (err) {
-          console.error(`Error in state listener for ${event}:`, err);
-        }
-      });
-    }
-  }
-
-  getCurrentOrg() {
-    return this.state.organizations.find(o => o.id === this.state.currentOrgId) || this.state.organizations[0];
-  }
-
-  switchOrg(orgId) {
-    const org = this.state.organizations.find(o => o.id === orgId);
-    if (org) {
-      this.state.currentOrgId = orgId;
-      this.saveState();
-      this.emit('orgChanged', org);
-      this.emit('*', { key: 'currentOrgId', value: orgId });
-    }
-  }
-
-  addAuditLog(action, entity, details, status = 'Success') {
-    const newLog = {
-      id: 'log_' + Date.now(),
-      timestamp: new Date().toISOString(),
-      action,
-      entity,
-      actor: this.state.currentUser ? this.state.currentUser.name : 'System',
-      details,
-      status
-    };
-    this.update('auditLogs', logs => [newLog, ...(logs || [])]);
-  }
-
-  toggleKillSwitch() {
-    const org = this.getCurrentOrg();
-    const isPaused = !org.isPaused;
-    org.isPaused = isPaused;
-    this.saveState();
-    this.addAuditLog(
-      isPaused ? 'Emergency Kill-Switch Engaged' : 'Emergency Kill-Switch Disengaged',
-      'All Active Workflows & Campaigns',
-      isPaused ? 'User clicked PAUSE ALL AUTOMATIONS. All outbound queues frozen.' : 'Automations resumed by owner.',
-      isPaused ? 'Paused' : 'Active'
-    );
-    this.emit('killSwitchChanged', isPaused);
-  }
-}
-
-window.appState = new StateStore();
+  window.appState = new StateStore();
+  window.NB = window.NB || {};
+  Object.assign(window.NB, { leads: [], customers: [], deals: {}, calls: [], conversations: [], activityFeed: [], tasks: [], appointments: [] });
+})();

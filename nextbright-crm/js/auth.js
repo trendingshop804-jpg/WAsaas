@@ -1,5 +1,5 @@
-﻿/* ============================================================
-   AUTH.JS â€” Supabase session for the NextBright CRM
+/* ============================================================
+   AUTH.JS — Supabase session for the NextBright CRM
    ============================================================
    Provides a real signed-in session so the CRM can call the
    tenant-scoped API with a genuine user JWT (never the anon key).
@@ -35,8 +35,8 @@ const NB_AUTH = (() => {
           }
         } catch (_) { /* fallback below */ }
 
-        projectUrl = projectUrl || window.supabaseConfig?.projectUrl || FALLBACK_PROJECT_URL;
-        anonKey = anonKey || window.supabaseConfig?.anonKey || FALLBACK_ANON_KEY;
+        projectUrl = projectUrl || window.supabaseConfig?.projectUrl || null;
+        anonKey = anonKey || window.supabaseConfig?.anonKey || null;
 
         if (!projectUrl || !anonKey) throw new Error('Supabase is not configured on the server.');
         if (!window.supabase?.createClient) throw new Error('Supabase JS SDK failed to load.');
@@ -181,7 +181,7 @@ const NB_AUTH = (() => {
    * Resolves once we know the session state. Shows a sign-in panel when Supabase
    * is reachable but nobody is signed in.
    *
-   * The overlay is a convenience, NOT the security boundary â€” every tenant API
+   * The overlay is a convenience, NOT the security boundary — every tenant API
    * independently rejects unauthenticated requests with 401. So if the Supabase
    * config cannot be loaded at all (offline, misconfigured, test harness) the
    * app is left usable and the Inbox simply reports that it needs a sign-in,

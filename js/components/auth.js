@@ -181,13 +181,14 @@ class AuthComponent {
     }
 
     try {
-      await window.authService.signUp({
+      const result = await window.authService.signUp({
         email,
         password,
         fullName,
         workspaceName: workspaceName || `${fullName}'s Workspace`
       });
-      this.enterApplication();
+      if (result.session) this.enterApplication();
+      else this.showError('Check your email to confirm your account before signing in.');
     } catch (err) {
       let msg = err.message || 'Account creation failed. Please try again.';
       if (msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
