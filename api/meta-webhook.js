@@ -863,7 +863,7 @@ async function applyDeliveryStatuses(statuses) {
     const patch = { status: mapped };
     if (mapped === 'failed') {
       patch.error_code = status.errors?.[0]?.code ?? null;
-      patch.error_message = status.errors?.[0]?.title ?? 'Delivery failed';
+      patch.error_message = status.errors?.[0]?.title || status.errors?.[0]?.message || 'Delivery failed';
     }
 
     const { error } = await supabase

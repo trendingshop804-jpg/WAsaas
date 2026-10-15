@@ -53,7 +53,7 @@ class InboxComponent {
           .channel('inbox-realtime')
           .on(
             'postgres_changes',
-            { event: 'INSERT', schema: 'public', table: 'messages' },
+            { event: '*', schema: 'public', table: 'messages' },
             async (payload) => {
               const newMsg = payload.new;
               if (!newMsg || !window.whatsappService) return;
@@ -111,12 +111,14 @@ class InboxComponent {
                 sentByHuman: !newMsg.is_ai,
                 metaMessageId: newMsg.wa_message_id,
                 wa_message_id: newMsg.wa_message_id,
+                error_code: newMsg.error_code || null,
+                error_message: newMsg.error_message || null,
               };
 
               if (!conversation.messages) conversation.messages = [];
-              if (!conversation.messages.some(m => m.id === formattedMsg.id || (formattedMsg.metaMessageId && m.metaMessageId === formattedMsg.metaMessageId) || (formattedMsg.wa_message_id && m.wa_message_id === formattedMsg.wa_message_id))) {
-                conversation.messages.push(formattedMsg);
-              }
+              const existing = conversation.messages.find(m => m.id === formattedMsg.id || (formattedMsg.metaMessageId && m.metaMessageId === formattedMsg.metaMessageId) || (formattedMsg.wa_message_id && m.wa_message_id === formattedMsg.wa_message_id));
+              if (existing) Object.assign(existing, formattedMsg);
+              else conversation.messages.push(formattedMsg);
 
               const lastDisplay = formattedMsg.caption || formattedMsg.text || (msgType !== 'text' ? `📷 ${msgType} message` : '');
               conversation.lastMessage = lastDisplay;
@@ -296,11 +298,7 @@ class InboxComponent {
     // Approved Template Trigger Button
     const templateBtn = document.getElementById('inbox-template-selector-btn');
     const templateBannerBtn = document.getElementById('inbox-open-templates-banner-btn');
-    const handleOpenTemplates = () => {
-      if (window.navigationComponent) {
-        window.navigationComponent.switchView('templates');
-      }
-    };
+    const handleOpenTemplates = () => this.openApprovedTemplateSelector();
     if (templateBtn) templateBtn.addEventListener('click', handleOpenTemplates);
     if (templateBannerBtn) templateBannerBtn.addEventListener('click', handleOpenTemplates);
 
@@ -556,7 +554,8 @@ class InboxComponent {
         console.error('Inbox message send failed:', error);
         const message = window.whatsappService?.getErrorMessage?.(error, 'Unable to send message.')
           || 'Unable to send message.';
-        if (typeof window.showToast === 'function') window.showToast(message, 'error');
+        if (error?.message?.includes('TEMPLATE_REQUIRED') || error?.message?.includes('24-Hour Conversation Window Expired')) this.openApprovedTemplateSelector(text);
+        else if (typeof window.showToast === 'function') window.showToast(message, 'error');
         else alert(message);
       });
     }
@@ -565,6 +564,77 @@ class InboxComponent {
       input.value = '';
       input.style.height = 'auto';
     }
+  }
+
+  async openApprovedTemplateSelector(draftText = '') {
+    const conv = (window.appState.get('conversations') || []).find(c => c.id === this.selectedConvId);
+    if (!conv?.leadId) {
+      if (typeof window.showToast === 'function') window.showToast('Select a WhatsApp conversation first.', 'error');
+      return;
+    }
+
+    let payload;
+    try {
+      const response = await window.apiClient.authenticatedFetch('/api/messages?action=templates');
+      payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload.success) throw new Error(payload.error || 'Could not load approved WhatsApp templates.');
+    } catch (error) {
+      if (typeof window.showToast === 'function') window.showToast(error.message || 'Could not load approved WhatsApp templates.', 'error');
+      else alert(error.message || 'Could not load approved WhatsApp templates.');
+      return;
+    }
+
+    const templates = Array.isArray(payload.templates) ? payload.templates : [];
+    if (!templates.length) {
+      const message = 'No approved WhatsApp templates are available in Meta Business Manager.';
+      if (typeof window.showToast === 'function') window.showToast(message, 'error'); else alert(message);
+      return;
+    }
+
+    document.getElementById('wa-approved-template-modal')?.remove();
+    const modal = document.createElement('div');
+    modal.id = 'wa-approved-template-modal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.62);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px;';
+    const options = templates.map((template, index) => `<option value="${index}">${this.escapeHtml(template.name)} (${this.escapeHtml(template.language || 'en_US')}) - ${this.escapeHtml(template.category || 'UTILITY')}</option>`).join('');
+    modal.innerHTML = `
+      <div role="dialog" aria-modal="true" style="width:min(560px,100%);background:var(--bg-primary,#fff);color:var(--text-primary,#0f172a);border-radius:12px;padding:20px;box-shadow:0 20px 50px rgba(0,0,0,.28);">
+        <h3 style="margin:0 0 8px;">Send approved WhatsApp template</h3>
+        <p style="margin:0 0 16px;font-size:13px;color:var(--text-muted,#64748b);">The 24-hour customer service window is closed. Only Meta-approved templates may be sent.</p>
+        <label style="display:block;font-size:12px;font-weight:700;margin-bottom:5px;">Approved template</label>
+        <select id="wa-template-choice" style="width:100%;padding:9px;margin-bottom:12px;">${options}</select>
+        <label style="display:block;font-size:12px;font-weight:700;margin-bottom:5px;">Template variables (one per line)</label>
+        <textarea id="wa-template-params" rows="3" style="width:100%;padding:9px;box-sizing:border-box;" placeholder="Enter only the values required by this template"></textarea>
+        <label style="display:flex;gap:8px;align-items:flex-start;font-size:12px;margin:12px 0;"><input id="wa-template-consent" type="checkbox"> <span>I confirm this customer has consented to receive this WhatsApp template.</span></label>
+        <div style="display:flex;justify-content:flex-end;gap:8px;"><button type="button" id="wa-template-cancel">Cancel</button><button type="button" id="wa-template-send">Send template</button></div>
+      </div>`;
+    document.body.appendChild(modal);
+    const paramsInput = modal.querySelector('#wa-template-params');
+    if (paramsInput && draftText) paramsInput.value = draftText;
+
+    modal.querySelector('#wa-template-cancel')?.addEventListener('click', () => modal.remove());
+    modal.querySelector('#wa-template-send')?.addEventListener('click', async () => {
+      const selected = templates[Number(modal.querySelector('#wa-template-choice')?.value || 0)];
+      const consent = Boolean(modal.querySelector('#wa-template-consent')?.checked);
+      if (!consent) {
+        if (typeof window.showToast === 'function') window.showToast('Customer consent is required before sending a template.', 'error');
+        return;
+      }
+      const params = String(paramsInput?.value || '').split('\n').map(value => value.trim()).filter(Boolean);
+      try {
+        await window.whatsappService.sendMessage({
+          leadId: conv.leadId,
+          text: draftText || selected.name,
+          templateName: selected.name,
+          templateLanguage: selected.language || 'en_US',
+          templateParams: params,
+          templateConsent: true
+        });
+        modal.remove();
+      } catch (error) {
+        const message = window.whatsappService?.getErrorMessage?.(error, 'Unable to send the WhatsApp template.') || 'Unable to send the WhatsApp template.';
+        if (typeof window.showToast === 'function') window.showToast(message, 'error'); else alert(message);
+      }
+    });
   }
 
   getMediaMessageType(file) {
@@ -912,11 +982,16 @@ class InboxComponent {
     const bannerTemplateBtn = document.getElementById('inbox-open-templates-banner-btn');
     if (!banner || !conv) return;
 
-    // Simulate 24-hr session window countdown
-    let lastTime = new Date(conv.lastTimestamp || Date.now());
-    if (isNaN(lastTime.getTime())) {
-      lastTime = new Date();
-    }
+    // The Meta window begins at the customer's latest inbound WhatsApp message,
+    // never at an outbound CRM message.
+    const latestInbound = (conv.messages || [])
+      .filter(message => String(message.direction || message.sender || '').toLowerCase() !== 'outbound')
+      .map(message => message.received_at || message.created_at || message.timestamp)
+      .filter(Boolean)
+      .map(value => new Date(value))
+      .filter(value => !isNaN(value.getTime()))
+      .sort((a, b) => b.getTime() - a.getTime())[0];
+    let lastTime = latestInbound || new Date(0);
     const windowExpiry = new Date(lastTime.getTime() + 24 * 60 * 60 * 1000);
     const diffMs = windowExpiry.getTime() - Date.now();
 
@@ -1036,8 +1111,12 @@ class InboxComponent {
       }
 
       const aiTag = isOutbound ? `<span class="ai-tag-pill" style="background: rgba(139, 92, 246, 0.3); color: #c4b5fd; padding: 1px 6px; border-radius: 3px; font-weight: 700; text-transform: uppercase;">${msg.sentByHuman ? 'HUMAN' : 'AI AGENT'}</span>` : '';
-      const tick = isOutbound ? '<span class="msg-tick read" style="color: #38bdf8; font-weight: 700; margin-left: 3px;">✓✓</span>' : '';
-      const delivered = isOutbound ? ' · DELIVERED' : '';
+      const deliveryStatus = String(msg.status || (isOutbound ? 'sent' : '')).toUpperCase();
+      const isDelivered = deliveryStatus === 'DELIVERED' || deliveryStatus === 'READ';
+      const isRead = deliveryStatus === 'READ';
+      const tick = isOutbound && isDelivered ? `<span class="msg-tick read" style="color: ${isRead ? '#38bdf8' : 'var(--text-muted)'}; font-weight: 700; margin-left: 3px;">✓✓</span>` : (isOutbound && deliveryStatus === 'SENT' ? '<span class="msg-tick" style="font-weight: 700; margin-left: 3px;">✓</span>' : '');
+      const delivered = isOutbound ? ` · ${deliveryStatus || 'SENDING'}` : '';
+      const failure = isOutbound && deliveryStatus === 'FAILED' ? `<div style="color:#ef4444; font-size:10px; margin-top:3px;">${this.escapeHtml(msg.error_message || msg.errorMessage || 'Message Undeliverable')}</div>` : '';
 
       const isSticker = msgType === 'sticker';
       const bubbleClass = isSticker ? 'msg-bubble-sticker-bubble' : 'msg-bubble';
@@ -1056,6 +1135,7 @@ class InboxComponent {
                 ${tick}
               </span>
             </div>
+            ${failure}
             ` : ''}
           </div>
         </div>

@@ -380,7 +380,12 @@ async function handleDeliveryStatuses(
     // Update messages table
     const { error: msgErr } = await supabaseAdmin
       .from("messages")
-      .update({ status: mappedStatus, updated_at: updatedAt })
+      .update({
+        status: mappedStatus,
+        updated_at: updatedAt,
+        error_code: statusVal === 'failed' ? String((statusEntry.errors as Array<Record<string, unknown>> | undefined)?.[0]?.code ?? '') || null : null,
+        error_message: statusVal === 'failed' ? String((statusEntry.errors as Array<Record<string, unknown>> | undefined)?.[0]?.title || (statusEntry.errors as Array<Record<string, unknown>> | undefined)?.[0]?.message || 'Delivery failed') : null
+      })
       .eq("wa_message_id", waMsgId);
 
     if (msgErr) {

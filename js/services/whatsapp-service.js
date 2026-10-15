@@ -344,7 +344,7 @@ class WhatsAppService {
   }
 
   // Outbound Message Dispatch with Rate-Limiting & Guardrails
-  async sendMessage({ leadId, text, isAI = false }) {
+  async sendMessage({ leadId, text, isAI = false, templateName = null, templateLanguage = null, templateParams = null, templateConsent = false }) {
     const org = window.appState.getCurrentOrg();
     if (org.isPaused) {
       throw new Error('Automation is currently PAUSED via Global Emergency Kill-Switch.');
@@ -383,6 +383,10 @@ class WhatsAppService {
           phone: lead.phone,
           text,
           is_ai: isAI,
+          templateName,
+          templateLanguage,
+          templateParams,
+          templateConsent,
           conversation_id: conv?.id || null,
           clientMessageId: `inbox:${leadId}:${Date.now()}`
         })
@@ -444,12 +448,6 @@ class WhatsAppService {
     window.appState.saveState();
     window.appState.emit('messageSent', { message: newMsg, leadId });
 
-    // Simulate delivery tick if not already delivered
-    setTimeout(() => {
-      newMsg.status = 'DELIVERED';
-      window.appState.saveState();
-      window.appState.emit('messageDelivered', { messageId: newMsg.id });
-    }, 1500);
 
     return newMsg;
   }

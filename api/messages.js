@@ -332,20 +332,19 @@ function initialsFromName(name, phone) {
  * contacted 40 days ago silently received Meta's sample template instead of the
  * operator being told to configure one.
  */
-function buildTemplatePayload(phone, text, templateParams, templateNameOverride) {
+function buildTemplatePayload(phone, text, templateParams, templateNameOverride, languageOverride) {
   const name = String(templateNameOverride || process.env.WHATSAPP_TEMPLATE_NAME || '').trim();
   if (!name) return null;
 
-  const language = (process.env.WHATSAPP_TEMPLATE_LANGUAGE || 'en_US').trim();
-  const params = Array.isArray(templateParams) && templateParams.length
-    ? templateParams.map(String)
-    : [text];
+  const language = String(languageOverride || process.env.WHATSAPP_TEMPLATE_LANGUAGE || 'en_US').trim();
+  const params = Array.isArray(templateParams) ? templateParams.map(String).filter(Boolean) : [];
+  const components = params.length ? [{ type: 'body', parameters: params.map(p => ({ type: 'text', text: p })) }] : [];
 
   return {
     messaging_product: 'whatsapp',
     to: phone,
     type: 'template',
-    template: { name, language: { code: language }, components: [{ type: 'body', parameters: params.map(p => ({ type: 'text', text: p })) }] }
+    template: { name, language: { code: language }, components }
   };
 }
 
@@ -423,7 +422,7 @@ async function getTenantWhatsAppCredentials(supabase, organizationId) {
 
   const { data: conn, error } = await supabase
     .from('whatsapp_connections')
-    .select('phone_number_id, access_token_encrypted, access_token')
+    .select('phone_number_id, waba_id, access_token_encrypted, access_token')
     .eq('organization_id', organizationId)
     .eq('is_active', true)
     .order('updated_at', { ascending: false })
@@ -444,7 +443,17 @@ async function getTenantWhatsAppCredentials(supabase, organizationId) {
   }
 
   if (!accessToken) return null;
-  return { phoneNumberId: conn.phone_number_id, accessToken };
+  return { phoneNumberId: conn.phone_number_id, wabaId: conn.waba_id || null, accessToken };
+}
+
+async function getApprovedTemplates({ accessToken, wabaId }) {
+  if (!wabaId) throw new Error('WhatsApp Business Account ID is missing. Reconnect WhatsApp to load templates.');
+  const templateRes = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${wabaId}/message_templates?fields=name,language,status,category,components&limit=250`, {
+    headers: { Authorization: `Bearer ${accessToken}` }
+  });
+  const body = await templateRes.json().catch(() => ({}));
+  if (!templateRes.ok || body?.error) throw new Error(body?.error?.message || 'Could not load WhatsApp templates from Meta.');
+  return (body.data || []).filter(template => String(template.status || '').toUpperCase() === 'APPROVED');
 }
 
 async function uploadMediaToMeta(phoneNumberId, accessToken, fileBuffer, mimeType, fileName) {
@@ -569,6 +578,16 @@ export default async function handler(req, res) {
 
   // ---- POST/GET action=wa_campaigns ---------------------------------------
   const actionParam = String(req.query?.action || req.body?.action || '').toLowerCase();
+  if (req.method === 'GET' && actionParam === 'templates') {
+    const creds = await getTenantWhatsAppCredentials(supabase, organizationId);
+    if (!creds) return res.status(409).json({ success: false, error: 'No active WhatsApp connection is configured for your organization.' });
+    try {
+      const templates = await getApprovedTemplates(creds);
+      return res.status(200).json({ success: true, templates });
+    } catch (error) {
+      return res.status(502).json({ success: false, error: error.message || 'Could not load approved WhatsApp templates.' });
+    }
+  }
   if (actionParam === 'wa_campaigns' || actionParam === 'campaigns') {
     if (req.method === 'GET') {
       const { data: campaigns } = await supabase
@@ -917,22 +936,43 @@ export default async function handler(req, res) {
       ? (Date.now() - new Date(lastInboundAt).getTime()) < SERVICE_WINDOW_MS
       : false;
 
-    const reqTemplateName = body.template_name || body.templateName || body.template || process.env.WHATSAPP_TEMPLATE_NAME || null;
+    const reqTemplateName = body.template_name || body.templateName || body.template || null;
     const now = new Date().toISOString();
     const payload = withinWindow
       ? { messaging_product: 'whatsapp', to: phone, type: 'text', text: { body: text } }
-      : buildTemplatePayload(phone, text, body.templateParams, reqTemplateName);
+      : buildTemplatePayload(phone, text, body.templateParams, reqTemplateName, body.templateLanguage);
 
     if (!withinWindow && !payload) {
       return res.status(422).json({
         success: false,
-        error: 'This customer is outside the 24-hour service window, so an approved template is required. Set WHATSAPP_TEMPLATE_NAME (and pass templateParams) to send.',
+        error: '24-Hour Conversation Window Expired. Select an approved WhatsApp template before sending.',
         code: 'TEMPLATE_REQUIRED',
         windowOpen: false,
         lastInboundAt
       });
     }
 
+    if (!withinWindow && body.templateConsent !== true) {
+      return res.status(422).json({
+        success: false,
+        error: 'Customer consent is required before sending a template outside the 24-hour conversation window.',
+        code: 'TEMPLATE_CONSENT_REQUIRED',
+        windowOpen: false,
+        lastInboundAt
+      });
+    }
+    if (!withinWindow) {
+      try {
+        const approvedTemplates = await getApprovedTemplates(tenantCreds);
+        const selectedTemplate = approvedTemplates.find(template => template.name === reqTemplateName
+          && String(template.language || '').toLowerCase() === String(body.templateLanguage || 'en_US').toLowerCase());
+        if (!selectedTemplate) {
+          return res.status(422).json({ success: false, error: 'Select an approved WhatsApp template from Meta before sending.', code: 'TEMPLATE_NOT_APPROVED', windowOpen: false, lastInboundAt });
+        }
+      } catch (error) {
+        return res.status(502).json({ success: false, error: error.message || 'Could not verify the selected WhatsApp template.' });
+      }
+    }
     let conversationId = body.conversation_id || null;
     let lead = null;
     try {
