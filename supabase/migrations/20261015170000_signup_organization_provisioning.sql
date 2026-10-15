@@ -1,4 +1,4 @@
-﻿-- Additive, idempotent extension of the EXISTING on_auth_user_created trigger.
+-- Additive, idempotent extension of the EXISTING on_auth_user_created trigger.
 -- It preserves all existing rows and never selects a default/first organization.
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger
@@ -24,8 +24,16 @@ BEGIN
   workspace_slug := lower(regexp_replace(workspace_name, '[^a-zA-Z0-9]+', '-', 'g')) || '-' || left(NEW.id::text, 8);
   INSERT INTO public.organizations (name, slug, owner_id)
   VALUES (workspace_name, workspace_slug, NEW.id)
-  ON CONFLICT (slug) DO UPDATE SET owner_id = coalesce(public.organizations.owner_id, excluded.owner_id)
+  ON CONFLICT (slug) DO NOTHING
   RETURNING id INTO organization_id;
+  IF organization_id IS NULL THEN
+    SELECT id INTO organization_id
+    FROM public.organizations
+    WHERE slug = workspace_slug AND owner_id = NEW.id;
+    IF organization_id IS NULL THEN
+      RAISE EXCEPTION 'Refusing to reuse an organization with a colliding signup slug';
+    END IF;
+  END IF;
   INSERT INTO public.organization_users (organization_id, user_id, role)
   VALUES (organization_id, NEW.id, 'Owner')
   ON CONFLICT (organization_id, user_id) DO NOTHING;
