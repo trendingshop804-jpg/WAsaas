@@ -1,4 +1,4 @@
-// scripts/test-tenant-auth-blocks.mjs
+﻿// scripts/test-tenant-auth-blocks.mjs
 // ---------------------------------------------------------------------------
 // Offline authorization tests for the three endpoints that were previously
 // unauthenticated while using the Supabase service-role key with a
@@ -6,7 +6,7 @@
 //
 //   api/meta-oauth-exchange.js  - writes whatsapp_connections / instagram_connections
 //   api/instagram.js            - connect / disconnect / send_message / oauth-exchange
-//   api/send-media.js           - outbound WhatsApp media
+//   api/messages.js             - outbound WhatsApp messages
 //
 // Fully mocked: no database, no network, no Meta calls. The Meta Graph API is
 // stubbed and any unexpected outbound URL aborts the test.
@@ -104,7 +104,7 @@ async function call(handler, req) {
 
 const oauth = (await import(pathToFileURL(path.join(rootDir, 'api/meta-oauth-exchange.js')).href + '?t=' + Date.now())).default;
 const instagram = (await import(pathToFileURL(path.join(rootDir, 'api/instagram.js')).href + '?t=' + Date.now())).default;
-const sendMedia = (await import(pathToFileURL(path.join(rootDir, 'api/send-media.js')).href + '?t=' + Date.now())).default;
+const sendMedia = (await import(pathToFileURL(path.join(rootDir, 'api/messages.js')).href + '?t=' + Date.now())).default;
 
 const SESSION = { Authorization: 'Bearer mock-session-token' };
 function reset() { writes.length = 0; metaAuthHeaders = []; outboundUrls = []; }
@@ -293,3 +293,4 @@ await t('C3 send-media: never uses the GLOBAL WhatsApp token', async () => {
 
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);
+
