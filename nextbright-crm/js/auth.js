@@ -229,12 +229,28 @@ const NB_AUTH = (() => {
     });
   }
 
+  function clearLocalSession() {
+    for (const key of Object.keys(localStorage)) {
+      if (key.startsWith('sb-') || key.startsWith('nextbright:') || key === 'nexuslead_state_v1') {
+        localStorage.removeItem(key);
+      }
+    }
+    sessionStorage.clear();
+  }
+
   async function signOut() {
-    try {
-      const sb = await getClient();
-      await sb.auth.signOut();
-    } catch (_) { /* ignore */ }
-    window.location.reload();
+    // Clear the browser state first. A network failure must never keep the old
+    // account visible or allow its stale token to restore the CRM after reload.
+    const sb = client;
+    clearLocalSession();
+    client = null;
+    initPromise = null;
+    emit(null, null);
+    showOverlay();
+    if (sb?.auth?.signOut) {
+      try { await sb.auth.signOut({ scope: 'local' }); } catch (_) { /* local cleanup already succeeded */ }
+    }
+    window.location.replace(`${window.location.pathname}?signed_out=1`);
   }
 
   return { getClient, getAccessToken, apiFetch, requireSession, signOut, showOverlay, onAuthChange: fn => listeners.add(fn) };
