@@ -1,6 +1,6 @@
-﻿-- Additive signup provisioning for the active tenant model.
--- Existing organizations, memberships, and auth users are preserved.
-CREATE OR REPLACE FUNCTION public.provision_signup_organization()
+﻿-- Additive, idempotent extension of the EXISTING on_auth_user_created trigger.
+-- It preserves all existing rows and never selects a default/first organization.
+CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -11,14 +11,16 @@ DECLARE
   workspace_name text;
   workspace_slug text;
 BEGIN
-  -- Invited users are provisioned by the invitation flow, never assigned here.
-  IF NEW.raw_user_meta_data ? 'invitation_organization_id' THEN
-    RETURN NEW;
-  END IF;
+  INSERT INTO public.profiles (id, name, email, phone, role, status)
+  VALUES (NEW.id, COALESCE(NEW.raw_user_meta_data->>'name', split_part(NEW.email, '@', 1)), NEW.email, NEW.raw_user_meta_data->>'phone', 'customer', 'active')
+  ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email, updated_at = now();
+
+  -- Invitation flows must insert their authorized membership separately.
+  IF NEW.raw_user_meta_data ? 'invitation_organization_id' THEN RETURN NEW; END IF;
   SELECT ou.organization_id INTO organization_id FROM public.organization_users ou WHERE ou.user_id = NEW.id LIMIT 1;
   IF organization_id IS NOT NULL THEN RETURN NEW; END IF;
-  workspace_name := nullif(trim(coalesce(NEW.raw_user_meta_data->>'workspace_name', '')), '');
-  workspace_name := coalesce(workspace_name, split_part(coalesce(NEW.email, 'My Workspace'), '@', 1) || '''s Workspace');
+
+  workspace_name := coalesce(nullif(trim(NEW.raw_user_meta_data->>'workspace_name'), ''), split_part(NEW.email, '@', 1) || '''s Workspace');
   workspace_slug := lower(regexp_replace(workspace_name, '[^a-zA-Z0-9]+', '-', 'g')) || '-' || left(NEW.id::text, 8);
   INSERT INTO public.organizations (name, slug, owner_id)
   VALUES (workspace_name, workspace_slug, NEW.id)
@@ -30,12 +32,4 @@ BEGIN
   RETURN NEW;
 END;
 $fn$;
-DROP TRIGGER IF EXISTS on_auth_user_created_provision_organization ON auth.users;
-CREATE TRIGGER on_auth_user_created_provision_organization
-AFTER INSERT ON auth.users
-FOR EACH ROW EXECUTE FUNCTION public.provision_signup_organization();
-
-ALTER TABLE public.organization_users ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "members read own membership" ON public.organization_users;
-CREATE POLICY "members read own membership" ON public.organization_users
-FOR SELECT TO authenticated USING (user_id = auth.uid());
+-- Existing trigger already calls handle_new_user(); no additional trigger is created.
