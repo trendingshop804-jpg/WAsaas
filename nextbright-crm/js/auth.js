@@ -139,6 +139,7 @@ const NB_AUTH = (() => {
     const errEl = overlay.querySelector('#nb-auth-error');
     const emailEl = overlay.querySelector('#nb-auth-email');
     const passEl = overlay.querySelector('#nb-auth-password');
+    const workspaceEl = overlay.querySelector('#nb-auth-workspace');
 
     const run = async (mode) => {
       errEl.textContent = '';
