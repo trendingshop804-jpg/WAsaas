@@ -1,5 +1,5 @@
-/* ============================================================
-   AUTH.JS — Supabase session for the NextBright CRM
+﻿/* ============================================================
+   AUTH.JS â€” Supabase session for the NextBright CRM
    ============================================================
    Provides a real signed-in session so the CRM can call the
    tenant-scoped API with a genuine user JWT (never the anon key).
@@ -19,9 +19,6 @@ const NB_AUTH = (() => {
   function emit(session, user) {
     listeners.forEach(fn => { try { fn(session, user); } catch (_) { /* ignore */ } });
   }
-
-  const FALLBACK_PROJECT_URL = 'https://mdrxnycolkuuvszzzwqi.supabase.co';
-  const FALLBACK_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1kcnhueWNvbGt1dXZzenp6d3FpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcyMzkwNTcsImV4cCI6MjEwMjgxNTA1N30.hEl52V14VF47U1hQF6uzJGuMSQ05XLVsBq3x6fcimTI';
 
   async function getClient() {
     if (client) return client;
@@ -184,7 +181,7 @@ const NB_AUTH = (() => {
    * Resolves once we know the session state. Shows a sign-in panel when Supabase
    * is reachable but nobody is signed in.
    *
-   * The overlay is a convenience, NOT the security boundary — every tenant API
+   * The overlay is a convenience, NOT the security boundary â€” every tenant API
    * independently rejects unauthenticated requests with 401. So if the Supabase
    * config cannot be loaded at all (offline, misconfigured, test harness) the
    * app is left usable and the Inbox simply reports that it needs a sign-in,
@@ -201,10 +198,6 @@ const NB_AUTH = (() => {
       };
 
       (async () => {
-        const urlParams = new URLSearchParams(window.location.search || '');
-        if (urlParams.get('demo') === '1' || urlParams.get('test') === '1' || localStorage.getItem('nb_demo_mode') === '1') {
-          return finish(null, null);
-        }
 
         let sb;
         try {
@@ -253,3 +246,4 @@ window.NB_AUTH = NB_AUTH;
 document.addEventListener('DOMContentLoaded', () => {
   NB_AUTH.requireSession();
 });
+
