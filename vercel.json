@@ -3,60 +3,9 @@
   "framework": null,
   "buildCommand": "node -e \"process.exit(0)\"",
   "outputDirectory": ".",
-  "crons": [
-    {
-      "path": "/api/daily-followup?action=welcome",
-      "schedule": "0 9 * * *"
-    },
-    {
-      "path": "/api/daily-followup",
-      "schedule": "0 10 * * *"
-    }
-  ],
   "rewrites": [
-    {
-      "source": "/api/test-connection",
-      "destination": "/api/integration-status?route=test-connection"
-    },
-    {
-      "source": "/api/trigger-call",
-      "destination": "/api/integration-status?route=trigger-call"
-    },
-    {
-      "source": "/api/send-whatsapp-followup",
-      "destination": "/api/daily-followup?route=send-whatsapp-followup"
-    },
-    {
-      "source": "/api/update-whatsapp-profile",
-      "destination": "/api/meta-oauth-exchange?route=update-whatsapp-profile"
-    },
-    {
-      "source": "/api/admin-companies",
-      "destination": "/api/admin?resource=companies"
-    },
-    {
-      "source": "/api/admin-system",
-      "destination": "/api/admin?resource=system"
-    },
-    {
-      "source": "/api/send-media",
-      "destination": "/api/messages?route=send-media"
-    },
-    {
-      "source": "/api/social-conversations",
-      "destination": "/api/instagram?action=social_conversations"
-    },
-    {
-      "source": "/api/wa-campaigns",
-      "destination": "/api/messages?action=wa_campaigns"
-    },
-    {
-      "source": "/api/ai-agents",
-      "destination": "/api/ai-chat?route=ai_agents"
-    },
-    {
-      "source": "/api/knowledge-base",
-      "destination": "/api/ai-chat?route=knowledge_base"
-    }
+    { "source": "/api/test-connection", "destination": "/api/integration-status?route=test-connection" },
+    { "source": "/api/update-whatsapp-profile", "destination": "/api/meta-oauth-exchange?route=update-whatsapp-profile" },
+    { "source": "/api/send-media", "destination": "/api/messages?route=send-media" }
   ]
 }

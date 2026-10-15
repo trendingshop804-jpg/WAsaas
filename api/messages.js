@@ -1,4 +1,4 @@
-// api/messages.js
+﻿// api/messages.js
 // Reads and sends WhatsApp text and media messages for the signed-in user's organization.
 //
 // SECURITY
@@ -586,22 +586,54 @@ export default async function handler(req, res) {
   }
   if (actionParam === 'wa_campaigns' || actionParam === 'campaigns') {
     if (req.method === 'GET') {
-      const { data: campaigns } = await supabase
+      const { data: campaigns, error } = await supabase
         .from('wa_campaigns')
         .select('*')
         .eq('organization_id', organizationId)
         .order('created_at', { ascending: false });
+      if (error) {
+        console.error('[messages] could not load WhatsApp campaigns:', error.message);
+        return res.status(500).json({ success: false, error: 'Could not load WhatsApp campaigns.' });
+      }
       return res.status(200).json({ success: true, campaigns: campaigns || [] });
     }
-    if (req.method === 'POST') {
-      const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
-      const campaign = body.campaign || body;
-      campaign.organization_id = organizationId;
-      try {
-        await supabase.from('wa_campaigns').upsert(campaign);
-      } catch (e) {}
-      return res.status(200).json({ success: true, message: 'Campaign updated', campaign });
+
+    const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
+    const input = body.campaign || body;
+    const name = cleanText(input.name, 160);
+    const templateName = cleanText(input.template_name, 160);
+    const status = input.scheduled_at ? 'scheduled' : 'draft';
+    if (!name || !templateName) {
+      return res.status(400).json({ success: false, error: 'Campaign name and approved template are required.' });
     }
+
+    const campaign = {
+      organization_id: organizationId,
+      created_by: access.user?.id || null,
+      name,
+      status,
+      template_name: templateName,
+      template_language: cleanText(input.template_language, 20) || 'en_US',
+      audience_type: cleanText(input.audience_type, 40) || 'manual',
+      description: cleanText(input.description, 1000) || null,
+      scheduled_at: status === 'scheduled' ? input.scheduled_at : null,
+      total_recipients: 0,
+      queued_count: 0,
+      sent_count: 0,
+      delivered_count: 0,
+      read_count: 0,
+      failed_count: 0
+    };
+    const { data: savedCampaign, error } = await supabase
+      .from('wa_campaigns')
+      .insert(campaign)
+      .select()
+      .single();
+    if (error) {
+      console.error('[messages] could not save WhatsApp campaign:', error.message);
+      return res.status(500).json({ success: false, error: 'Could not save WhatsApp campaign.' });
+    }
+    return res.status(201).json({ success: true, campaign: savedCampaign });
   }
 
   // ---- POST action=create-lead -------------------------------------------
@@ -1195,10 +1227,12 @@ export default async function handler(req, res) {
 
     const byThread = new Map();
     messages.forEach(msg => {
-      const key = msg.sender_number || msg.lead_id || msg.conversation_id || 'unknown';
+      const key = msg.conversation_id || ('legacy:' + (msg.sender_number || msg.lead_id || msg.id));
       if (!byThread.has(key)) byThread.set(key, []);
       byThread.get(key).push({
         id: msg.id,
+        conversationId: msg.conversation_id || null,
+        senderNumber: msg.sender_number || null,
         dir: toDirection(msg),
         text: pickText(msg),
         time: pickTime(msg),
@@ -1214,17 +1248,20 @@ export default async function handler(req, res) {
     const conversations = [...byThread.entries()].map(([key, msgs]) => {
       const ordered = [...msgs].reverse();
       const last = ordered[ordered.length - 1];
-      const displayName = nameByDigits.get(normalizePhone(key)) || nameByDigits.get(digitsOnly(key)) || key;
+      const senderNumber = msgs.find(m => m.senderNumber)?.senderNumber || null;
+      const displayName = nameByDigits.get(normalizePhone(senderNumber)) || nameByDigits.get(digitsOnly(senderNumber)) || senderNumber || 'Unknown contact';
       const threadChannel = msgs.find(m => m.channel)?.channel || 'whatsapp';
       return {
+        id: key,
         key,
-        phone: key,
+        sender_number: senderNumber,
+        phone: senderNumber,
         name: displayName,
         initials: initialsFromName(displayName, key),
         channel: threadChannel,
         preview: last?.text || (last?.messageType === 'text' ? '' : `[${last?.messageType || 'media'}]`),
         time: last?.time || null,
-        messages: ordered
+        messages: ordered.map(message => ({ ...message, direction: message.dir, content: message.text, media_url: message.mediaUrl, message_type: message.messageType }))
       };
     });
 
@@ -1243,3 +1280,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: err.message, messages: [] });
   }
 }
+
+

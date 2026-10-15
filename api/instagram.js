@@ -48,7 +48,10 @@ export default async function handler(req, res) {
     'disconnect',
     'send_message',
     'oauth-exchange',
-    'code_exchange'
+    'code_exchange',
+    'list_posts',
+    'save_post',
+    'delete_post'
   ]);
   const needsOrg = TENANT_ACTIONS.has(action) || req.method === 'DELETE';
 
@@ -679,31 +682,35 @@ export default async function handler(req, res) {
     }
   }
 
+  if (action === 'list_posts') {
+    if (!supabase) return res.status(503).json({ error: 'Server database configuration is unavailable.' });
+    const { data, error } = await supabase.from('scheduled_posts').select('*').eq('organization_id', organizationId).order('created_at', { ascending: false });
+    if (error) return res.status(500).json({ error: `Could not load Instagram posts: ${error.message}` });
+    return res.status(200).json({ success: true, posts: data || [] });
+  }
+
   if (action === 'save_post') {
-    try {
-      const { post } = req.body || {};
-      if (!supabase) return res.status(200).json({ success: true, post: post || {} });
-      const { data, error } = await supabase.from('scheduled_posts').insert(post).select().single();
-      if (error) return res.status(400).json({ error: error.message });
-      return res.status(200).json({ success: true, post: data });
-    } catch (e) {
-      return res.status(500).json({ error: e.message });
-    }
+    const input = req.body?.post || {};
+    const mediaUrl = String(input.media_url || '').trim();
+    const caption = String(input.caption || '').trim();
+    if (!mediaUrl || !/^https:\/\//i.test(mediaUrl) || !caption) return res.status(400).json({ error: 'A public HTTPS media URL and caption are required.' });
+    if (!supabase) return res.status(503).json({ error: 'Server database configuration is unavailable.' });
+    const { data, error } = await supabase.from('scheduled_posts').insert({
+      organization_id: organizationId, post_type: String(input.type || 'post').toLowerCase(), media_urls: [mediaUrl], caption,
+      scheduled_time: input.scheduled_at ? new Date(input.scheduled_at).toISOString() : null,
+      status: input.scheduled_at ? 'pending' : 'draft', created_at: new Date().toISOString(), updated_at: new Date().toISOString()
+    }).select().single();
+    if (error) return res.status(500).json({ error: `Could not save Instagram post: ${error.message}` });
+    return res.status(201).json({ success: true, post: data });
   }
 
   if (action === 'delete_post') {
-    try {
-      const { postId } = req.body || {};
-      if (!supabase) return res.status(200).json({ success: true });
-      const { error } = await supabase.from('scheduled_posts').delete().eq('id', postId);
-      if (error) return res.status(400).json({ error: error.message });
-      return res.status(200).json({ success: true });
-    } catch (e) {
-      return res.status(500).json({ error: e.message });
-    }
+    const postId = String(req.body?.postId || '');
+    if (!postId || !supabase) return res.status(400).json({ error: 'Post id is required.' });
+    const { error } = await supabase.from('scheduled_posts').delete().eq('id', postId).eq('organization_id', organizationId);
+    if (error) return res.status(500).json({ error: `Could not delete Instagram post: ${error.message}` });
+    return res.status(200).json({ success: true });
   }
-
-  // ── 5. PUBLISH (default POST) ─────────────────────────────────────────────
   try {
     if (!supabase) {
       return res.status(200).json({ processed: 0, message: 'Database not configured' });
