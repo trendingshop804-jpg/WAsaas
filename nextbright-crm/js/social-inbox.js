@@ -10,79 +10,9 @@
   const esc = v => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   const toast = (msg, type) => { if (typeof window.showToast === 'function') window.showToast(msg, type); };
 
-  const DEFAULT_DEMO_CONVERSATIONS = [
-    {
-      id: 'conv-ig-1',
-      participant_id: 'ig_user_101',
-      participant_name: 'Sophia Martinez',
-      participant_username: 'sophiam_design',
-      participant_pic: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150',
-      platform: 'instagram',
-      unread_count: 2,
-      status: 'open',
-      last_message_text: 'Hi! I saw your post on WhatsApp CRM integration. What is the pricing for enterprise?',
-      last_message_at: new Date(Date.now() - 3600000 * 2).toISOString(),
-      labels: ['Inquiry', 'Enterprise']
-    },
-    {
-      id: 'conv-ig-2',
-      participant_id: 'ig_user_102',
-      participant_name: 'Alex Johnson',
-      participant_username: 'alexj_tech',
-      participant_pic: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150',
-      platform: 'instagram',
-      unread_count: 0,
-      status: 'open',
-      last_message_text: 'Thanks for sending the demo link! Checking it out now.',
-      last_message_at: new Date(Date.now() - 86400000 * 1).toISOString(),
-      labels: ['Demo Sent']
-    },
-    {
-      id: 'conv-ig-3',
-      participant_id: 'ig_user_103',
-      participant_name: 'Priya Patel',
-      participant_username: 'priya_lifestyle',
-      participant_pic: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
-      platform: 'instagram',
-      unread_count: 1,
-      status: 'open',
-      last_message_text: 'Can this integrate with our Shopify store as well?',
-      last_message_at: new Date(Date.now() - 3600000 * 5).toISOString(),
-      labels: ['Shopify', 'Integration']
-    },
-    {
-      id: 'conv-ig-4',
-      participant_id: 'ig_user_104',
-      participant_name: 'Marcus Vance',
-      participant_username: 'marcus_vance',
-      participant_pic: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150',
-      platform: 'instagram',
-      unread_count: 0,
-      status: 'closed',
-      last_message_text: 'Confirmed for our onboarding call on Friday. See you then!',
-      last_message_at: new Date(Date.now() - 86400000 * 3).toISOString(),
-      labels: ['Closed Won']
-    }
-  ];
+  const DEFAULT_DEMO_CONVERSATIONS = [];
 
-  const DEFAULT_DEMO_MESSAGES = {
-    'conv-ig-1': [
-      { id: 'm1', direction: 'in', content: 'Hey there! Loved your reel on automated follow-ups.', created_at: new Date(Date.now() - 7200000).toISOString() },
-      { id: 'm2', direction: 'out', content: 'Hi Sophia! Thanks for reaching out. We help automate lead engagement directly into CRM.', delivery_status: 'read', created_at: new Date(Date.now() - 5400000).toISOString() },
-      { id: 'm3', direction: 'in', content: 'Hi! I saw your post on WhatsApp CRM integration. What is the pricing for enterprise?', created_at: new Date(Date.now() - 3600000 * 2).toISOString() }
-    ],
-    'conv-ig-2': [
-      { id: 'm201', direction: 'in', content: 'Could you send me your product roadmap?', created_at: new Date(Date.now() - 86400000 * 2).toISOString() },
-      { id: 'm202', direction: 'out', content: 'Sure Alex, here is our demo workspace link and documentation.', delivery_status: 'read', created_at: new Date(Date.now() - 86400000 * 1.5).toISOString() },
-      { id: 'm203', direction: 'in', content: 'Thanks for sending the demo link! Checking it out now.', created_at: new Date(Date.now() - 86400000 * 1).toISOString() }
-    ],
-    'conv-ig-3': [
-      { id: 'm301', direction: 'in', content: 'Can this integrate with our Shopify store as well?', created_at: new Date(Date.now() - 3600000 * 5).toISOString() }
-    ],
-    'conv-ig-4': [
-      { id: 'm401', direction: 'in', content: 'Confirmed for our onboarding call on Friday. See you then!', created_at: new Date(Date.now() - 86400000 * 3).toISOString() }
-    ]
-  };
+  const DEFAULT_DEMO_MESSAGES = {};
 
   /* ---- State ---- */
   const state = {

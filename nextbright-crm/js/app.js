@@ -201,7 +201,8 @@ window.openCustomer360 = async function(name) {
   const modal = document.getElementById('modal-customer-360');
   if (!modal) return;
 
-  const c = window.NB.customers.find(item => item.name === name) || { name, phone: '+91 98765 43210', company: 'Client Enterprise', revenue: '₹45,000' };
+  const c = window.NB.customers.find(item => item.name === name);
+  if (!c) { window.showToast?.('Customer record is unavailable.', 'error'); return; }
 
   document.getElementById('c360-name').textContent = c.name;
   document.getElementById('c360-avatar').textContent = window.NB.initials(c.name);
@@ -215,20 +216,7 @@ window.openCustomer360 = async function(name) {
   }
 
   const timelineEl = document.getElementById('c360-timeline');
-  timelineEl.innerHTML = `
-    <div style="padding:8px 12px;background:var(--bg-card);border:1px solid var(--border-light);border-radius:6px;">
-      <strong style="color:var(--brand-primary)">Lead Created</strong> — Source: Instagram DMs (Yesterday 10:30 AM)
-    </div>
-    <div style="padding:8px 12px;background:var(--bg-card);border:1px solid var(--border-light);border-radius:6px;">
-      <strong style="color:var(--status-success)">WhatsApp Conversation</strong> — Customer inquired about services (Yesterday 11:00 AM)
-    </div>
-    <div style="padding:8px 12px;background:var(--bg-card);border:1px solid var(--border-light);border-radius:6px;">
-      <strong style="color:var(--status-purple)">Call Completed</strong> — Duration 04:12 by Signed-in user (Today 09:15 AM)
-    </div>
-    <div style="padding:8px 12px;background:var(--bg-card);border:1px solid var(--border-light);border-radius:6px;">
-      <strong style="color:var(--status-warning)">Appointment Scheduled</strong> — Consultation booked for 4:00 PM today
-    </div>
-  `;
+  timelineEl.innerHTML = '<div class="empty-state">No verified activity history is available.</div>';
 
   modal.classList.add('open');
 };
@@ -456,22 +444,26 @@ window.openScheduleModalForDay = function(day) {
 function renderFunnel() {
   const el = document.getElementById('funnel-wrap');
   if (!el) return;
+  const leads = window.NB?.leads || [];
+  const total = leads.length;
+  const count = status => leads.filter(lead => lead.status === status).length;
   const stages = [
-    { label:'Total Leads',  val:1245, pct:100 },
-    { label:'Contacted',    val:842,  pct:68  },
-    { label:'Qualified',    val:380,  pct:31  },
-    { label:'Proposal',     val:180,  pct:14  },
-    { label:'Won',          val:18,   pct:1.4, type:'won' },
-    { label:'Lost',         val:94,   pct:8,   type:'lost'},
-  ];
-  el.innerHTML = stages.map(s => `
+    { label:'Total Leads', val:total },
+    { label:'Contacted', val:count('Contacted') },
+    { label:'Qualified', val:count('Qualified') },
+    { label:'Proposal', val:count('Proposal') },
+    { label:'Won', val:count('Won'), type:'won' },
+    { label:'Lost', val:count('Lost'), type:'lost' }
+  ].map(stage => ({ ...stage, pct: total ? (stage.val / total) * 100 : 0 }));
+  el.innerHTML = stages.map(stage => `
     <div class="funnel-col">
-      <div class="funnel-val">${s.val}</div>
-      <div class="funnel-bar ${s.type || ''}" style="height:${Math.max(s.pct, 3)}%"></div>
-      <div class="funnel-lbl">${s.label}</div>
+      <div class="funnel-val">${stage.val}</div>
+      <div class="funnel-bar ${stage.type || ''}" style="height:${Math.max(stage.pct, 3)}%"></div>
+      <div class="funnel-lbl">${stage.label}</div>
     </div>
   `).join('');
 }
+window.renderFunnel = renderFunnel;
 
 /* ============================================================
    CALL WEBHOOK — MacroDroid mobile calling

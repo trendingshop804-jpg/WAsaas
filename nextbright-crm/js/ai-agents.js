@@ -6,46 +6,7 @@
 'use strict';
 
 (function () {
-  const DEFAULT_AGENTS = [
-    {
-      id: 'agent-1',
-      name: 'Sales & Support Assistant',
-      channels: ['instagram', 'whatsapp'],
-      business_name: 'NextBright CRM',
-      language: 'en',
-      tone: 'Professional',
-      system_instructions: 'You are an AI sales executive for NextBright. Assist customers with pricing, product features, and booking demo sessions.',
-      status: 'active',
-      working_hours: { enabled: false, start: '09:00', end: '18:00', timezone: 'UTC' },
-      auto_reply_enabled: true,
-      confidence_threshold: 0.75,
-      max_replies_per_conversation: 10,
-      handover_on_low_confidence: true,
-      handover_keywords: ['human', 'agent', 'person', 'representative', 'support', 'help'],
-      lead_qualification_enabled: true,
-      appointment_assistant_enabled: true,
-      created_at: new Date(Date.now() - 86400000 * 7).toISOString()
-    },
-    {
-      id: 'agent-2',
-      name: 'Instagram DM Lead Qualifier',
-      channels: ['instagram'],
-      business_name: 'NextBright Social',
-      language: 'en',
-      tone: 'Sales-focused',
-      system_instructions: 'Qualify inbound Instagram DMs by asking for their business name, team size, and main CRM requirement.',
-      status: 'active',
-      working_hours: { enabled: true, start: '08:00', end: '20:00', timezone: 'EST' },
-      auto_reply_enabled: true,
-      confidence_threshold: 0.80,
-      max_replies_per_conversation: 5,
-      handover_on_low_confidence: true,
-      handover_keywords: ['human', 'pricing'],
-      lead_qualification_enabled: true,
-      appointment_assistant_enabled: false,
-      created_at: new Date(Date.now() - 86400000 * 3).toISOString()
-    }
-  ];
+  const DEFAULT_AGENTS = [];
 
   function getAgents() {
     try {

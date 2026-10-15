@@ -6,44 +6,7 @@
 'use strict';
 
 (function () {
-  const DEFAULT_ENTRIES = [
-    {
-      id: 'kb-1',
-      category: 'company',
-      title: 'NextBright CRM Overview',
-      content: 'NextBright CRM is a multi-tenant AI automation platform supporting WhatsApp Cloud API, Instagram Graph API, Twilio Voice Calls, and lead pipeline tracking.',
-      keywords: ['nextbright', 'crm', 'saas', 'overview'],
-      is_active: true,
-      created_at: new Date(Date.now() - 86400000 * 5).toISOString()
-    },
-    {
-      id: 'kb-2',
-      category: 'pricing',
-      title: 'Subscription Pricing & Packages',
-      content: 'Starter Plan: $49/mo (includes 1,000 monthly messages & CRM pipeline). Enterprise Plan: $149/mo (includes unlimited AI auto-replies, multi-agent support, and priority SLA).',
-      keywords: ['pricing', 'cost', 'plans', 'enterprise', 'starter'],
-      is_active: true,
-      created_at: new Date(Date.now() - 86400000 * 4).toISOString()
-    },
-    {
-      id: 'kb-3',
-      category: 'faq',
-      title: 'Working Hours & Location',
-      content: 'Our support team operates Monday through Friday from 9:00 AM to 6:00 PM EST. Headquartered at 100 Tech Park Way, Suite 400, San Francisco, CA.',
-      keywords: ['hours', 'location', 'address', 'support', 'timing'],
-      is_active: true,
-      created_at: new Date(Date.now() - 86400000 * 3).toISOString()
-    },
-    {
-      id: 'kb-4',
-      category: 'booking',
-      title: 'Demo & Appointment Instructions',
-      content: 'Customers can request a live 1-on-1 demo by sharing their full name, company, email, and preferred date/time slot.',
-      keywords: ['demo', 'booking', 'appointment', 'schedule'],
-      is_active: true,
-      created_at: new Date(Date.now() - 86400000 * 2).toISOString()
-    }
-  ];
+  const DEFAULT_ENTRIES = [];
 
   let currentCategory = 'all';
 

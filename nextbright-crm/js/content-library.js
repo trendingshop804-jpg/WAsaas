@@ -5,54 +5,9 @@
 'use strict';
 
 (function () {
-  const DEFAULT_ASSETS = [
-    {
-      id: 'asset-1',
-      title: 'CRM Product Banner 2026',
-      file_type: 'image',
-      url: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=800&auto=format&fit=crop&q=60',
-      size: '1.2 MB',
-      dimensions: '1920 x 1080',
-      folder: 'marketing',
-      tags: ['banner', 'crm', 'saas'],
-      created_at: new Date(Date.now() - 86400000 * 5).toISOString()
-    },
-    {
-      id: 'asset-2',
-      title: 'WhatsApp Automation Explainer',
-      file_type: 'video',
-      url: 'https://images.unsplash.com/photo-1551836022-d5d88e9218df?w=800&auto=format&fit=crop&q=60',
-      size: '4.8 MB',
-      dimensions: '1080 x 1920',
-      folder: 'reels',
-      tags: ['whatsapp', 'reel', 'tutorial'],
-      created_at: new Date(Date.now() - 86400000 * 3).toISOString()
-    },
-    {
-      id: 'asset-3',
-      title: 'Customer Onboarding Flow Chart',
-      file_type: 'image',
-      url: 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=800&auto=format&fit=crop&q=60',
-      size: '850 KB',
-      dimensions: '1200 x 800',
-      folder: 'templates',
-      tags: ['onboarding', 'diagram'],
-      created_at: new Date(Date.now() - 86400000 * 2).toISOString()
-    },
-    {
-      id: 'asset-4',
-      title: 'NextBright Brand Guidelines',
-      file_type: 'document',
-      url: 'https://images.unsplash.com/photo-1568992687947-868a62a9f521?w=800&auto=format&fit=crop&q=60',
-      size: '2.4 MB',
-      dimensions: 'A4 Document',
-      folder: 'brand',
-      tags: ['pdf', 'branding', 'guidelines'],
-      created_at: new Date(Date.now() - 86400000 * 10).toISOString()
-    }
-  ];
+  const DEFAULT_ASSETS = [];
 
-  const DEFAULT_FOLDERS = ['marketing', 'templates', 'reels', 'brand'];
+  const DEFAULT_FOLDERS = [];
 
   let currentCategory = '';
   let currentFolder = '';

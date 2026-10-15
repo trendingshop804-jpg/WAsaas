@@ -6,11 +6,7 @@
 let adminCompanies = [];
 let overviewChart = null;
 
-const defaultCompanies = [
-  { id: 'org-abc-dental', name: 'ABC Dental Clinic', owner: 'Dr. Anita Sharma', email: 'anita@abcdental.com', phone: '+91 98765 11111', businessType: 'Dental Clinic', plan: 'Professional', status: 'active', usersCount: 5, messagesCount: 8430, aiRequests: 320 },
-  { id: 'org-xyz-garage', name: 'XYZ Car Service & Garage', owner: 'Vikram Singh', email: 'vikram@xyzgarage.com', phone: '+91 98765 22222', businessType: 'Garage', plan: 'Growth', status: 'active', usersCount: 3, messagesCount: 4120, aiRequests: 180 },
-  { id: 'org-glow-salon', name: 'Glow Beauty Salon', owner: 'Meera Kapoor', email: 'meera@glowsalon.com', phone: '+91 98765 33333', businessType: 'Salon', plan: 'Starter', status: 'trial', usersCount: 2, messagesCount: 1450, aiRequests: 45 }
-];
+const defaultCompanies = [];
 
 /* ---- Navigation & View Switching ---- */
 const adminViewMeta = {

@@ -13,6 +13,7 @@ const NB_AUTH = (() => {
   let client = null;
   let initPromise = null;
   let overlay = null;
+  let authSubscriptionReady = false;
 
   const listeners = new Set();
 
@@ -43,6 +44,14 @@ const NB_AUTH = (() => {
         client = window.supabase.createClient(projectUrl, anonKey, {
           auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
         });
+        if (!authSubscriptionReady) {
+          authSubscriptionReady = true;
+          client.auth.onAuthStateChange((_event, session) => {
+            if (session) dismissOverlay(session, session.user);
+            else showOverlay();
+            emit(session || null, session?.user || null);
+          });
+        }
         return client;
       })();
     }
@@ -208,7 +217,10 @@ const NB_AUTH = (() => {
         try {
           sb = await getClient();
         } catch (err) {
-          console.warn('[auth] Supabase unavailable, continuing without sign-in:', err.message);
+          console.warn('[auth] Supabase unavailable:', err.message);
+          showOverlay();
+          const errorElement = document.getElementById('nb-auth-error');
+          if (errorElement) errorElement.textContent = 'Authentication service is unavailable. Check the server configuration and retry.';
           return finish(null, null);
         }
 
@@ -218,14 +230,8 @@ const NB_AUTH = (() => {
             dismissOverlay(data.session, data.user);
             return finish(data.session, data.user);
           }
-          // Re-check when a sign-in completes elsewhere (e.g. token refresh).
-          sb.auth.onAuthStateChange((event, session) => {
-            if (session) {
-              dismissOverlay(session, session.user);
-              finish(session, session.user);
-            }
-          });
           showOverlay();
+          finish(null, null);
         } catch (err) {
           console.warn('[auth] session check failed:', err.message);
           finish(null, null);
@@ -236,7 +242,7 @@ const NB_AUTH = (() => {
 
   function clearLocalSession() {
     for (const key of Object.keys(localStorage)) {
-      if (key.startsWith('sb-') || key.startsWith('nextbright:') || key === 'nexuslead_state_v1') {
+      if (key.startsWith('sb-') || key.startsWith('nextbright:') || key.startsWith('nextbright_') || key.startsWith('nb_') || key.startsWith('nl_') || key.startsWith('nexuslead_')) {
         localStorage.removeItem(key);
       }
     }
@@ -250,6 +256,7 @@ const NB_AUTH = (() => {
     clearLocalSession();
     client = null;
     initPromise = null;
+    authSubscriptionReady = false;
     emit(null, null);
     showOverlay();
     if (sb?.auth?.signOut) {

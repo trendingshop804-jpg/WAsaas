@@ -257,7 +257,7 @@ function initPeriodBtns() {
 let activeConversationKey = null;
 
 function conversationKey(conv, index) {
-  // Normalise to digits so demo data ("+91 98765 43210") and live API data
+  // Normalise phone numbers from tenant API data
   // ("919876543210") resolve to the same thread key.
   const phone = String(conv?.phone || conv?.key || '').replace(/\D/g, '');
   if (phone) return phone;
@@ -363,6 +363,20 @@ function renderConversation(conv) {
   if (callBtn) {
     callBtn.dataset.phone = conv.phone || conv.key || '';
     callBtn.dataset.name = conv.name || 'contact';
+  }
+  const infoPanel = document.querySelector('.conv-info-panel');
+  if (infoPanel) {
+    const fields = infoPanel.querySelectorAll('.info-row span:last-child');
+    const infoAvatar = infoPanel.querySelector('.conv-info-avatar');
+    const infoName = infoPanel.querySelector('.conv-info-name');
+    const infoRole = infoPanel.querySelector('.conv-info-role');
+    if (infoAvatar) infoAvatar.textContent = conv.initials || window.NB.initials(conv.name || '?');
+    if (infoName) infoName.textContent = conv.name || 'Unknown contact';
+    if (infoRole) infoRole.textContent = conv.channel === 'instagram' ? 'Instagram conversation' : 'WhatsApp conversation';
+    if (fields[0]) fields[0].textContent = conv.phone || 'Not available';
+    if (fields[1]) fields[1].textContent = conv.email || 'Not available';
+    if (fields[2]) fields[2].textContent = conv.channel || 'Unknown';
+    if (fields[3]) fields[3].textContent = conv.status || 'Open';
   }
 
   if (messagesEl) {
@@ -480,13 +494,14 @@ async function refreshLiveInbox() {
   try {
     const live = await fetchLiveConversations();
     if (!live.length) {
-      // An empty result is a real state, not a no-op: it means the server holds
-      // no messages for this organization. Silently keeping the previous list
-      // is what made "inbound is not arriving" impossible to diagnose.
-      setInboxAuthNotice(
-        'No messages returned for your organization. The list below may be out of date.'
-      );
-      return false;
+      window.NB.conversations = [];
+      activeConversationKey = null;
+      renderConversationList();
+      const messages = document.getElementById('conv-messages');
+      if (messages) messages.innerHTML = '<div class="empty-state">No conversations for this organization.</div>';
+      setInboxAuthNotice('No messages for this organization yet.');
+      liveInboxLastCount = 0;
+      return true;
     }
 
     window.NB.conversations = live;
@@ -495,13 +510,12 @@ async function refreshLiveInbox() {
     clearInboxAuthNotice();
     return true;
   } catch (error) {
-    // Keep the last good list on screen rather than blanking the inbox, but never
-    // silently: previously only sign-in errors were surfaced, so a 404, a 500 or
-    // a cross-tenant rejection looked exactly like "no new messages".
-    setInboxAuthNotice(
-      `Live inbox unavailable - ${error.message} Showing the last known list.`
-    );
-    console.warn('[Live Inbox]', error.message);
+    window.NB.conversations = [];
+    activeConversationKey = null;
+    renderConversationList();
+    const messages = document.getElementById('conv-messages');
+    if (messages) messages.innerHTML = '<div class="empty-state">Messages are unavailable.</div>';
+    setInboxAuthNotice(`Live inbox unavailable - ${error.message}`);    console.warn('[Live Inbox]', error.message);
     return false;
   }
 }

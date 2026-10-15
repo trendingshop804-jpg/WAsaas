@@ -5,62 +5,11 @@
 'use strict';
 
 (function () {
-  const DEFAULT_SEGMENTS = [
-    {
-      id: 'seg-1',
-      name: 'High Score Hot Leads',
-      description: 'Leads with engagement score > 80 and active status',
-      criteria: 'Score > 80 AND Status == "Hot"',
-      contact_count: 85,
-      created_at: new Date(Date.now() - 86400000 * 10).toISOString()
-    },
-    {
-      id: 'seg-2',
-      name: 'Inbound Webhook Leads',
-      description: 'Leads captured via WhatsApp incoming webhooks',
-      criteria: 'Source == "WhatsApp Webhook"',
-      contact_count: 240,
-      created_at: new Date(Date.now() - 86400000 * 5).toISOString()
-    },
-    {
-      id: 'seg-3',
-      name: 'Unqualified Follow-up List',
-      description: 'Leads pending second contact attempt',
-      criteria: 'FollowupPending == true',
-      contact_count: 42,
-      created_at: new Date(Date.now() - 86400000 * 2).toISOString()
-    }
-  ];
+  const DEFAULT_SEGMENTS = [];
 
-  const DEFAULT_BROADCASTS = [
-    {
-      id: 'bc-1',
-      title: 'Q4 Product Launch Announcement',
-      segment_name: 'High Score Hot Leads',
-      template: 'exclusive_festive_offer',
-      recipients: 85,
-      delivered: 84,
-      read: 71,
-      status: 'completed',
-      sent_at: new Date(Date.now() - 86400000 * 2).toISOString()
-    },
-    {
-      id: 'bc-2',
-      title: 'Weekend Webinar Invite',
-      segment_name: 'Inbound Webhook Leads',
-      template: 'lead_welcome_v2',
-      recipients: 240,
-      delivered: 236,
-      read: 189,
-      status: 'completed',
-      sent_at: new Date(Date.now() - 86400000 * 4).toISOString()
-    }
-  ];
+  const DEFAULT_BROADCASTS = [];
 
-  const DEFAULT_OPTOUTS = [
-    { phone: '+15550192834', name: 'John Doe', optout_date: '2026-10-05', reason: 'Replied STOP' },
-    { phone: '+919876012345', name: 'Rajesh Kumar', optout_date: '2026-10-08', reason: 'User opt-out request' }
-  ];
+  const DEFAULT_OPTOUTS = [];
 
   function getSegments() {
     try {

@@ -25,6 +25,21 @@ async function handleOnboarding(req, res) {
   const { data: organization } = await admin.from('organizations').select('id, name, slug').eq('id', organizationId).single();
   return res.status(201).json({ success: true, organization, role: 'Owner' });
 }
+async function handleWorkspace(req, res) {
+  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed.' });
+  const auth = await getAuthenticatedUser(req);
+  if (!auth.user || auth.isApiKey) return res.status(auth.status || 401).json({ error: auth.message || 'A signed-in user session is required.' });
+  const { rows, error: membershipError } = await getUserOrganizationIds(auth.user.id);
+  if (membershipError) return res.status(503).json({ error: 'Could not verify organization membership. Please retry.' });
+  const admin = createSupabaseAdminClient();
+  if (!admin) return res.status(503).json({ error: 'Database service is unavailable.' });
+  const { data: profile } = await admin.from('profiles').select('name, email').eq('id', auth.user.id).maybeSingle();
+  if (!rows.length) return res.status(200).json({ success: true, user: { id: auth.user.id, email: auth.user.email, name: profile?.name || null }, organization: null, role: null, setupRequired: true });
+  const membership = rows[0];
+  const { data: organization, error } = await admin.from('organizations').select('id, name, slug').eq('id', membership.organization_id).maybeSingle();
+  if (error || !organization) return res.status(503).json({ error: 'Could not load your organization.' });
+  return res.status(200).json({ success: true, user: { id: auth.user.id, email: auth.user.email, name: profile?.name || null }, organization, role: membership.role || 'Member', setupRequired: false });
+}
 function normalizePhone(value) { const digits = String(value || '').replace(/\D/g, ''); return digits.length >= 7 && digits.length <= 15 ? digits : null; }
 function cleanChoice(value, allowed, fallback) { const selected = String(value || fallback).trim(); return allowed.has(selected) ? selected : null; }
 function fields() { return 'id, contact_name, company_name, phone, phone_normalized, email, status, score, source, assigned_agent_id, next_followup_at, custom_fields, notes, created_at, updated_at'; }
@@ -34,6 +49,7 @@ export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store'); res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS'); res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-API-Key');
   if (req.method === 'OPTIONS') return res.status(204).end();
   if (req.query?.route === 'onboarding') return handleOnboarding(req, res);
+  if (req.query?.route === 'workspace') return handleWorkspace(req, res);
   const access = await requireOrgAccess(req, res, null); if (!access) return;
   const admin = createSupabaseAdminClient(); if (!admin) return res.status(503).json({ error: 'Database service is currently unavailable.' });
   const query = req.query || {};
