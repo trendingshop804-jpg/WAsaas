@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-const api = fs.readFileSync(new URL('../api/onboarding.js', import.meta.url), 'utf8');
+const api = fs.readFileSync(new URL('../api/leads.js', import.meta.url), 'utf8');
 const ui = fs.readFileSync(new URL('../nextbright-crm/js/mvp.js', import.meta.url), 'utf8');
 const auth = fs.readFileSync(new URL('../nextbright-crm/js/auth.js', import.meta.url), 'utf8');
 assert.match(api, /getAuthenticatedUser/);
