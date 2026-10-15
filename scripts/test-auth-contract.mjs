@@ -1,4 +1,4 @@
-// scripts/test-auth-contract.mjs
+﻿// scripts/test-auth-contract.mjs
 // The authentication contract for tenant-scoped APIs, covering the six cases
 // required for /api/messages and every endpoint behind requireOrgAccess().
 //
@@ -145,7 +145,7 @@ await test('CASE 1: no Authorization header -> 401', async () => {
 await test('CASE 1b: the 401 distinguishes "no session" with code AUTH_REQUIRED', async () => {
   const { res } = await call({});
   assert.equal(res.payload.code, 'AUTH_REQUIRED');
-  assert.match(res.payload.message, /signed-in session is required/i);
+  assert.match(res.payload.message, /valid signed-in session|signed-in session is required/i);
 });
 
 await test('CASE 2: invalid token -> 401', async () => {
@@ -220,3 +220,4 @@ await test('tenant identity is never taken from a query parameter', async () => 
 
 console.log(`\n${failed ? failed + ' test(s) failed.' : passed + ' passed, 0 failed.'}`);
 process.exit(failed ? 1 : 0);
+

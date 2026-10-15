@@ -1,8 +1,30 @@
-ï»¿import { createSupabaseAdminClient, requireOrgAccess } from './_supabase.js';
+import { createSupabaseAdminClient, getAuthenticatedUser, getUserOrganizationIds, requireOrgAccess } from './_supabase.js';
 
 const LEAD_STATUSES = new Set(['New', 'Contacted', 'Replied', 'Qualified', 'Won', 'Lost']);
 const LEAD_SOURCES = new Set(['Manual', 'WhatsApp', 'Import', 'API']);
 function parseBody(req) { if (!req.body) return {}; if (typeof req.body === 'string') { try { return JSON.parse(req.body); } catch { return {}; } } return req.body; }
+function slugFor(name, userId) { const base = name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 56); return `${base || 'workspace'}-${String(userId).slice(0, 8)}`; }
+async function handleOnboarding(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed.' });
+  const auth = await getAuthenticatedUser(req);
+  if (!auth.user || auth.isApiKey) return res.status(auth.status || 401).json({ error: auth.message || 'A signed-in user session is required.' });
+  const { rows, error: membershipError } = await getUserOrganizationIds(auth.user.id);
+  if (membershipError) return res.status(503).json({ error: 'Could not verify organization membership. Please retry.' });
+  if (rows.length) return res.status(409).json({ error: 'Your organization is already set up.', code: 'ALREADY_PROVISIONED' });
+  const body = parseBody(req);
+  const name = String(body.organizationName || body.workspaceName || '').trim().replace(/\s+/g, ' ');
+  if (name.length < 2 || name.length > 100) return res.status(400).json({ error: 'Enter an organization name between 2 and 100 characters.' });
+  const admin = createSupabaseAdminClient(); if (!admin) return res.status(503).json({ error: 'Database service is unavailable.' });
+  const slug = slugFor(name, auth.user.id);
+  const { data: inserted, error: insertError } = await admin.from('organizations').insert({ name, slug, owner_id: auth.user.id }).select('id, name, slug').maybeSingle();
+  if (insertError && insertError.code !== '23505') return res.status(500).json({ error: 'Could not create your organization.' });
+  let organizationId = inserted?.id;
+  if (!organizationId) { const { data: existing, error } = await admin.from('organizations').select('id, owner_id').eq('slug', slug).maybeSingle(); if (error || !existing || existing.owner_id !== auth.user.id) return res.status(409).json({ error: 'Could not safely create your organization. Please choose a different name.', code: 'ORGANIZATION_CONFLICT' }); organizationId = existing.id; }
+  const { error: memberError } = await admin.from('organization_users').insert({ organization_id: organizationId, user_id: auth.user.id, role: 'Owner' }).select('organization_id').maybeSingle();
+  if (memberError && memberError.code !== '23505') return res.status(500).json({ error: 'Organization was created but membership could not be completed. Please retry.' });
+  const { data: organization } = await admin.from('organizations').select('id, name, slug').eq('id', organizationId).single();
+  return res.status(201).json({ success: true, organization, role: 'Owner' });
+}
 function normalizePhone(value) { const digits = String(value || '').replace(/\D/g, ''); return digits.length >= 7 && digits.length <= 15 ? digits : null; }
 function cleanChoice(value, allowed, fallback) { const selected = String(value || fallback).trim(); return allowed.has(selected) ? selected : null; }
 function fields() { return 'id, contact_name, company_name, phone, phone_normalized, email, status, score, source, assigned_agent_id, next_followup_at, custom_fields, notes, created_at, updated_at'; }
@@ -11,6 +33,7 @@ async function phoneExists(admin, organizationId, normalized, excludeId) { if (!
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store'); res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS'); res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-API-Key');
   if (req.method === 'OPTIONS') return res.status(204).end();
+  if (req.query?.route === 'onboarding') return handleOnboarding(req, res);
   const access = await requireOrgAccess(req, res, null); if (!access) return;
   const admin = createSupabaseAdminClient(); if (!admin) return res.status(503).json({ error: 'Database service is currently unavailable.' });
   const query = req.query || {};
@@ -27,7 +50,7 @@ export default async function handler(req, res) {
   if (req.method === 'POST') {
     const name = String(body.contactName || body.contact_name || body.name || '').trim(), phone = String(body.phone || body.phoneNumber || '').trim(), phoneNormalized = phone ? normalizePhone(phone) : null, email = String(body.email || '').trim().toLowerCase() || null;
     const status = cleanChoice(body.status, LEAD_STATUSES, 'New'), source = cleanChoice(body.source, LEAD_SOURCES, 'Manual');
-    if (!name) return res.status(400).json({ error: 'Lead name is required.' }); if (phone && !phoneNormalized) return res.status(400).json({ error: 'Enter a valid phone number with 7â€“15 digits.' }); if (!phone && !email) return res.status(400).json({ error: 'A phone number or email address is required.' }); if (email && !/^\S+@\S+\.\S+$/.test(email)) return res.status(400).json({ error: 'Enter a valid email address.' }); if (!status || !source) return res.status(400).json({ error: 'Invalid lead status or source.' });
+    if (!name) return res.status(400).json({ error: 'Lead name is required.' }); if (phone && !phoneNormalized) return res.status(400).json({ error: 'Enter a valid phone number with 7–15 digits.' }); if (!phone && !email) return res.status(400).json({ error: 'A phone number or email address is required.' }); if (email && !/^\S+@\S+\.\S+$/.test(email)) return res.status(400).json({ error: 'Enter a valid email address.' }); if (!status || !source) return res.status(400).json({ error: 'Invalid lead status or source.' });
     try {
       if (await phoneExists(admin, access.organizationId, phoneNormalized)) return res.status(409).json({ error: 'A lead with this phone number already exists in your organization.', code: 'DUPLICATE_PHONE' });
       const row = { organization_id: access.organizationId, contact_name: name, company_name: String(body.companyName || body.company_name || body.company || '').trim() || null, phone: phone || null, phone_normalized: phoneNormalized, email, status, source, score: Number.parseInt(body.score, 10) || 0, assigned_agent_id: body.assignedAgentId || body.assigned_agent_id || null, next_followup_at: body.nextFollowUpAt || body.next_followup_at || null, notes: String(body.notes || '').trim() || null, custom_fields: typeof body.customFields === 'object' && body.customFields ? body.customFields : {} };
@@ -37,7 +60,7 @@ export default async function handler(req, res) {
   if (req.method === 'PATCH' || req.method === 'PUT') {
     const id = String(query.id || body.id || '').trim(); if (!id) return res.status(400).json({ error: 'Lead id is required.' }); const updates = { updated_at: new Date().toISOString() };
     if ('contactName' in body || 'contact_name' in body || 'name' in body) { updates.contact_name = String(body.contactName || body.contact_name || body.name || '').trim(); if (!updates.contact_name) return res.status(400).json({ error: 'Lead name is required.' }); }
-    if ('phone' in body || 'phoneNumber' in body) { const phone = String(body.phone || body.phoneNumber || '').trim(), normalized = phone ? normalizePhone(phone) : null; if (phone && !normalized) return res.status(400).json({ error: 'Enter a valid phone number with 7â€“15 digits.' }); try { if (await phoneExists(admin, access.organizationId, normalized, id)) return res.status(409).json({ error: 'A lead with this phone number already exists in your organization.', code: 'DUPLICATE_PHONE' }); } catch { return res.status(500).json({ error: 'Could not validate phone number.' }); } updates.phone = phone || null; updates.phone_normalized = normalized; }
+    if ('phone' in body || 'phoneNumber' in body) { const phone = String(body.phone || body.phoneNumber || '').trim(), normalized = phone ? normalizePhone(phone) : null; if (phone && !normalized) return res.status(400).json({ error: 'Enter a valid phone number with 7–15 digits.' }); try { if (await phoneExists(admin, access.organizationId, normalized, id)) return res.status(409).json({ error: 'A lead with this phone number already exists in your organization.', code: 'DUPLICATE_PHONE' }); } catch { return res.status(500).json({ error: 'Could not validate phone number.' }); } updates.phone = phone || null; updates.phone_normalized = normalized; }
     if ('email' in body) { const email = String(body.email || '').trim().toLowerCase(); if (email && !/^\S+@\S+\.\S+$/.test(email)) return res.status(400).json({ error: 'Enter a valid email address.' }); updates.email = email || null; }
     if ('companyName' in body || 'company_name' in body || 'company' in body) updates.company_name = String(body.companyName || body.company_name || body.company || '').trim() || null;
     if ('status' in body) { const status = cleanChoice(body.status, LEAD_STATUSES); if (!status) return res.status(400).json({ error: 'Invalid lead status.' }); updates.status = status; }

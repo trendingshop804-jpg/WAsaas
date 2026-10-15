@@ -20,9 +20,6 @@ const NB_AUTH = (() => {
     listeners.forEach(fn => { try { fn(session, user); } catch (_) { /* ignore */ } });
   }
 
-  const FALLBACK_PROJECT_URL = 'https://mdrxnycolkuuvszzzwqi.supabase.co';
-  const FALLBACK_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1kcnhueWNvbGt1dXZzenp6d3FpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcyMzkwNTcsImV4cCI6MjEwMjgxNTA1N30.hEl52V14VF47U1hQF6uzJGuMSQ05XLVsBq3x6fcimTI';
-
   async function getClient() {
     if (client) return client;
     if (!initPromise) {
@@ -38,8 +35,8 @@ const NB_AUTH = (() => {
           }
         } catch (_) { /* fallback below */ }
 
-        projectUrl = projectUrl || window.supabaseConfig?.projectUrl || FALLBACK_PROJECT_URL;
-        anonKey = anonKey || window.supabaseConfig?.anonKey || FALLBACK_ANON_KEY;
+        projectUrl = projectUrl || window.supabaseConfig?.projectUrl || null;
+        anonKey = anonKey || window.supabaseConfig?.anonKey || null;
 
         if (!projectUrl || !anonKey) throw new Error('Supabase is not configured on the server.');
         if (!window.supabase?.createClient) throw new Error('Supabase JS SDK failed to load.');
@@ -130,7 +127,9 @@ const NB_AUTH = (() => {
                style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:8px;margin-bottom:14px;font-size:14px">
         <label style="display:block;font-size:12px;font-weight:600;color:#374151;margin-bottom:6px">Password</label>
         <input id="nb-auth-password" type="password" autocomplete="current-password"
-               style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:8px;margin-bottom:16px;font-size:14px">
+               style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:8px;margin-bottom:10px;font-size:14px">
+        <label style="display:block;font-size:12px;font-weight:600;color:#374151;margin-bottom:6px">Organization name <span style="font-weight:400">(for sign up)</span></label>
+        <input id="nb-auth-workspace" type="text" autocomplete="organization" placeholder="Your business name" style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:8px;margin-bottom:16px;font-size:14px">
         <div style="display:flex;gap:8px;margin-bottom:14px">
           <button id="nb-auth-signin"  style="flex:1;padding:10px;border:0;border-radius:8px;background:#2563eb;color:#fff;font-weight:600;cursor:pointer">Sign in</button>
           <button id="nb-auth-signup"  style="flex:1;padding:10px;border:1px solid #d1d5db;border-radius:8px;background:#fff;color:#374151;font-weight:600;cursor:pointer">Sign up</button>
@@ -142,6 +141,7 @@ const NB_AUTH = (() => {
     const errEl = overlay.querySelector('#nb-auth-error');
     const emailEl = overlay.querySelector('#nb-auth-email');
     const passEl = overlay.querySelector('#nb-auth-password');
+    const workspaceEl = overlay.querySelector('#nb-auth-workspace');
 
     const run = async (mode) => {
       errEl.textContent = '';
@@ -150,8 +150,10 @@ const NB_AUTH = (() => {
       if (!email || !password) { errEl.textContent = 'Enter your email and password.'; return; }
       try {
         const sb = await getClient();
+        const workspaceName = workspaceEl?.value.trim() || '';
+        if (mode === 'signup' && !workspaceName) { errEl.textContent = 'Enter your organization name.'; return; }
         const { data, error } = mode === 'signup'
-          ? await sb.auth.signUp({ email, password })
+          ? await sb.auth.signUp({ email, password, options: { data: { workspace_name: workspaceName } } })
           : await sb.auth.signInWithPassword({ email, password });
         if (error) { errEl.textContent = error.message; return; }
         if (!data?.session && mode === 'signup') {
@@ -201,10 +203,6 @@ const NB_AUTH = (() => {
       };
 
       (async () => {
-        const urlParams = new URLSearchParams(window.location.search || '');
-        if (urlParams.get('demo') === '1' || urlParams.get('test') === '1' || localStorage.getItem('nb_demo_mode') === '1') {
-          return finish(null, null);
-        }
 
         let sb;
         try {
@@ -236,12 +234,28 @@ const NB_AUTH = (() => {
     });
   }
 
+  function clearLocalSession() {
+    for (const key of Object.keys(localStorage)) {
+      if (key.startsWith('sb-') || key.startsWith('nextbright:') || key === 'nexuslead_state_v1') {
+        localStorage.removeItem(key);
+      }
+    }
+    sessionStorage.clear();
+  }
+
   async function signOut() {
-    try {
-      const sb = await getClient();
-      await sb.auth.signOut();
-    } catch (_) { /* ignore */ }
-    window.location.reload();
+    // Clear the browser state first. A network failure must never keep the old
+    // account visible or allow its stale token to restore the CRM after reload.
+    const sb = client;
+    clearLocalSession();
+    client = null;
+    initPromise = null;
+    emit(null, null);
+    showOverlay();
+    if (sb?.auth?.signOut) {
+      try { await sb.auth.signOut({ scope: 'local' }); } catch (_) { /* local cleanup already succeeded */ }
+    }
+    window.location.replace(`${window.location.pathname}?signed_out=1`);
   }
 
   return { getClient, getAccessToken, apiFetch, requireSession, signOut, showOverlay, onAuthChange: fn => listeners.add(fn) };
@@ -253,3 +267,4 @@ window.NB_AUTH = NB_AUTH;
 document.addEventListener('DOMContentLoaded', () => {
   NB_AUTH.requireSession();
 });
+

@@ -265,6 +265,7 @@
       // Authenticated but not permitted. Distinct from 401 on purpose: this is
       // never fixed by signing in again.
       console.warn('[API] 403 Forbidden for', String(input), '- not a member of this organization?');
+      notifyAuthEvent({ type: 'forbidden', path: String(input) });
     } else if (response.status >= 500) {
       // Surface the server's own message rather than hiding it.
       const detail = await response.clone().text().catch(() => '');

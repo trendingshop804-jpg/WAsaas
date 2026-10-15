@@ -534,7 +534,7 @@ function initActionModals() {
 
       window.NB.customers.unshift({
         name, phone: phone || '+91 98765 11111', company: company || 'Enterprise',
-        revenue: revenue || '₹50,000', assigned: 'Praveenkumar', lastContact: 'Today'
+        revenue: revenue || '₹50,000', assigned: window.authService?.getUser()?.profile?.name || 'Unassigned', lastContact: 'Today'
       });
       if (typeof window.renderCustomers === 'function') window.renderCustomers();
 
@@ -558,7 +558,7 @@ function initActionModals() {
       if (!window.NB.deals[stage]) window.NB.deals[stage] = [];
       window.NB.deals[stage].unshift({
         name, customer: customer || 'Client', amount: amount || '₹1,00,000',
-        prob: '70%', probClass: 'prob-high', owner: 'Praveenkumar', lastActivity: 'Just now'
+        prob: '70%', probClass: 'prob-high', owner: window.authService?.getUser()?.profile?.name || 'Unassigned', lastActivity: 'Just now'
       });
       if (typeof window.renderDeals === 'function') window.renderDeals();
 

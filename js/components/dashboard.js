@@ -109,7 +109,7 @@ class DashboardComponent {
     setEl('kpi-messages-sent', totalSent);
     setEl('kpi-response-rate', responseRate + '%');
     setEl('kpi-conversion-rate', conversionRate + '%');
-    setEl('kpi-credits-used', `${org.creditsUsed} / ${org.creditsLimit}`);
+    setEl('kpi-credits-used', org ? String(org.creditsUsed || 0) + ' / ' + String(org.creditsLimit || 0) : '—');
 
     // Update Follow-up priority widget on dashboard
     if (window.followUpsComponent) {

@@ -75,30 +75,23 @@ class AuthService {
   async syncUserProfile() {
     if (!this.supabase || !this.currentUser) return;
     try {
-      // NOTE: this database has no `users` table — the profile lives in
-      // `profiles`, keyed by the same id as auth.users. Querying `users`
-      // always failed, which left the signed-in user with no organization.
-      // `organizations(*)` embeds via profiles.organization_id -> organizations.id
-      // (created by supabase/migrations/20260926_tenant_whatsapp_schema.sql).
       const { data: profile, error } = await this.supabase
         .from('profiles')
-        .select('id, name, email, role, organization_id, organizations(*)')
+        .select('id, name, email, role')
         .eq('id', this.currentUser.id)
         .maybeSingle();
-
       if (error) throw error;
-
-      if (profile) {
-        this.currentUser.profile = profile;
-        if (profile.organizations) {
-          window.appState.set('currentOrgId', profile.organizations.id);
-          const orgs = window.appState.get('organizations') || [];
-          if (!orgs.some(o => o.id === profile.organizations.id)) {
-            orgs.unshift(profile.organizations);
-            window.appState.set('organizations', orgs);
-          }
-        }
-      }
+      const { data: memberships, error: membershipError } = await this.supabase
+        .from('organization_users')
+        .select('organization_id, role, organizations(id, name, slug)')
+        .eq('user_id', this.currentUser.id)
+        .limit(1);
+      if (membershipError) throw membershipError;
+      const membership = memberships?.[0] || null;
+      const organization = membership?.organizations || null;
+      this.currentUser.profile = { ...profile, organization_id: organization?.id || null, organizationRole: membership?.role || null };
+      window.appState.configureScope({ userId: this.currentUser.id, organization });
+      window.dispatchEvent(new CustomEvent('nb:workspace', { detail: { user: this.currentUser, organization, role: membership?.role || null } }));
     } catch (e) {
       console.warn('[AuthService] Could not sync database profile:', e.message);
     }
@@ -108,11 +101,13 @@ class AuthService {
     this.currentUser = null;
     this.currentSession = null;
     localStorage.removeItem('nexuslead_local_user');
+    window.appState?.clear();
+    window.dispatchEvent(new CustomEvent('nb:workspace', { detail: { user: null, organization: null, role: null } }));
   }
 
   isAuthenticated() {
     if (this.supabase) {
-      return Boolean(this.currentSession || this.currentUser);
+      return Boolean(this.currentSession?.access_token);
     }
     return false;
   }
@@ -201,7 +196,7 @@ class AuthService {
       if (error) throw new Error(error.message);
       return { success: true };
     }
-    return { success: true, message: 'Password reset link sent (demo simulation).' };
+    throw new Error('Authentication is not configured. Password reset is unavailable.');
   }
 
   getUser() {

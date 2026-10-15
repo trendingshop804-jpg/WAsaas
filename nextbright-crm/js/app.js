@@ -223,7 +223,7 @@ window.openCustomer360 = async function(name) {
       <strong style="color:var(--status-success)">WhatsApp Conversation</strong> — Customer inquired about services (Yesterday 11:00 AM)
     </div>
     <div style="padding:8px 12px;background:var(--bg-card);border:1px solid var(--border-light);border-radius:6px;">
-      <strong style="color:var(--status-purple)">Call Completed</strong> — Duration 04:12 by Praveenkumar (Today 09:15 AM)
+      <strong style="color:var(--status-purple)">Call Completed</strong> — Duration 04:12 by Signed-in user (Today 09:15 AM)
     </div>
     <div style="padding:8px 12px;background:var(--bg-card);border:1px solid var(--border-light);border-radius:6px;">
       <strong style="color:var(--status-warning)">Appointment Scheduled</strong> — Consultation booked for 4:00 PM today
