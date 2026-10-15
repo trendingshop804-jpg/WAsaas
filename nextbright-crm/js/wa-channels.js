@@ -1,118 +1,50 @@
-/* =============================================================================
-   wa-channels.js â€” NextBright CRM
-   WhatsApp Channels & Official Meta Business Profile Management
-   ============================================================================= */
 'use strict';
 
 (function () {
-  const DEFAULT_PROFILE = {
-    display_name: 'NextBright CRM Official',
-    about: 'Leading AI-Powered Multi-Tenant CRM & Sales Automation Platform for modern businesses.',
-    address: '100 Tech Park Way, Suite 400, San Francisco, CA',
-    email: 'support@nextbright.io',
-    websites: ['https://nextbright.io'],
-    vertical: 'SOFTWARE',
-    messaging_tier: 'TIER_1',
-    quality_score: 'HIGH',
-    daily_limit: 1000,
-    phone_number: '+1 (555) 019-2834',
-    waba_id: 'waba_99182471928347'
-  };
-
-  function getProfile() {
+  function request(options) {
+    if (window.NB_AUTH?.apiFetch) return window.NB_AUTH.apiFetch('/api/update-whatsapp-profile', options);
+    return fetch('/api/update-whatsapp-profile', options);
+  }
+  async function callProfile(body) {
+    const response = await request({ method: 'POST', body: JSON.stringify(body) });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || 'Meta did not confirm the WhatsApp profile operation.');
+    return payload;
+  }
+  function toast(message, type) { if (window.showToast) window.showToast(message, type); }
+  function fill(profile) {
+    const fields = { 'wa-prof-name': profile.name || '', 'wa-prof-about': profile.about || profile.description || '', 'wa-prof-address': profile.address || '', 'wa-prof-email': profile.email || '', 'wa-prof-website': Array.isArray(profile.websites) ? profile.websites[0] || '' : '' };
+    Object.entries(fields).forEach(([id, value]) => { const input = document.getElementById(id); if (input) input.value = value; });
+    const vertical = document.getElementById('wa-prof-vertical'); if (vertical && profile.vertical) vertical.value = profile.vertical;
+  }
+  async function sync() {
     try {
-      const stored = localStorage.getItem('nb_wa_business_profile');
-      if (stored) return JSON.parse(stored);
-    } catch (e) {}
-    localStorage.setItem('nb_wa_business_profile', JSON.stringify(DEFAULT_PROFILE));
-    return DEFAULT_PROFILE;
+      toast('Fetching live WhatsApp Business profile from Meta…', 'info');
+      const payload = await callProfile({ action: 'fetch_profile' });
+      fill(payload.profile || {});
+      const profile = payload.profile || {};
+      const phone = document.getElementById('wa-channel-phone'); if (phone) phone.textContent = profile.phone_number || 'Connected (number not returned by Meta)';
+      const tier = document.getElementById('wa-channel-tier'); if (tier) tier.textContent = profile.messaging_limit_tier || 'Not returned by Meta';
+      const limit = document.getElementById('wa-channel-limit'); if (limit) limit.textContent = profile.messaging_limit_tier ? 'See Meta Manager' : 'Not returned by Meta';
+      const quality = document.getElementById('wa-channel-quality'); if (quality) quality.textContent = profile.quality_rating ? `Quality: ${profile.quality_rating}` : 'Quality: Not returned by Meta';
+      toast('WhatsApp profile refreshed from Meta.', 'success');
+    } catch (error) { toast(error.message, 'error'); }
   }
-
-  function saveProfile(prof) {
-    localStorage.setItem('nb_wa_business_profile', JSON.stringify(prof));
+  async function save(event) {
+    event.preventDefault();
+    const about = document.getElementById('wa-prof-about')?.value.trim();
+    if (!about) return toast('About text is required for the supported profile update.', 'error');
+    try {
+      const payload = await callProfile({ action: 'update_about', about });
+      toast(payload.message || 'Meta confirmed the About update.', 'success');
+      await sync();
+    } catch (error) { toast(error.message, 'error'); }
   }
-
-  function initWAChannels() {
-    populateProfileForm();
-    setupEventListeners();
+  function init() {
+    const form = document.getElementById('form-wa-profile'); if (form) form.onsubmit = save;
+    document.getElementById('btn-sync-wa-profile')?.addEventListener('click', sync);
+    sync();
   }
-
-  function populateProfileForm() {
-    const prof = getProfile();
-
-    const nameInput = document.getElementById('wa-prof-name');
-    const aboutInput = document.getElementById('wa-prof-about');
-    const addressInput = document.getElementById('wa-prof-address');
-    const emailInput = document.getElementById('wa-prof-email');
-    const websiteInput = document.getElementById('wa-prof-website');
-    const verticalSelect = document.getElementById('wa-prof-vertical');
-
-    if (nameInput) nameInput.value = prof.display_name;
-    if (aboutInput) aboutInput.value = prof.about;
-    if (addressInput) addressInput.value = prof.address;
-    if (emailInput) emailInput.value = prof.email;
-    if (websiteInput) websiteInput.value = (prof.websites && prof.websites[0]) || '';
-    if (verticalSelect) verticalSelect.value = prof.vertical;
-
-    const elPhone = document.getElementById('wa-channel-phone');
-    const elTier = document.getElementById('wa-channel-tier');
-    const elLimit = document.getElementById('wa-channel-limit');
-    const elQuality = document.getElementById('wa-channel-quality');
-
-    if (elPhone) elPhone.textContent = prof.phone_number;
-    if (elTier) elTier.textContent = prof.messaging_tier;
-    if (elLimit) elLimit.textContent = `${prof.daily_limit.toLocaleString()} / 24h`;
-    if (elQuality) elQuality.textContent = `Quality: ${prof.quality_score}`;
-  }
-
-  function setupEventListeners() {
-    const form = document.getElementById('form-wa-profile');
-    if (form) {
-      form.onsubmit = handleProfileSave;
-    }
-
-    const syncBtn = document.getElementById('btn-sync-wa-profile');
-    if (syncBtn) {
-      syncBtn.onclick = syncWithMetaGraphApi;
-    }
-  }
-
-  function handleProfileSave(e) {
-    e.preventDefault();
-    const prof = getProfile();
-
-    prof.display_name = document.getElementById('wa-prof-name')?.value.trim() || prof.display_name;
-    prof.about = document.getElementById('wa-prof-about')?.value.trim() || prof.about;
-    prof.address = document.getElementById('wa-prof-address')?.value.trim() || prof.address;
-    prof.email = document.getElementById('wa-prof-email')?.value.trim() || prof.email;
-    prof.websites = [document.getElementById('wa-prof-website')?.value.trim() || 'https://nextbright.io'];
-    prof.vertical = document.getElementById('wa-prof-vertical')?.value || 'SOFTWARE';
-
-    saveProfile(prof);
-
-    if (window.showToast) window.showToast('WhatsApp Business Profile updated successfully!', 'success');
-  }
-
-  async function syncWithMetaGraphApi() {
-    if (window.showToast) window.showToast('Syncing status with Meta WhatsApp Cloud API...', 'info');
-
-    setTimeout(() => {
-      const prof = getProfile();
-      prof.quality_score = 'HIGH';
-      prof.daily_limit = 1000;
-      prof.messaging_tier = 'TIER_1';
-      saveProfile(prof);
-      populateProfileForm();
-      if (window.showToast) window.showToast('Meta WABA Status: Connected & Healthy (High Quality)', 'success');
-    }, 1000);
-  }
-
-  window.NextBrightWAChannels = {
-    init: initWAChannels,
-    sync: syncWithMetaGraphApi
-  };
-
-  document.addEventListener('DOMContentLoaded', () => {
-    initWAChannels();
-  });
+  window.NextBrightWAChannels = { init, sync };
+  document.addEventListener('DOMContentLoaded', init);
 })();
