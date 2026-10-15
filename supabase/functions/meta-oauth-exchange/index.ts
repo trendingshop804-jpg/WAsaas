@@ -21,7 +21,8 @@ const META_APP_SECRET = Deno.env.get("META_APP_SECRET") || "";
 const ENCRYPT_SECRET = Deno.env.get("INTEGRATION_ENCRYPT_SECRET");
 
 const corsHeaders = {
-  "Access-Control-Allow-Origin": ["https://yourdomain.com", "https://app.yourdomain.com", "http://localhost:3000"],
+  // Access is protected by the required Supabase user JWT; this header must be a single value, not an array.
+  "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization, apikey",
 };
@@ -198,7 +199,7 @@ async function saveSelectedAccounts(
     const waba = discovery.wabas[wabaIndex];
     const phone = waba.phoneNumbers[phoneIndex];
 
-    await supabaseAdmin.from("whatsapp_connections").upsert({
+    const { error: whatsappSaveError } = await supabaseAdmin.from("whatsapp_connections").upsert({
       organization_id: organizationId,
       provider: "META_CLOUD_API",
       phone_number: phone.display_phone_number,
@@ -209,6 +210,7 @@ async function saveSelectedAccounts(
       is_active: true,
       updated_at: new Date().toISOString()
     }, { onConflict: "organization_id, phone_number_id" });
+    if (whatsappSaveError) throw new Error(`Could not save WhatsApp connection: ${whatsappSaveError.message}`);
     whatsappSaved = true;
     savedWabaId = waba.wabaId;
 
@@ -321,7 +323,7 @@ async function handleEmbeddedSignup(
   // 5. Encrypt and store token
   const encryptedToken = await encryptToken(longLivedToken);
 
-  await supabaseAdmin.from("whatsapp_connections").upsert({
+  const { error: whatsappSaveError } = await supabaseAdmin.from("whatsapp_connections").upsert({
     organization_id: organizationId,
     provider: "META_EMBEDDED_SIGNUP",
     phone_number: phoneData.display_phone_number,
@@ -332,6 +334,7 @@ async function handleEmbeddedSignup(
     is_active: true,
     updated_at: new Date().toISOString()
   }, { onConflict: "organization_id, phone_number_id" });
+  if (whatsappSaveError) throw new Error(`Could not save WhatsApp connection: ${whatsappSaveError.message}`);
 
   // 6. Subscribe to webhooks
   await subscribeToWebhook(wabaId, longLivedToken);

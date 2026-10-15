@@ -1235,15 +1235,26 @@ class SettingsIntegrationsComponent {
         }
 
         const org = window.appState.getCurrentOrg();
+        const authHeaders = window.supabaseConfig.getSessionHeaders?.();
+        if (!authHeaders) {
+          throw new Error('Your sign-in session has expired. Please sign in again before connecting WhatsApp.');
+        }
+
         fetch(edgeUrl, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: authHeaders,
           body: JSON.stringify({ code, organizationId: org.id })
         })
-          .then(res => res.json())
+          .then(async res => {
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok || data.error) throw new Error(data.error || `WhatsApp connection failed (${res.status}).`);
+            return data;
+          })
           .then(data => {
             console.log('[FB Connect] Edge function response:', data);
-            if (data.error) throw new Error(data.error);
+            if (!data.whatsapp && !data.waba_id) {
+              throw new Error('Meta did not return a WhatsApp Business account. Select an account with an active WhatsApp phone number and try again.');
+            }
 
             const org = window.appState.getCurrentOrg();
             org.whatsappConnected = true;
