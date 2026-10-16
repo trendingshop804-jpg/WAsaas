@@ -6,10 +6,16 @@
 'use strict';
 
 (function () {
-  function initSocialIntegrations() {
+  let initialized = false;
+
+  async function initSocialIntegrations() {
     loadSavedCredentials();
-    fetchLiveIntegrationStatuses();
-    setupEventListeners();
+    if (!initialized) {
+      setupEventListeners();
+      initialized = true;
+    }
+    const token = await window.NB_AUTH?.getAccessToken?.().catch(() => null);
+    if (token) fetchLiveIntegrationStatuses();
   }
 
   async function fetchLiveIntegrationStatuses() {
@@ -247,7 +253,4 @@
     testWa: testWhatsAppConnection
   };
 
-  document.addEventListener('DOMContentLoaded', () => {
-    initSocialIntegrations();
-  });
 })();

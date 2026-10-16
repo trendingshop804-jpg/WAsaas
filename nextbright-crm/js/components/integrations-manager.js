@@ -55,12 +55,22 @@
           token = await window.NB_AUTH.getAccessToken();
         } catch (_) {}
       }
-      if (!token) throw new Error('Sign in to manage integrations.');
+      if (!token) {
+        const error = new Error('Sign in to manage integrations.');
+        error.status = 401;
+        error.code = 'AUTH_REQUIRED';
+        throw error;
+      }
       if (!headers['Authorization']) headers['Authorization'] = `Bearer ${token}`;
 
       const res = await fetch(endpoint, { credentials: 'omit', ...options, headers });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || data.message || `Request failed (HTTP ${res.status})`);
+      if (!res.ok) {
+        const error = new Error(data.error || data.message || `Request failed (HTTP ${res.status})`);
+        error.status = res.status;
+        error.code = data.code || (res.status === 401 ? 'AUTH_REQUIRED' : 'REQUEST_FAILED');
+        throw error;
+      }
       return data;
     }
 
@@ -76,8 +86,10 @@
         this.apiKeys = [];
         this.renderConnections();
         this.renderApiKeys();
-        console.error('[IntegrationsManager] Load error:', err);
-        this.toast(err.message || 'Could not load integrations.', 'error');
+        if (![401, 403].includes(err?.status) && err?.code !== 'AUTH_REQUIRED') {
+          console.error('[IntegrationsManager] Load error:', err);
+          this.toast(err.message || 'Could not load integrations.', 'error');
+        }
       }
     }
 
@@ -316,8 +328,23 @@ print(response.json())`,
         }
       });
 
-      // Initial Data Fetch
-      this.loadData();
+      const clearProtectedData = () => {
+        this.connections = [];
+        this.apiKeys = [];
+        this.renderConnections();
+        this.renderApiKeys();
+      };
+
+      if (window.NB_AUTH?.onAuthChange) {
+        window.NB_AUTH.onAuthChange(session => {
+          if (session?.access_token) this.loadData();
+          else clearProtectedData();
+        });
+      }
+
+      window.NB_AUTH?.getAccessToken?.()
+        .then(token => token ? this.loadData() : clearProtectedData())
+        .catch(clearProtectedData);
     }
 
     renderConnections() {

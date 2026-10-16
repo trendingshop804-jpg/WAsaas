@@ -1,13 +1,9 @@
 // api/update-whatsapp-profile.js
 // Handles WhatsApp Business profile updates (photo, about, and fetch) for local dev-server & Vercel
-import { createClient } from '@supabase/supabase-js';
 import { decryptToken } from './_crypto.js';
+import { createSupabaseAdminClient, requireOrgAccess } from './_supabase.js';
 
-const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
-const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
 const GRAPH_API_VERSION = 'v21.0';
-
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
 function validateImage(fileExt, mimeType, byteSize) {
   const validExts = ['jpeg', 'jpg', 'png'];
@@ -93,104 +89,48 @@ export default async function handler(req, res) {
   }
 
   try {
-    const authHeader = req.headers.authorization || req.headers.Authorization;
-    let organizationId = req.body?.organizationId || req.body?.organization_id || null;
-    let userEmail = 'Admin';
+    const access = await requireOrgAccess(req, res, null);
+    if (!access) return;
 
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      const token = authHeader.split(' ')[1];
-      try {
-        const { data: { user }, error: userErr } = await supabase.auth.getUser(token);
-        if (!userErr && user) {
-          userEmail = user.email || userEmail;
-          const { data: userProfile } = await supabase
-            .from('users')
-            .select('organization_id, role')
-            .eq('id', user.id)
-            .maybeSingle();
-
-          if (userProfile?.organization_id && ['OWNER', 'ADMIN'].includes(userProfile.role)) {
-            organizationId = userProfile.organization_id;
-          }
-        }
-      } catch (authErr) {
-        console.warn('Auth token verification skipped:', authErr.message);
-      }
+    const supabase = createSupabaseAdminClient();
+    if (!supabase) {
+      return res.status(503).json({ error: 'WhatsApp profile service is not configured.' });
     }
 
-    if (!organizationId) {
-      // Check active connection in whatsapp_connections table
-      const { data: activeConns } = await supabase
-        .from('whatsapp_connections')
-        .select('organization_id')
-        .eq('is_active', true)
-        .order('updated_at', { ascending: false })
-        .limit(1);
-      if (activeConns?.[0]?.organization_id) {
-        organizationId = activeConns[0].organization_id;
-      }
+    const { action, imageBase64, fileName, about } = req.body || {};
+    if (!action) {
+      return res.status(400).json({ error: "Missing required 'action' field" });
     }
 
-    if (!organizationId) {
-      // Fallback to active organization in DB
-      const { data: activeOrgs } = await supabase
-        .from('organizations')
-        .select('id')
-        .limit(1);
-      organizationId = activeOrgs?.[0]?.id;
-    }
-
-    // Get WhatsApp connection (try by organization_id first, then any active connection)
-    let connection = null;
-    if (organizationId) {
-      const { data: connections } = await supabase
-        .from('whatsapp_connections')
-        .select('access_token_encrypted, access_token, phone_number_id, waba_id, phone_number, is_active, organization_id')
-        .eq('organization_id', organizationId)
-        .eq('is_active', true)
-        .order('updated_at', { ascending: false })
-        .limit(1);
-      connection = connections?.[0];
-    }
-
-    if (!connection) {
-      const fallbackToken = req.body?.accessToken || req.body?.token || process.env.WHATSAPP_ACCESS_TOKEN;
-      const fallbackPhoneId = req.body?.phoneNumberId || req.body?.phone_number_id || process.env.PHONE_NUMBER_ID;
-      const fallbackWabaId = req.body?.wabaId || req.body?.waba_id || process.env.WABA_ID;
-
-      if (fallbackToken || fallbackPhoneId) {
-        connection = {
-          access_token: fallbackToken,
-          phone_number_id: fallbackPhoneId,
-          waba_id: fallbackWabaId,
-          phone_number: req.body?.phoneNumber || req.body?.phone_number || fallbackPhoneId || 'WhatsApp Business',
-          organization_id: organizationId || 'org_default',
-          is_active: true
-        };
-
-        // Asynchronously persist to whatsapp_connections so future lookups succeed
-        try {
-          supabase.from('whatsapp_connections').upsert({
-            organization_id: connection.organization_id,
-            phone_number_id: fallbackPhoneId || 'default',
-            waba_id: fallbackWabaId || null,
-            phone_number: connection.phone_number,
-            access_token: fallbackToken,
-            is_active: true,
-            updated_at: new Date().toISOString()
-          }, { onConflict: 'organization_id, phone_number_id' }).then(() => { }).catch(() => { });
-        } catch (_) { }
-      }
-    }
-
-    if (!connection) {
-      return res.status(400).json({
-        error: 'No active WhatsApp connection found. Please connect WhatsApp Business first.',
+    const normalizedRole = String(access.role || '').trim().toUpperCase();
+    if (action !== 'fetch_profile' && !['OWNER', 'ADMIN'].includes(normalizedRole)) {
+      return res.status(403).json({
+        error: 'Only organization owners or admins can update the WhatsApp Business profile.',
+        code: 'INSUFFICIENT_ROLE'
       });
     }
 
-    if (!organizationId) {
-      organizationId = connection.organization_id || 'org_default';
+    const organizationId = access.organizationId;
+    const userEmail = access.user?.email || 'Authenticated user';
+    const { data: connections, error: connectionError } = await supabase
+      .from('whatsapp_connections')
+      .select('access_token_encrypted, access_token, phone_number_id, waba_id, phone_number, is_active, organization_id')
+      .eq('organization_id', organizationId)
+      .eq('is_active', true)
+      .order('updated_at', { ascending: false })
+      .limit(1);
+
+    if (connectionError) {
+      console.error('[WhatsApp Profile] Connection lookup failed:', connectionError.message);
+      return res.status(500).json({ error: 'Could not load this organization\'s WhatsApp connection.' });
+    }
+
+    const connection = connections?.[0];
+    if (!connection) {
+      return res.status(409).json({
+        error: 'No active WhatsApp connection is configured for this organization.',
+        code: 'NO_WHATSAPP_CONNECTION'
+      });
     }
 
     let accessToken = null;
@@ -205,22 +145,19 @@ export default async function handler(req, res) {
       accessToken = connection.access_token;
     }
     if (!accessToken) {
-      accessToken = req.body?.accessToken || req.body?.token || process.env.WHATSAPP_ACCESS_TOKEN;
-    }
-
-    if (!accessToken) {
-      return res.status(400).json({
+      return res.status(409).json({
         error: 'No WhatsApp access token available. Please reconnect your WhatsApp Business account.',
+        code: 'WHATSAPP_CREDENTIAL_UNAVAILABLE'
       });
     }
 
     const { phone_number_id, waba_id } = connection;
-    const targetPhoneId = phone_number_id || req.body?.phoneNumberId || req.body?.phone_number_id || process.env.PHONE_NUMBER_ID || waba_id;
-
-    const { action, imageBase64, fileName, about } = req.body || {};
-
-    if (!action) {
-      return res.status(400).json({ error: "Missing required 'action' field" });
+    const targetPhoneId = phone_number_id || waba_id;
+    if (!targetPhoneId) {
+      return res.status(409).json({
+        error: 'The saved WhatsApp connection is missing its Phone Number ID.',
+        code: 'WHATSAPP_PHONE_ID_MISSING'
+      });
     }
 
     // ─── Action: update_profile_picture ──────────────────────────────────

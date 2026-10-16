@@ -1,9 +1,13 @@
 'use strict';
 
 (function () {
+  let initialized = false;
+
   function request(options) {
     if (window.NB_AUTH?.apiFetch) return window.NB_AUTH.apiFetch('/api/update-whatsapp-profile', options);
-    return fetch('/api/update-whatsapp-profile', options);
+    const error = new Error('Sign in to manage the WhatsApp Business profile.');
+    error.code = 'AUTH_REQUIRED';
+    throw error;
   }
   async function callProfile(body) {
     const response = await request({ method: 'POST', body: JSON.stringify(body) });
@@ -19,7 +23,7 @@
   }
   async function sync() {
     try {
-      toast('Fetching live WhatsApp Business profile from Meta…', 'info');
+      toast('Fetching live WhatsApp Business profile from Metaâ€¦', 'info');
       const payload = await callProfile({ action: 'fetch_profile' });
       fill(payload.profile || {});
       const profile = payload.profile || {};
@@ -40,11 +44,13 @@
       await sync();
     } catch (error) { toast(error.message, 'error'); }
   }
-  function init() {
+  async function init() {
+    if (initialized) return;
+    initialized = true;
     const form = document.getElementById('form-wa-profile'); if (form) form.onsubmit = save;
     document.getElementById('btn-sync-wa-profile')?.addEventListener('click', sync);
-    sync();
+    const token = await window.NB_AUTH?.getAccessToken?.().catch(() => null);
+    if (token) sync();
   }
   window.NextBrightWAChannels = { init, sync };
-  document.addEventListener('DOMContentLoaded', init);
 })();

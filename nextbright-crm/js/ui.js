@@ -1069,6 +1069,7 @@ const INTEGRATION_STATUS_KEYS = ['whatsapp', 'instagram', 'twilio', 'stripe'];
 const INTEGRATION_STATUS_POLL_MS = 30_000;
 let integrationStatusPromise = null;
 let integrationStatusPollTimer = null;
+let integrationStatusAuthBound = false;
 const integrationServerConfigs = Object.create(null);
 
 function getIntegrationStatusElements(key) {
@@ -1297,13 +1298,40 @@ async function testIntegrationConnection(key, candidateValues = null) {
 }
 
 function initIntegrationStatus() {
-  if (integrationStatusPollTimer) return;
-  fetchIntegrationStatuses();
-  integrationStatusPollTimer = window.setInterval(() => fetchIntegrationStatuses(), INTEGRATION_STATUS_POLL_MS);
-  document.addEventListener('visibilitychange', () => {
-    if (!document.hidden) fetchIntegrationStatuses();
+  if (integrationStatusAuthBound) return;
+  integrationStatusAuthBound = true;
+
+  const stopPolling = () => {
+    if (integrationStatusPollTimer) window.clearInterval(integrationStatusPollTimer);
+    integrationStatusPollTimer = null;
+    integrationStatusPromise = null;
+    INTEGRATION_STATUS_KEYS.forEach(key => setIntegrationStatus(key, {
+      status: 'unavailable',
+      message: 'Sign in to check this integration.'
+    }));
+  };
+
+  const startPolling = () => {
+    if (integrationStatusPollTimer) return;
+    fetchIntegrationStatuses();
+    integrationStatusPollTimer = window.setInterval(() => fetchIntegrationStatuses(), INTEGRATION_STATUS_POLL_MS);
+  };
+
+  window.NB_AUTH?.onAuthChange?.(session => {
+    if (session?.access_token) startPolling();
+    else stopPolling();
   });
-  window.addEventListener('online', () => fetchIntegrationStatuses());
+
+  window.NB_AUTH?.getAccessToken?.()
+    .then(token => token ? startPolling() : stopPolling())
+    .catch(stopPolling);
+
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && integrationStatusPollTimer) fetchIntegrationStatuses();
+  });
+  window.addEventListener('online', () => {
+    if (integrationStatusPollTimer) fetchIntegrationStatuses();
+  });
 }
 
 window.fetchIntegrationStatuses = fetchIntegrationStatuses;
