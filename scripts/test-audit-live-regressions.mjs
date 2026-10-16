@@ -81,11 +81,16 @@ assert.doesNotMatch(agentUi, /Default reply logs active/);
 assert.doesNotMatch(agentUi, /Grounded fallback using local Knowledge Base/);
 
 const edgeWebhook = fs.readFileSync(new URL('../supabase/functions/meta-webhook/index.ts', import.meta.url), 'utf8');
+const edgeAiReply = fs.readFileSync(new URL('../supabase/functions/meta-webhook/ai-reply.mjs', import.meta.url), 'utf8');
 assert.doesNotMatch(edgeWebhook, /Thanks for asking! I can share the right pricing/);
 assert.doesNotMatch(edgeWebhook, /Hi! Thanks for getting in touch\. How can I help you today\?/);
 assert.match(edgeWebhook, /\.eq\("auto_reply_enabled", true\)/);
-assert.match(edgeWebhook, /No verified knowledge matched; message left for human review/);
-assert.match(edgeWebhook, /If the answer is not explicitly present, return an empty response instead of guessing/);
+assert.match(edgeWebhook, /\.order\("received_at", \{ ascending: false \}\)/);
+assert.match(edgeWebhook, /\(data \|\| \[\]\)\.reverse\(\)/);
+assert.match(edgeWebhook, /recordAIOutcome/);
+assert.match(edgeAiReply, /knowledge_not_found/);
+assert.match(edgeAiReply, /provider_failed/);
+assert.match(edgeAiReply, /unsafe_or_repeated_reply/);
 
 const vercel = JSON.parse(fs.readFileSync(new URL('../vercel.json', import.meta.url), 'utf8'));
 assert.ok(vercel.rewrites.some(rule => rule.source === '/api/ai-agents' && rule.destination.includes('/api/ai-chat')));

@@ -6,9 +6,11 @@
 //   - AI auto-reply generation
 //   - Automatic follow-up pause when customer replies
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { decideAutoReply } from "./ai-reply.mjs";
 
 const supabaseUrl       = Deno.env.get("SUPABASE_URL") ?? "";
 const openRouterApiKey  = Deno.env.get("OPENROUTER_API_KEY") ?? "";
+const openRouterModel   = Deno.env.get("OPENROUTER_MODEL") ?? "openai/gpt-4o-mini";
 
 const MEDIA_TYPES = ["image", "video", "audio", "document", "sticker"];
 
@@ -47,34 +49,14 @@ function isOptOut(message: string): boolean {
   return /\b(stop|unsubscribe|remove me|do not contact|don't contact|not interested)\b/i.test(message);
 }
 
-type KnowledgeEntry = {
-  title: string;
-  content: string;
-  category?: string;
-  keywords?: string[];
-};
-
-function matchingKnowledge(entries: KnowledgeEntry[], userMessage: string): KnowledgeEntry[] {
-  const ignoredWords = new Set(["and", "are", "can", "for", "how", "the", "this", "what", "with", "you", "your"]);
-  const words = userMessage.toLowerCase().split(/[^a-z0-9]+/)
-    .filter(word => word.length >= 3 && !ignoredWords.has(word));
-  if (words.length === 0) return [];
-
-  return entries.filter(entry => {
-    const searchable = [entry.title, entry.content, entry.category || "", ...(entry.keywords || [])]
-      .join(" ")
-      .toLowerCase();
-    return words.some(word => searchable.includes(word));
-  }).slice(0, 5);
-}
-
-async function loadAutoReplyContext(supabaseAdmin: any, organizationId: string, userMessage: string) {
+async function loadAutoReplyContext(supabaseAdmin: any, organizationId: string) {
   const { data: agents, error: agentError } = await supabaseAdmin
     .from("ai_agents")
-    .select("id,business_name,system_instructions,tone")
+    .select("id,business_name,system_instructions,tone,status,auto_reply_enabled,updated_at")
     .eq("organization_id", organizationId)
-    .eq("is_active", true)
+    .eq("status", "active")
     .eq("auto_reply_enabled", true)
+    .order("updated_at", { ascending: false })
     .limit(1);
 
   if (agentError || !agents?.[0]) {
@@ -84,7 +66,7 @@ async function loadAutoReplyContext(supabaseAdmin: any, organizationId: string, 
 
   const { data: knowledge, error: knowledgeError } = await supabaseAdmin
     .from("ai_knowledge_base")
-    .select("title,content,category,keywords")
+    .select("id,title,content,category,keywords,updated_at")
     .eq("organization_id", organizationId)
     .eq("is_active", true);
 
@@ -93,17 +75,13 @@ async function loadAutoReplyContext(supabaseAdmin: any, organizationId: string, 
     return null;
   }
 
-  const sources = matchingKnowledge((knowledge || []) as KnowledgeEntry[], userMessage);
-  if (sources.length === 0) {
-    console.info("[AI Agent] No verified knowledge matched; message left for human review");
-    return null;
-  }
-
-  return { agent: agents[0] as Record<string, unknown>, sources };
+  return { agent: agents[0] as Record<string, unknown>, knowledge: knowledge || [] };
 }
 
-async function generateAIReply(agent: Record<string, unknown>, sources: KnowledgeEntry[], history: Array<Record<string, unknown>>, userMessage: string): Promise<string> {
-  if (!openRouterApiKey) return "";
+async function generateAIReply(agent: Record<string, unknown>, sources: Array<Record<string, unknown>>, history: Array<Record<string, unknown>>, userMessage: string) {
+  if (!openRouterApiKey) {
+    return { ok: false, text: "", outcome: "not_configured", errorCode: "AI_PROVIDER_NOT_CONFIGURED" };
+  }
 
   const businessName = agent.business_name || "our business";
   const tone = agent.tone || "professional and helpful";
@@ -120,7 +98,7 @@ async function generateAIReply(agent: Record<string, unknown>, sources: Knowledg
 
 ## Hard rules
 - Use only the verified Knowledge Base below for factual claims, pricing, features, and timelines.
-- If the answer is not explicitly present, return an empty response instead of guessing.
+- If the answer is not explicitly present, respond with exactly __INSUFFICIENT_KNOWLEDGE__ instead of guessing.
 - Never ask for sensitive info (passwords, OTPs, card numbers) over chat.
 
 ## Additional instructions
@@ -133,7 +111,7 @@ ${knowledgeContext}`;
     { role: 'system', content: systemPrompt },
     ...history.map(m => ({
       role: (m as Record<string, string>).direction === 'inbound' ? 'user' : 'assistant',
-      content: (m as Record<string, string>).body || ''
+      content: (m as Record<string, string>).body || (m as Record<string, string>).content || ''
     })),
     { role: 'user', content: userMessage }
   ];
@@ -142,16 +120,28 @@ ${knowledgeContext}`;
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: { "Authorization": `Bearer ${openRouterApiKey}`, "Content-Type": "application/json", "X-Title": "WAsaas AI Agent" },
-      body: JSON.stringify({ model: "openai/gpt-4o-mini", messages, temperature: 0.2, max_tokens: 220 })
+      body: JSON.stringify({ model: openRouterModel, messages, temperature: 0.2, max_tokens: 220 })
     });
 
-    const data = await response.json();
+    const data = await response.json().catch(() => ({}));
     const reply = data?.choices?.[0]?.message?.content?.trim();
-    if (response.ok && reply) return reply;
+    if (!response.ok) {
+      return {
+        ok: false,
+        text: "",
+        outcome: "http_error",
+        errorCode: String(data?.error?.code || response.status)
+      };
+    }
+    if (!reply) return { ok: false, text: "", outcome: "empty_response", errorCode: "AI_PROVIDER_EMPTY" };
+    if (reply === "__INSUFFICIENT_KNOWLEDGE__") {
+      return { ok: false, text: "", outcome: "insufficient_knowledge", errorCode: "AI_KNOWLEDGE_REJECTED" };
+    }
+    return { ok: true, text: reply, outcome: "success", errorCode: null };
   } catch (error) {
-    console.error("[AI Agent] Reply generation failed:", error);
+    console.error("[AI Agent] Provider request failed:", (error as Error).message);
+    return { ok: false, text: "", outcome: "exception", errorCode: "AI_PROVIDER_EXCEPTION" };
   }
-  return "";
 }
 
 async function sendWhatsAppReply(phoneNumberId: string, to: string, body: string) {
@@ -168,6 +158,41 @@ async function sendWhatsAppReply(phoneNumberId: string, to: string, body: string
   const data = await response.json();
   if (!response.ok) throw new Error(`WhatsApp send failed (${response.status}): ${JSON.stringify(data)}`);
   return data;
+}
+
+async function recordAIOutcome(supabaseAdmin: any, details: Record<string, any>) {
+  const safeEvent = {
+    organization_id: details.organizationId,
+    conversation_id: details.conversationId,
+    inbound_message_id: details.inboundMessageId,
+    agent_id: details.agentId || null,
+    provider: "openrouter",
+    model: openRouterModel,
+    provider_outcome: details.providerOutcome,
+    provider_error_code: details.providerErrorCode || null,
+    fallback_reason: details.fallbackReason || null,
+    intent: details.intent || "unknown",
+    selected_knowledge: details.sources || [],
+    send_result: details.sendResult || "not_attempted",
+    outbound_message_id: details.outboundMessageId || null
+  };
+  console.info("[AI Agent] outcome", JSON.stringify(safeEvent));
+
+  const status = details.sendResult === "sent" ? "sent" : details.sendResult === "failed" ? "failed" : "handover";
+  const { error } = await supabaseAdmin.from("ai_reply_logs").insert({
+    organization_id: details.organizationId,
+    agent_id: details.agentId || null,
+    channel: "whatsapp",
+    conversation_id: details.conversationId,
+    incoming_message: details.incomingMessage,
+    ai_draft_reply: details.replyKind === "ai" ? details.reply || null : null,
+    final_sent_reply: details.sendResult === "sent" ? details.reply || null : null,
+    handover_triggered: details.sendResult !== "sent" || details.replyKind === "clarification",
+    handover_reason: details.fallbackReason || null,
+    status,
+    api_result: safeEvent
+  });
+  if (error) console.warn("[AI Agent] Could not persist outcome:", error.code || error.message);
 }
 
 async function processInboundMedia(msg: any, mediaType: string, supabaseAdmin: any) {
@@ -227,14 +252,22 @@ async function processInboundMedia(msg: any, mediaType: string, supabaseAdmin: a
 }
 
 async function getOrganizationId(supabaseAdmin: any, phoneNumberId: string): Promise<string | null> {
-  const { data } = await supabaseAdmin
+  const { data, error } = await supabaseAdmin
     .from("whatsapp_connections")
     .select("organization_id")
     .eq("phone_number_id", phoneNumberId)
     .eq("is_active", true)
-    .limit(1);
+    .limit(2);
 
-  return data?.[0]?.organization_id || null;
+  if (error) {
+    console.error("[Webhook] WhatsApp tenant lookup failed:", error.code || error.message);
+    return null;
+  }
+  if (!data || data.length !== 1) {
+    console.error("[Webhook] WhatsApp phone number must map to exactly one active organization");
+    return null;
+  }
+  return data[0].organization_id;
 }
 
 async function findOrCreateLead(supabaseAdmin: any, organizationId: string, phoneNumber: string): Promise<string> {
@@ -302,15 +335,16 @@ async function findOrCreateConversation(supabaseAdmin: any, organizationId: stri
   return newConv.id;
 }
 
-async function fetchChatHistory(supabaseAdmin: any, conversationId: string, limit = 20): Promise<Array<Record<string, unknown>>> {
+async function fetchChatHistory(supabaseAdmin: any, organizationId: string, conversationId: string, limit = 20): Promise<Array<Record<string, unknown>>> {
   const { data } = await supabaseAdmin
     .from("messages")
-    .select("direction, body, message_type, received_at")
+    .select("direction, body, content, message_type, received_at, created_at")
+    .eq("organization_id", organizationId)
     .eq("conversation_id", conversationId)
-    .order("received_at", { ascending: true })
+    .order("received_at", { ascending: false })
     .limit(limit);
 
-  return data || [];
+  return (data || []).reverse();
 }
 
 function parseAIResponse(rawContent: string): { replyText: string; crmData: Record<string, unknown> | null } {
@@ -539,6 +573,7 @@ async function handler(request: Request): Promise<Response> {
           const { data: existing } = await supabaseAdmin
             .from("messages")
             .select("id")
+            .eq("organization_id", organizationId)
             .eq("wa_message_id", msg.id)
             .limit(1);
           if (existing && existing.length > 0) {
@@ -592,7 +627,7 @@ async function handler(request: Request): Promise<Response> {
           conversationId = await findOrCreateConversation(supabaseAdmin, organizationId, leadId);
 
           if (type === "text" && displayContent.trim()) {
-            chatHistory = await fetchChatHistory(supabaseAdmin, conversationId);
+            chatHistory = await fetchChatHistory(supabaseAdmin, organizationId, conversationId);
           }
         } catch (err) {
           console.error("[Webhook] Lead/Conversation setup error:", err);
@@ -621,14 +656,17 @@ async function handler(request: Request): Promise<Response> {
         };
 
         const { error } = await supabaseAdmin.from("messages").insert(messageRecord);
-        if (error) console.error("[Webhook] Supabase insert error:", error);
+        if (error) {
+          console.error("[Webhook] Supabase insert error:", error.code || error.message);
+          continue;
+        }
 
         // â”€â”€ Pause follow-up automation when customer replies â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         // Any inbound message pauses the scheduled follow-up sequence.
         await pauseLeadFollowUp(supabaseAdmin, leadId);
 
         // â”€â”€ Opt-out compliance â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-        if (isOptOut(content) && leadId) {
+        if (isOptOut(displayContent) && leadId) {
           try {
             await supabaseAdmin
               .from("leads")
@@ -649,17 +687,76 @@ async function handler(request: Request): Promise<Response> {
         }
 
         // â”€â”€ AI auto-reply (text messages only, non-opt-outs) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-        if (openRouterApiKey && type === "text" && displayContent.trim() && !isOptOut(displayContent)) {
+        if (type === "text" && displayContent.trim() && !isOptOut(displayContent)) {
           try {
-            const autoReplyContext = await loadAutoReplyContext(supabaseAdmin, organizationId, displayContent);
-            if (!autoReplyContext) continue;
-            const aiRaw = await generateAIReply(autoReplyContext.agent, autoReplyContext.sources, chatHistory, displayContent);
-            if (!aiRaw) throw new Error("AI provider did not return a grounded reply; no message was sent");
-            const parsed   = parseAIResponse(aiRaw);
+            const autoReplyContext = await loadAutoReplyContext(supabaseAdmin, organizationId);
+            if (!autoReplyContext) {
+              await recordAIOutcome(supabaseAdmin, {
+                organizationId,
+                conversationId,
+                inboundMessageId: msg.id,
+                incomingMessage: displayContent,
+                providerOutcome: "not_called",
+                fallbackReason: "agent_not_enabled_or_schema_unavailable",
+                sendResult: "not_attempted",
+                replyKind: "none",
+                sources: []
+              });
+              continue;
+            }
+
+            const decision = await decideAutoReply({
+              agent: autoReplyContext.agent,
+              knowledge: autoReplyContext.knowledge,
+              history: chatHistory,
+              userMessage: displayContent,
+              provider: ({ agent, sources, history, userMessage }: any) => generateAIReply(agent, sources, history, userMessage)
+            });
+
+            if (!decision.shouldSend) {
+              await recordAIOutcome(supabaseAdmin, {
+                organizationId,
+                conversationId,
+                inboundMessageId: msg.id,
+                incomingMessage: displayContent,
+                agentId: autoReplyContext.agent.id,
+                providerOutcome: decision.providerOutcome,
+                providerErrorCode: decision.providerErrorCode,
+                fallbackReason: decision.fallbackReason,
+                intent: decision.intent,
+                sendResult: "not_attempted",
+                replyKind: decision.replyKind,
+                sources: decision.sources
+              });
+              continue;
+            }
+
+            const parsed = parseAIResponse(decision.reply);
             const replyText = parsed.replyText;
             if (!replyText) throw new Error("AI response did not contain a customer reply; no message was sent");
 
-            const sent   = await sendWhatsAppReply(phoneNumberId, sender, replyText);
+            let sent;
+            try {
+              sent = await sendWhatsAppReply(phoneNumberId, sender, replyText);
+            } catch (sendError) {
+              await recordAIOutcome(supabaseAdmin, {
+                organizationId,
+                conversationId,
+                inboundMessageId: msg.id,
+                incomingMessage: displayContent,
+                agentId: autoReplyContext.agent.id,
+                reply: replyText,
+                replyKind: decision.replyKind,
+                providerOutcome: decision.providerOutcome,
+                providerErrorCode: decision.providerErrorCode,
+                fallbackReason: decision.fallbackReason || "meta_send_failed",
+                intent: decision.intent,
+                sources: decision.sources,
+                sendResult: "failed"
+              });
+              throw sendError;
+            }
+
             const sentAt = new Date().toISOString();
             const { error: outboundError } = await supabaseAdmin.from("messages").insert({
               organization_id: organizationId,
@@ -674,10 +771,27 @@ async function handler(request: Request): Promise<Response> {
               direction:       "outbound",
               received_at:     sentAt,
               created_at:      sentAt,
-              is_ai:           true,
+              is_ai:           decision.replyKind === "ai",
               status:          "sent",
             });
             if (outboundError) throw outboundError;
+
+            await recordAIOutcome(supabaseAdmin, {
+              organizationId,
+              conversationId,
+              inboundMessageId: msg.id,
+              incomingMessage: displayContent,
+              agentId: autoReplyContext.agent.id,
+              reply: replyText,
+              replyKind: decision.replyKind,
+              providerOutcome: decision.providerOutcome,
+              providerErrorCode: decision.providerErrorCode,
+              fallbackReason: decision.fallbackReason,
+              intent: decision.intent,
+              sources: decision.sources,
+              sendResult: "sent",
+              outboundMessageId: sent.messages?.[0]?.id || null
+            });
 
             await updateLeadFromCRM(supabaseAdmin, leadId, parsed.crmData);
 
@@ -687,6 +801,7 @@ async function handler(request: Request): Promise<Response> {
                 last_message:   replyText,
                 last_timestamp: new Date().toISOString()
               })
+              .eq("organization_id", organizationId)
               .eq("id", conversationId);
           } catch (error) {
             console.error("[AI Agent] Auto-reply send failed:", error);
