@@ -47,57 +47,87 @@ function isOptOut(message: string): boolean {
   return /\b(stop|unsubscribe|remove me|do not contact|don't contact|not interested)\b/i.test(message);
 }
 
-async function generateAIReply(organization: Record<string, unknown>, history: Array<Record<string, unknown>>, userMessage: string): Promise<string> {
-  if (!openRouterApiKey) return "";
+type KnowledgeEntry = {
+  title: string;
+  content: string;
+  category?: string;
+  keywords?: string[];
+};
 
-  const businessName      = organization?.name || 'our business';
-  const productDescription = organization?.product_description || 'our services';
-  const pricingSummary    = organization?.pricing_summary || 'contact us for pricing details';
-  const bookingLink       = organization?.booking_link || '';
+function matchingKnowledge(entries: KnowledgeEntry[], userMessage: string): KnowledgeEntry[] {
+  const ignoredWords = new Set(["and", "are", "can", "for", "how", "the", "this", "what", "with", "you", "your"]);
+  const words = userMessage.toLowerCase().split(/[^a-z0-9]+/)
+    .filter(word => word.length >= 3 && !ignoredWords.has(word));
+  if (words.length === 0) return [];
 
-  const systemPrompt = `You are ${businessName}'s WhatsApp assistant. Your job is to greet inbound leads, qualify them, and either book them in or hand them off to a human â€” all inside a normal WhatsApp chat.
-
-## Voice & format
-- Sound like a helpful person on WhatsApp, not a form. Short messages (1-3 lines max).
-- One question at a time. Never dump multiple questions in one message.
-- Use the lead's name once you have it. Light emoji is fine, don't overdo it.
-- Reply in the language the lead writes in (English, Tamil, Malayalam, or mixed).
-
-## Conversation flow
-1. Greet + discover intent â€” Ask what brought them here in one friendly line.
-2. Qualify â€” Naturally collect, over the course of the chat (not as a checklist):
-   - Name
-   - Business/industry
-   - What problem they're trying to solve / what they're interested in
-   - Budget range (ask softly, e.g. "roughly what budget are you working with?")
-   - Timeline (immediate / this month / just exploring)
-3. Score the lead internally as HOT (ready to buy, has budget + timeline), WARM (interested, needs nurturing), or COLD (just browsing/no fit).
-4. Route:
-   - HOT â†’ offer to book a call/demo right away, share ${bookingLink}, and flag for human follow-up.
-   - WARM â†’ answer their questions, share relevant info/pricing, ask if they'd like a callback.
-   - COLD â†’ answer politely, add to nurture list, don't push for a call.
-5. Handoff â€” If the lead asks something you're unsure of, asks for a human, or gets frustrated, say so plainly and tag for human takeover. Never pretend to be human if directly asked.
-
-## Hard rules
-- Never invent pricing, features, or timelines you weren't given â€” say you'll confirm and get back to them.
-- Never ask for sensitive info (passwords, OTPs, card numbers) over chat.
-- Don't repeat a question the lead already answered earlier in the chat.
-- If the lead goes silent, don't follow up more than twice.
-
-## Output for the CRM (structured, not shown to the lead)
-After each exchange, also produce:
-{
-  "lead_status": "HOT | WARM | COLD",
-  "captured_fields": { "name": "", "industry": "", "need": "", "budget": "", "timeline": "" },
-  "next_action": "book_call | send_info | human_handoff | nurture",
-  "notes": ""
+  return entries.filter(entry => {
+    const searchable = [entry.title, entry.content, entry.category || "", ...(entry.keywords || [])]
+      .join(" ")
+      .toLowerCase();
+    return words.some(word => searchable.includes(word));
+  }).slice(0, 5);
 }
 
-## Context
-- Business: ${businessName}
-- Product/Service: ${productDescription}
-- Pricing: ${pricingSummary}
-- Booking link: ${bookingLink}`;
+async function loadAutoReplyContext(supabaseAdmin: any, organizationId: string, userMessage: string) {
+  const { data: agents, error: agentError } = await supabaseAdmin
+    .from("ai_agents")
+    .select("id,business_name,system_instructions,tone")
+    .eq("organization_id", organizationId)
+    .eq("is_active", true)
+    .eq("auto_reply_enabled", true)
+    .limit(1);
+
+  if (agentError || !agents?.[0]) {
+    if (agentError) console.warn("[AI Agent] Auto-reply configuration unavailable:", agentError.message);
+    return null;
+  }
+
+  const { data: knowledge, error: knowledgeError } = await supabaseAdmin
+    .from("ai_knowledge_base")
+    .select("title,content,category,keywords")
+    .eq("organization_id", organizationId)
+    .eq("is_active", true);
+
+  if (knowledgeError) {
+    console.warn("[AI Agent] Knowledge base unavailable:", knowledgeError.message);
+    return null;
+  }
+
+  const sources = matchingKnowledge((knowledge || []) as KnowledgeEntry[], userMessage);
+  if (sources.length === 0) {
+    console.info("[AI Agent] No verified knowledge matched; message left for human review");
+    return null;
+  }
+
+  return { agent: agents[0] as Record<string, unknown>, sources };
+}
+
+async function generateAIReply(agent: Record<string, unknown>, sources: KnowledgeEntry[], history: Array<Record<string, unknown>>, userMessage: string): Promise<string> {
+  if (!openRouterApiKey) return "";
+
+  const businessName = agent.business_name || "our business";
+  const tone = agent.tone || "professional and helpful";
+  const instructions = agent.system_instructions || "Answer customer questions accurately and concisely.";
+  const knowledgeContext = sources.map(source => `[${source.title}] ${source.content}`).join("\n\n");
+
+  const systemPrompt = `You are ${businessName}'s WhatsApp assistant.
+
+## Voice & format
+- Use a ${tone} tone and keep replies to 1-3 short lines.
+- Reply in the language the lead writes in (English, Tamil, Malayalam, or mixed).
+- Answer the customer's latest question directly before asking anything new.
+- Do not repeat a greeting or question already present in the conversation.
+
+## Hard rules
+- Use only the verified Knowledge Base below for factual claims, pricing, features, and timelines.
+- If the answer is not explicitly present, return an empty response instead of guessing.
+- Never ask for sensitive info (passwords, OTPs, card numbers) over chat.
+
+## Additional instructions
+${instructions}
+
+## Verified Knowledge Base
+${knowledgeContext}`;
 
   const messages = [
     { role: 'system', content: systemPrompt },
@@ -112,7 +142,7 @@ After each exchange, also produce:
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: { "Authorization": `Bearer ${openRouterApiKey}`, "Content-Type": "application/json", "X-Title": "WAsaas AI Agent" },
-      body: JSON.stringify({ model: "openai/gpt-4o-mini", messages, temperature: 0.7, max_tokens: 600 })
+      body: JSON.stringify({ model: "openai/gpt-4o-mini", messages, temperature: 0.2, max_tokens: 220 })
     });
 
     const data = await response.json();
@@ -619,10 +649,11 @@ async function handler(request: Request): Promise<Response> {
         }
 
         // â”€â”€ AI auto-reply (text messages only, non-opt-outs) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-        const autoReplyEnabled = orgSettings.auto_reply_enabled === true && Boolean(openRouterApiKey);
-        if (autoReplyEnabled && type === "text" && displayContent.trim() && !isOptOut(displayContent)) {
+        if (openRouterApiKey && type === "text" && displayContent.trim() && !isOptOut(displayContent)) {
           try {
-            const aiRaw    = await generateAIReply(orgSettings, chatHistory, displayContent);
+            const autoReplyContext = await loadAutoReplyContext(supabaseAdmin, organizationId, displayContent);
+            if (!autoReplyContext) continue;
+            const aiRaw = await generateAIReply(autoReplyContext.agent, autoReplyContext.sources, chatHistory, displayContent);
             if (!aiRaw) throw new Error("AI provider did not return a grounded reply; no message was sent");
             const parsed   = parseAIResponse(aiRaw);
             const replyText = parsed.replyText;
