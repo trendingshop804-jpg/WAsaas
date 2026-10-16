@@ -24,6 +24,8 @@
     constructor() {
       this.connections = [];
       this.apiKeys = [];
+      this.schemaWarning = '';
+      this.loadPromise = null;
       this.init();
     }
 
@@ -75,22 +77,30 @@
     }
 
     async loadData() {
-      try {
-        const data = await this.apiFetch('/api/integration-keys');
-        this.connections = data.connections || [];
-        this.apiKeys = data.apiKeys || [];
-        this.renderConnections();
-        this.renderApiKeys();
-      } catch (err) {
-        this.connections = [];
-        this.apiKeys = [];
-        this.renderConnections();
-        this.renderApiKeys();
-        if (![401, 403].includes(err?.status) && err?.code !== 'AUTH_REQUIRED') {
-          console.error('[IntegrationsManager] Load error:', err);
-          this.toast(err.message || 'Could not load integrations.', 'error');
+      if (this.loadPromise) return this.loadPromise;
+      this.loadPromise = (async () => {
+        try {
+          const data = await this.apiFetch('/api/integration-keys');
+          this.connections = data.connections || [];
+          this.apiKeys = data.apiKeys || [];
+          this.schemaWarning = data.code === 'INTEGRATION_SCHEMA_MISSING' ? (data.warning || 'Integration storage setup is required.') : '';
+          this.renderConnections();
+          this.renderApiKeys();
+        } catch (err) {
+          this.connections = [];
+          this.apiKeys = [];
+          this.schemaWarning = '';
+          this.renderConnections();
+          this.renderApiKeys();
+          if (![401, 403].includes(err?.status) && err?.code !== 'AUTH_REQUIRED') {
+            console.error('[IntegrationsManager] Load error:', err);
+            this.toast(err.message || 'Could not load integrations.', 'error');
+          }
+        } finally {
+          this.loadPromise = null;
         }
-      }
+      })();
+      return this.loadPromise;
     }
 
     bindEvents() {
@@ -331,6 +341,7 @@ print(response.json())`,
       const clearProtectedData = () => {
         this.connections = [];
         this.apiKeys = [];
+        this.schemaWarning = '';
         this.renderConnections();
         this.renderApiKeys();
       };
@@ -350,6 +361,11 @@ print(response.json())`,
     renderConnections() {
       const container = document.getElementById('crms-connections-list');
       if (!container) return;
+
+      if (this.schemaWarning) {
+        container.innerHTML = `<div style="padding:28px;text-align:center;color:var(--text-muted);background:var(--navy-50);border-radius:8px;border:1px dashed var(--border-light);grid-column:1/-1;"><strong style="display:block;color:var(--text-primary);margin-bottom:6px;">Integration storage setup required</strong><span>${esc(this.schemaWarning)}</span></div>`;
+        return;
+      }
 
       if (!this.connections.length) {
         container.innerHTML = `
@@ -438,6 +454,11 @@ print(response.json())`,
     renderApiKeys() {
       const tbody = document.getElementById('api-keys-table-body');
       if (!tbody) return;
+
+      if (this.schemaWarning) {
+        tbody.innerHTML = `<tr><td colspan="6" style="padding:24px;text-align:center;color:var(--text-muted);">${esc(this.schemaWarning)}</td></tr>`;
+        return;
+      }
 
       if (!this.apiKeys.length) {
         tbody.innerHTML = `

@@ -181,9 +181,8 @@ const NB_AUTH = (() => {
     return overlay;
   }
 
-  function dismissOverlay(session, user) {
+  function dismissOverlay() {
     if (overlay) { overlay.remove(); overlay = null; }
-    emit(session, user);
   }
 
   function showOverlay() {
@@ -227,8 +226,9 @@ const NB_AUTH = (() => {
         try {
           const { data } = await sb.auth.getSession();
           if (data?.session) {
-            dismissOverlay(data.session, data.user);
-            return finish(data.session, data.user);
+            const sessionUser = data.session.user || null;
+            dismissOverlay();
+            return finish(data.session, sessionUser);
           }
           showOverlay();
           finish(null, null);

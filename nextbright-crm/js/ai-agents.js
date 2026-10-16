@@ -7,6 +7,20 @@
 
 (function () {
   const DEFAULT_AGENTS = [];
+  let backendError = '';
+
+  async function apiJson(path, options = {}) {
+    if (!window.NB_AUTH?.apiFetch) throw new Error('Sign in to manage AI agents.');
+    const response = await window.NB_AUTH.apiFetch(path, options);
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const error = new Error(payload.error || `Request failed (${response.status})`);
+      error.status = response.status;
+      error.code = payload.code || 'REQUEST_FAILED';
+      throw error;
+    }
+    return payload;
+  }
 
   function getAgents() {
     try {
@@ -28,19 +42,15 @@
 
   async function fetchBackendAgents() {
     try {
-      const headers = { 'Content-Type': 'application/json' };
-      const token = window.supabaseConfig?.accessToken || localStorage.getItem('sb-access-token') || '';
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-
-      const res = await fetch('/api/ai-agents?action=list', { headers });
-      if (res.ok) {
-        const data = await res.json();
-        if (data && Array.isArray(data.agents) && data.agents.length > 0) {
-          saveAgents(data.agents);
-          renderAgentsGrid();
-        }
-      }
-    } catch (_) {}
+      const data = await apiJson('/api/ai-agents?action=list');
+      backendError = '';
+      saveAgents(Array.isArray(data.agents) ? data.agents : []);
+      renderAgentsGrid();
+    } catch (error) {
+      backendError = error.message;
+      saveAgents([]);
+      renderAgentsGrid();
+    }
   }
 
   function initAIAgents() {
@@ -73,7 +83,7 @@
         <div style="grid-column: 1 / -1; padding: 48px; text-align: center; background: white; border-radius: 12px; border: 1px dashed var(--border-light);">
           <div style="font-size: 3rem; margin-bottom: 12px;">🤖</div>
           <h3 style="font-size: 1.1rem; font-weight: 600; margin-bottom: 6px;">No AI Agents Configured</h3>
-          <p style="color: var(--text-muted); font-size: 0.875rem; margin-bottom: 16px;">Create your first AI Auto-Reply Agent for Instagram DMs and WhatsApp messages.</p>
+          <p style="color: var(--text-muted); font-size: 0.875rem; margin-bottom: 16px;">${escapeHtml(backendError || 'Create your first AI Auto-Reply Agent for Instagram DMs and WhatsApp messages.')}</p>
           <button type="button" class="btn btn-primary" onclick="window.NextBrightAIAgents.openModal()">
             <i data-feather="plus"></i> Create AI Agent
           </button>
@@ -137,13 +147,12 @@
     if (window.feather) feather.replace();
   }
 
-  function renderReplyLogs() {
+  async function renderReplyLogs() {
     const container = document.getElementById('ai-logs-table-body');
     if (!container) return;
 
-    fetch('/api/ai-agents?action=logs')
-      .then(r => r.json())
-      .then(res => {
+    try {
+        const res = await apiJson('/api/ai-agents?action=logs');
         const logs = res.logs || [];
         if (logs.length === 0) {
           container.innerHTML = `<tr><td colspan="5" style="text-align:center; padding: 24px; color: var(--text-muted);">No AI reply logs recorded yet.</td></tr>`;
@@ -176,10 +185,9 @@
             </tr>
           `;
         }).join('');
-      })
-      .catch(() => {
-        container.innerHTML = `<tr><td colspan="5" style="text-align:center; padding: 24px; color: var(--text-muted);">Default reply logs active</td></tr>`;
-      });
+    } catch (error) {
+      container.innerHTML = `<tr><td colspan="5" style="text-align:center; padding: 24px; color: var(--text-muted);">${escapeHtml(error.message || 'AI reply logs are unavailable.')}</td></tr>`;
+    }
   }
 
   function openCreateAgentModal(id) {
@@ -238,12 +246,7 @@
     if (editingId) {
       const existing = agents.find(a => a.id === editingId);
       if (existing) {
-        existing.name = name;
-        existing.business_name = businessName;
-        existing.tone = tone;
-        existing.system_instructions = instructions;
-        existing.updated_at = new Date().toISOString();
-        agentToSave = existing;
+        agentToSave = { ...existing, name, business_name: businessName, tone, system_instructions: instructions, updated_at: new Date().toISOString() };
       }
     }
 
@@ -258,7 +261,7 @@
         system_instructions: instructions,
         status: 'active',
         working_hours: { enabled: false, start: '09:00', end: '18:00', timezone: 'UTC' },
-        auto_reply_enabled: true,
+        auto_reply_enabled: false,
         confidence_threshold: 0.75,
         max_replies_per_conversation: 10,
         handover_on_low_confidence: true,
@@ -267,27 +270,23 @@
         appointment_assistant_enabled: true,
         created_at: new Date().toISOString()
       };
-      agents.unshift(agentToSave);
     }
 
-    saveAgents(agents);
-    closeCreateAgentModal();
-    renderAgentsGrid();
-
     try {
-      const headers = { 'Content-Type': 'application/json' };
-      const token = window.supabaseConfig?.accessToken || localStorage.getItem('sb-access-token') || '';
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-
-      await fetch('/api/ai-agents?action=save', {
+      const result = await apiJson('/api/ai-agents?action=save', {
         method: 'POST',
-        headers,
         body: JSON.stringify({ agent: agentToSave })
       });
-    } catch (err) {}
-
-    const actionText = editingId ? 'updated' : 'created & active';
-    if (window.showToast) window.showToast(`AI Agent "${name}" ${actionText}!`, 'success');
+      const nextAgents = agents.filter(agent => agent.id !== editingId);
+      nextAgents.unshift(result.agent);
+      saveAgents(nextAgents);
+      closeCreateAgentModal();
+      renderAgentsGrid();
+      const actionText = editingId ? 'updated' : 'created';
+      if (window.showToast) window.showToast(`AI Agent "${name}" ${actionText}. Auto-reply remains off until explicitly enabled.`, 'success');
+    } catch (error) {
+      if (window.showToast) window.showToast(error.message || 'Could not save AI agent.', 'error');
+    }
   }
 
   async function togglePause(id) {
@@ -295,46 +294,33 @@
     const agent = agents.find(a => a.id === id);
     if (!agent) return;
 
-    agent.status = agent.status === 'paused' ? 'active' : 'paused';
-    saveAgents(agents);
-    renderAgentsGrid();
+    const updatedAgent = { ...agent, status: agent.status === 'paused' ? 'active' : 'paused' };
 
     try {
-      const headers = { 'Content-Type': 'application/json' };
-      const token = window.supabaseConfig?.accessToken || localStorage.getItem('sb-access-token') || '';
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-
-      await fetch('/api/ai-agents?action=save', {
+      const result = await apiJson('/api/ai-agents?action=save', {
         method: 'POST',
-        headers,
-        body: JSON.stringify({ agent })
+        body: JSON.stringify({ agent: updatedAgent })
       });
-    } catch (_) {}
-
-    if (window.showToast) window.showToast(`Agent "${agent.name}" is now ${agent.status}`, 'info');
+      saveAgents(agents.map(item => item.id === id ? result.agent : item));
+      renderAgentsGrid();
+      if (window.showToast) window.showToast(`Agent "${agent.name}" is now ${result.agent.status}`, 'info');
+    } catch (error) {
+      if (window.showToast) window.showToast(error.message || 'Could not update AI agent.', 'error');
+    }
   }
 
   async function deleteAgent(id) {
     if (typeof window.confirm === 'function') {
       if (!confirm('Are you sure you want to delete this AI Agent?')) return;
     }
-    let agents = getAgents();
-    agents = agents.filter(a => a.id !== id);
-    saveAgents(agents);
-    renderAgentsGrid();
-
     try {
-      const headers = { 'Content-Type': 'application/json' };
-      const token = window.supabaseConfig?.accessToken || localStorage.getItem('sb-access-token') || '';
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-
-      await fetch(`/api/ai-agents?action=delete&id=${encodeURIComponent(id)}`, {
-        method: 'DELETE',
-        headers
-      });
-    } catch (_) {}
-
-    if (window.showToast) window.showToast('AI Agent removed', 'default');
+      await apiJson(`/api/ai-agents?action=delete&id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+      saveAgents(getAgents().filter(agent => agent.id !== id));
+      renderAgentsGrid();
+      if (window.showToast) window.showToast('AI Agent removed', 'default');
+    } catch (error) {
+      if (window.showToast) window.showToast(error.message || 'Could not remove AI agent.', 'error');
+    }
   }
 
   function openTestModal(agentId) {
@@ -361,36 +347,10 @@
     }
 
     try {
-      let data = null;
-      try {
-        const res = await fetch('/api/ai-agents?action=test-reply', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message: query, channel: 'instagram', agentId })
-        });
-        if (res && res.ok) {
-          data = await res.json();
-        }
-      } catch (_) {}
-
-      if (!data || !data.reply) {
-        // Grounded fallback using local Knowledge Base
-        const kbEntries = window.NextBrightKB?.getEntries ? window.NextBrightKB.getEntries() : [];
-        const lowerQ = query.toLowerCase();
-        const matched = kbEntries.filter(k => (k.title + ' ' + (k.keywords || []).join(' ') + ' ' + k.category + ' ' + k.content).toLowerCase().split(/\s+/).some(w => w.length >= 4 && lowerQ.includes(w)));
-        const topKb = matched[0] || kbEntries[0] || { title: 'NextBright Verified KB', content: 'Our team is ready to assist.' };
-
-        const isHandover = ['human', 'agent', 'person', 'support', 'representative'].some(k => lowerQ.includes(k));
-        data = {
-          success: true,
-          status: isHandover ? 'handover' : 'sent',
-          confidence_score: 0.94,
-          grounded_in: [topKb.title],
-          reply: isHandover
-            ? 'I am connecting you with a human representative right now. A team member will join shortly!'
-            : `Regarding "${topKb.title}": ${topKb.content}`
-        };
-      }
+      const data = await apiJson('/api/ai-agents?action=test-reply', {
+        method: 'POST',
+        body: JSON.stringify({ message: query, channel: 'instagram', agentId })
+      });
 
       const resultBox = document.getElementById('ai-test-result-box');
       const replyEl = document.getElementById('ai-test-reply-text');

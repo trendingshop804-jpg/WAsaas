@@ -43,23 +43,12 @@ function buildStoragePath(cleanPhone: string, mediaId: string, fileName: string,
   return `${cleanPhone}/${mediaId}/${mediaId}_${safeName}${suffix}`;
 }
 
-function fallbackReply(message: string): string {
-  const normalized = message.toLowerCase();
-  if (/\b(price|pricing|cost|rate|how much)\b/.test(normalized)) {
-    return "Thanks for asking! I can share the right pricing once I understand what you need. What are you looking to achieve?";
-  }
-  if (/\b(demo|call|meeting|book)\b/.test(normalized)) {
-    return "Absolutely â€” I'd be happy to arrange a quick demo. What day and time work best for you?";
-  }
-  return "Hi! Thanks for getting in touch. How can I help you today?";
-}
-
 function isOptOut(message: string): boolean {
   return /\b(stop|unsubscribe|remove me|do not contact|don't contact|not interested)\b/i.test(message);
 }
 
 async function generateAIReply(organization: Record<string, unknown>, history: Array<Record<string, unknown>>, userMessage: string): Promise<string> {
-  if (!openRouterApiKey) return fallbackReply(userMessage);
+  if (!openRouterApiKey) return "";
 
   const businessName      = organization?.name || 'our business';
   const productDescription = organization?.product_description || 'our services';
@@ -132,7 +121,7 @@ After each exchange, also produce:
   } catch (error) {
     console.error("[AI Agent] Reply generation failed:", error);
   }
-  return fallbackReply(userMessage);
+  return "";
 }
 
 async function sendWhatsAppReply(phoneNumberId: string, to: string, body: string) {
@@ -546,12 +535,18 @@ async function handler(request: Request): Promise<Response> {
           displayContent = c ? `ðŸ‘¤ Contact: ${c.name?.formatted_name || c.phones?.[0]?.phone || 'Shared Contact'}` : "ðŸ‘¤ Shared Contact";
         } else if (type === "reaction") {
           displayContent = msg.reaction?.emoji ? `Reaction: ${msg.reaction.emoji}` : "Reaction";
+        } else if (type === "order") {
+          displayContent = msg.order?.catalog_id ? `WhatsApp order from catalog ${msg.order.catalog_id}.` : "WhatsApp order received; item details were not included in the webhook.";
+        } else if (type === "system") {
+          displayContent = msg.system?.body || `WhatsApp system notice${msg.system?.type ? `: ${msg.system.type}` : ""}.`;
+        } else if (type === "referral") {
+          displayContent = msg.referral?.headline || msg.referral?.body || msg.referral?.source_url || "WhatsApp referral received without readable details.";
         } else if (isMedia) {
           mediaInfo      = await processInboundMedia(msg, type, supabaseAdmin);
           caption        = msg[type]?.caption || "";
           displayContent = caption || (type === "audio" || type === "voice" ? "ðŸŽ¤ Voice message" : type === "sticker" ? "ðŸ©· Sticker" : `ðŸ“Ž ${type} message`);
         } else {
-          displayContent = msg.text?.body || "ðŸ“© Inbound message";
+          displayContent = `Meta delivered a WhatsApp ${type} event, but no supported readable content was included.`;
         }
 
         if (!displayContent) {
@@ -624,11 +619,14 @@ async function handler(request: Request): Promise<Response> {
         }
 
         // â”€â”€ AI auto-reply (text messages only, non-opt-outs) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-        if (false && type === "text" && content.trim() && !isOptOut(content)) {
+        const autoReplyEnabled = orgSettings.auto_reply_enabled === true && Boolean(openRouterApiKey);
+        if (autoReplyEnabled && type === "text" && displayContent.trim() && !isOptOut(displayContent)) {
           try {
-            const aiRaw    = await generateAIReply(orgSettings, chatHistory, content);
+            const aiRaw    = await generateAIReply(orgSettings, chatHistory, displayContent);
+            if (!aiRaw) throw new Error("AI provider did not return a grounded reply; no message was sent");
             const parsed   = parseAIResponse(aiRaw);
-            const replyText = parsed.replyText || fallbackReply(content);
+            const replyText = parsed.replyText;
+            if (!replyText) throw new Error("AI response did not contain a customer reply; no message was sent");
 
             const sent   = await sendWhatsAppReply(phoneNumberId, sender, replyText);
             const sentAt = new Date().toISOString();

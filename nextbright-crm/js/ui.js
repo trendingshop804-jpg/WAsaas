@@ -393,15 +393,17 @@ function renderConversation(conv) {
       const msgType = String(m.messageType || m.message_type || 'text').toLowerCase();
       const mediaUrl = m.mediaUrl || m.media_url || '';
       const rawText = String(m.text || '').trim();
-      const isUnsupported = msgType === 'unsupported' ||
-                            rawText.toLowerCase() === '[unsupported]' ||
-                            rawText.toLowerCase().startsWith('[unsupported:');
+      const isHistoricalUnsupported = rawText.toLowerCase() === '[unsupported]' ||
+                                      rawText.toLowerCase().startsWith('[unsupported:');
+      const isUnsupported = msgType === 'unsupported' || isHistoricalUnsupported;
 
       let bodyContent = '';
       if (isUnsupported) {
         bodyContent = `<div class="msg-unsupported" style="display:inline-flex; align-items:center; gap:6px; color:var(--text-muted, #888); font-style:italic; font-size:0.8125rem;">
           <span>⚠️</span>
-          <span>Unsupported message type</span>
+          <span>${escapeHtml(isHistoricalUnsupported
+            ? 'Historical message content is unavailable because the original webhook payload was not retained.'
+            : (rawText || 'Meta delivered a message type this inbox cannot display.'))}</span>
         </div>`;
       } else if (mediaUrl) {
         if (msgType === 'image') {
@@ -439,7 +441,8 @@ function renderConversation(conv) {
         };
         const label = iconMap[msgType] || `📎 ${msgType}`;
         const extraText = rawText ? `<div style="margin-top:4px;">${escapeHtml(rawText)}</div>` : '';
-        bodyContent = `<div style="font-size:0.8125rem; color:var(--text-muted, #888); font-style:italic;">${label} (media unavailable)</div>${extraText}`;
+        const mediaMissing = ['image', 'sticker', 'audio', 'voice', 'video', 'document'].includes(msgType) ? ' (media unavailable)' : '';
+        bodyContent = `<div style="font-size:0.8125rem; color:var(--text-muted, #888); font-style:italic;">${label}${mediaMissing}</div>${extraText}`;
       } else if (rawText) {
         bodyContent = escapeHtml(rawText);
       } else {

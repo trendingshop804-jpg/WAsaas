@@ -157,6 +157,17 @@ await test('SIGNED IN -> returns the real access token', async () => {
   assert.equal(await api.getAccessToken(), 'real-user-token');
 });
 
+await test('requireSession returns the user nested in the Supabase session', async () => {
+  const user = { id: 'user-a', email: 'owner-a@example.test' };
+  const session = { access_token: 'real-user-token', expires_at: future(3600), user };
+  const { api } = loadAuth({ session });
+  let emittedUser = null;
+  api.onAuthChange((_nextSession, nextUser) => { emittedUser = nextUser; });
+  const result = await api.requireSession();
+  assert.equal(result.user?.id, user.id);
+  assert.equal(emittedUser?.id, user.id);
+});
+
 await test('apiFetch with no session throws AUTH_REQUIRED and sends nothing', async () => {
   const { api, requests } = loadAuth({ session: null, fetchImpl: ok });
   await assert.rejects(

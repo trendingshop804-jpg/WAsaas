@@ -27,6 +27,10 @@ function requireAdmin(access, res) {
   res.status(403).json({ error: 'Only an Owner or Admin can manage integration API keys.' });
   return false;
 }
+
+function isMissingIntegrationSchema(error) {
+  return ['42P01', 'PGRST205'].includes(String(error?.code || ''));
+}
 function validatedHttpsUrl(value) {
   let url;
   try { url = new URL(String(value || '').trim()); } catch { return null; }
@@ -101,14 +105,28 @@ export default async function handler(req, res) {
         .order('created_at', { ascending: false })
     ]);
 
+    if (isMissingIntegrationSchema(connections.error) || isMissingIntegrationSchema(keys.error)) {
+      return res.status(200).json({
+        connections: [],
+        apiKeys: [],
+        available: false,
+        code: 'INTEGRATION_SCHEMA_MISSING',
+        warning: 'Integration storage is not installed for this environment. Apply the reviewed integration migration before saving API keys.'
+      });
+    }
+
     if (connections.error || keys.error) {
       console.error('[integration-keys] list failed:', connections.error?.message || keys.error?.message);
-      return res.status(500).json({ error: 'Could not load integration settings.' });
+      return res.status(500).json({
+        error: 'Could not load integration settings.',
+        code: 'INTEGRATION_SETTINGS_LOAD_FAILED'
+      });
     }
 
     return res.status(200).json({
       connections: connections.data || [],
-      apiKeys: keys.data || []
+      apiKeys: keys.data || [],
+      available: true
     });
   }
 

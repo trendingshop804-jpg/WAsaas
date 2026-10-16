@@ -9,6 +9,20 @@
   const DEFAULT_ENTRIES = [];
 
   let currentCategory = 'all';
+  let backendError = '';
+
+  async function apiJson(path, options = {}) {
+    if (!window.NB_AUTH?.apiFetch) throw new Error('Sign in to manage the knowledge base.');
+    const response = await window.NB_AUTH.apiFetch(path, options);
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const error = new Error(payload.error || `Request failed (${response.status})`);
+      error.status = response.status;
+      error.code = payload.code || 'REQUEST_FAILED';
+      throw error;
+    }
+    return payload;
+  }
 
   function getEntries() {
     try {
@@ -30,19 +44,15 @@
 
   async function fetchBackendEntries() {
     try {
-      const headers = { 'Content-Type': 'application/json' };
-      const token = window.supabaseConfig?.accessToken || localStorage.getItem('sb-access-token') || '';
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-
-      const res = await fetch('/api/knowledge-base?action=list', { headers });
-      if (res.ok) {
-        const data = await res.json();
-        if (data && Array.isArray(data.entries) && data.entries.length > 0) {
-          saveEntries(data.entries);
-          renderKnowledgeGrid();
-        }
-      }
-    } catch (_) {}
+      const data = await apiJson('/api/knowledge-base?action=list');
+      backendError = '';
+      saveEntries(Array.isArray(data.entries) ? data.entries : []);
+      renderKnowledgeGrid();
+    } catch (error) {
+      backendError = error.message;
+      saveEntries([]);
+      renderKnowledgeGrid();
+    }
   }
 
   function initKnowledgeBase() {
@@ -104,7 +114,7 @@
         <div style="grid-column: 1 / -1; padding: 48px; text-align: center; background: white; border-radius: 12px; border: 1px dashed var(--border-light);">
           <div style="font-size: 3rem; margin-bottom: 12px;">📚</div>
           <h3 style="font-size: 1.1rem; font-weight: 600; margin-bottom: 6px;">No Knowledge Base Entries Found</h3>
-          <p style="color: var(--text-muted); font-size: 0.875rem; margin-bottom: 16px;">Add company details, FAQs, pricing and policies to ground AI auto-replies accurately.</p>
+          <p style="color: var(--text-muted); font-size: 0.875rem; margin-bottom: 16px;">${escapeHtml(backendError || 'Add company details, FAQs, pricing and policies to ground AI auto-replies accurately.')}</p>
           <button type="button" class="btn btn-primary" onclick="window.NextBrightKB.openModal()">
             <i data-feather="plus"></i> Add Knowledge Entry
           </button>
@@ -204,12 +214,7 @@
     if (editingId) {
       const existing = entries.find(e => e.id === editingId);
       if (existing) {
-        existing.title = title;
-        existing.category = category;
-        existing.content = content;
-        existing.keywords = [category, title.toLowerCase()];
-        existing.updated_at = new Date().toISOString();
-        entryToSave = existing;
+        entryToSave = { ...existing, title, category, content, keywords: [category, title.toLowerCase()], updated_at: new Date().toISOString() };
       }
     }
 
@@ -223,50 +228,37 @@
         is_active: true,
         created_at: new Date().toISOString()
       };
-      entries.unshift(entryToSave);
     }
 
-    saveEntries(entries);
-    closeCreateModal();
-    renderKnowledgeGrid();
-
     try {
-      const headers = { 'Content-Type': 'application/json' };
-      const token = window.supabaseConfig?.accessToken || localStorage.getItem('sb-access-token') || '';
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-
-      await fetch('/api/knowledge-base?action=save', {
+      const result = await apiJson('/api/knowledge-base?action=save', {
         method: 'POST',
-        headers,
         body: JSON.stringify({ entry: entryToSave })
       });
-    } catch (err) {}
-
-    const actionText = editingId ? 'updated' : 'added';
-    if (window.showToast) window.showToast(`Knowledge Entry "${title}" ${actionText}!`, 'success');
+      const nextEntries = entries.filter(entry => entry.id !== editingId);
+      nextEntries.unshift(result.entry);
+      saveEntries(nextEntries);
+      closeCreateModal();
+      renderKnowledgeGrid();
+      const actionText = editingId ? 'updated' : 'added';
+      if (window.showToast) window.showToast(`Knowledge Entry "${title}" ${actionText}!`, 'success');
+    } catch (error) {
+      if (window.showToast) window.showToast(error.message || 'Could not save knowledge entry.', 'error');
+    }
   }
 
   async function deleteEntry(id) {
     if (typeof window.confirm === 'function') {
       if (!confirm('Are you sure you want to delete this knowledge base entry?')) return;
     }
-    let entries = getEntries();
-    entries = entries.filter(e => e.id !== id);
-    saveEntries(entries);
-    renderKnowledgeGrid();
-
     try {
-      const headers = { 'Content-Type': 'application/json' };
-      const token = window.supabaseConfig?.accessToken || localStorage.getItem('sb-access-token') || '';
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-
-      await fetch(`/api/knowledge-base?action=delete&id=${encodeURIComponent(id)}`, {
-        method: 'DELETE',
-        headers
-      });
-    } catch (_) {}
-
-    if (window.showToast) window.showToast('Knowledge entry deleted', 'default');
+      await apiJson(`/api/knowledge-base?action=delete&id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+      saveEntries(getEntries().filter(entry => entry.id !== id));
+      renderKnowledgeGrid();
+      if (window.showToast) window.showToast('Knowledge entry deleted', 'default');
+    } catch (error) {
+      if (window.showToast) window.showToast(error.message || 'Could not delete knowledge entry.', 'error');
+    }
   }
 
   function escapeHtml(str) {

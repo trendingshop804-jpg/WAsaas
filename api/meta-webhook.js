@@ -3,15 +3,19 @@
 const MEDIA_TYPES = new Set(['image', 'document', 'audio', 'video', 'sticker']);
 const STATUS_MAP = { sent: 'sent', delivered: 'delivered', read: 'read', failed: 'failed' };
 const digits = value => String(value || '').replace(/\D/g, '');
-function readableContent(message) {
+export function readableContent(message) {
   const type = String(message?.type || 'unknown');
   if (type === 'text') return typeof message.text?.body === 'string' && message.text.body.trim() ? message.text.body.trim() : 'WhatsApp text message did not include readable content.';
   if (type === 'interactive') return message.interactive?.button_reply?.title || message.interactive?.list_reply?.title || 'Interactive WhatsApp reply without readable label.';
   if (type === 'button') return message.button?.text || 'WhatsApp button reply without readable label.';
   if (type === 'location') return message.location?.name || message.location?.address || (message.location ? `Location: ${message.location.latitude}, ${message.location.longitude}` : 'WhatsApp location without readable details.');
   if (type === 'contacts') return message.contacts?.[0]?.name?.formatted_name || 'WhatsApp contact card without readable name.';
+  if (type === 'reaction') return message.reaction?.emoji ? `Reaction: ${message.reaction.emoji}` : 'WhatsApp reaction without an emoji.';
+  if (type === 'order') return message.order?.catalog_id ? `WhatsApp order from catalog ${message.order.catalog_id}.` : 'WhatsApp order received; item details were not included in the webhook.';
+  if (type === 'system') return message.system?.body || `WhatsApp system notice${message.system?.type ? `: ${message.system.type}` : ''}.`;
+  if (type === 'referral') return message.referral?.headline || message.referral?.body || message.referral?.source_url || 'WhatsApp referral received without readable details.';
   if (MEDIA_TYPES.has(type)) return message[type]?.caption || `${type[0].toUpperCase()}${type.slice(1)} attachment (no caption).`;
-  return `Unsupported WhatsApp message type: ${type}`;
+  return `Meta delivered a WhatsApp ${type} event, but no supported readable content was included.`;
 }
 async function findOrCreateLead(admin, organizationId, sender, contactName) {
   const normalized = digits(sender);
@@ -70,7 +74,8 @@ export default async function handler(req, res) {
         const type = String(message.type || 'unsupported');
         const content = readableContent(message);
         const media = MEDIA_TYPES.has(type) ? message[type] : null;
-        const { error } = await admin.from('messages').insert({ organization_id: connection.organization_id, lead_id: leadId, conversation_id: conversationId, wa_message_id: message.id, sender_number: message.from, direction: 'inbound', channel: 'whatsapp', message_type: MEDIA_TYPES.has(type) || ['text','interactive','button','location','contacts'].includes(type) ? type : 'unsupported', content, body: content, message_body: content, media_caption: media?.caption || null, file_name: media?.filename || null, status: 'delivered', received_at: new Date().toISOString() });
+        const supportedTypes = ['text', 'interactive', 'button', 'location', 'contacts', 'reaction', 'order', 'system', 'referral'];
+        const { error } = await admin.from('messages').insert({ organization_id: connection.organization_id, lead_id: leadId, conversation_id: conversationId, wa_message_id: message.id, sender_number: message.from, direction: 'inbound', channel: 'whatsapp', message_type: MEDIA_TYPES.has(type) || supportedTypes.includes(type) ? type : 'unsupported', content, body: content, message_body: content, media_caption: media?.caption || null, file_name: media?.filename || null, status: 'delivered', received_at: new Date().toISOString() });
         if (error) throw error;
         await admin.from('conversations').update({ last_message: content, last_timestamp: new Date().toISOString() }).eq('id', conversationId);
         stored += 1;
