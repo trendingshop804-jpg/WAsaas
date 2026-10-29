@@ -2,7 +2,8 @@
  * dev-server.js — NexusLead AI Local Dev Server
  * - Reads .env file (sets process.env for API handlers)
  * - Serves static files from project root on http://localhost:3001
- * - Handles /api/* routes by importing the matching api/*.js handler
+ * - Handles /api/* routes via the single api/[slug].js dispatcher (same code
+ *   path Vercel uses, including alias rewrites like /api/test-connection)
  * Start with:  node dev-server.js
  */
 import fs from 'fs';
@@ -12,19 +13,9 @@ import { fileURLToPath, pathToFileURL } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = 3001;
 
-const API_REWRITES = {
-  'test-connection': { target: 'integration-status', query: { route: 'test-connection' } },
-  'trigger-call': { target: 'integration-status', query: { route: 'trigger-call' } },
-  'send-whatsapp-followup': { target: 'daily-followup', query: { route: 'send-whatsapp-followup' } },
-  'update-whatsapp-profile': { target: 'meta-oauth-exchange', query: { route: 'update-whatsapp-profile' } },
-  'admin-companies': { target: 'admin', query: { resource: 'companies' } },
-  'admin-system': { target: 'admin', query: { resource: 'system' } },
-  'send-media': { target: 'messages', query: { route: 'send-media' } },
-  'social-conversations': { target: 'instagram', query: { action: 'social_conversations' } },
-  'wa-campaigns': { target: 'messages', query: { action: 'wa_campaigns' } },
-  'ai-agents': { target: 'ai-chat', query: { route: 'ai_agents' } },
-  'knowledge-base': { target: 'ai-chat', query: { route: 'knowledge_base' } }
-};
+// NOTE: API routing (including alias rewrites such as /api/test-connection)
+// lives in api/[slug].js — the same single dispatcher Vercel deploys — so
+// local behaviour and production behaviour cannot drift apart.
 
 function loadDotEnv() {
   // Match Vercel/Next conventions: .env.local overrides .env for local runs.
@@ -107,20 +98,16 @@ const server = http.createServer(async (nodeReq, nodeRes) => {
     return nodeRes.end();
   }
   if (pathname.startsWith('/api/')) {
-    let fnName = pathname.replace('/api/', '').replace(/\/$/, '') || 'index';
-    let extraQuery = {};
-    if (API_REWRITES[fnName]) {
-      extraQuery = API_REWRITES[fnName].query || {};
-      fnName = API_REWRITES[fnName].target;
-    }
-    const handlerPath = path.join(__dirname, 'api', `${fnName}.js`);
+    const fnName = pathname.replace('/api/', '').replace(/\/$/, '') || 'index';
+    // Single dispatcher: resolves real handlers and legacy aliases in one place.
+    const handlerPath = path.join(__dirname, 'api', '[slug].js');
     if (!fs.existsSync(handlerPath)) {
       nodeRes.writeHead(404, { 'Content-Type': 'application/json' });
       return nodeRes.end(JSON.stringify({ error: `API handler not found: ${fnName}` }));
     }
     try {
       const body = await readBody(nodeReq);
-      const req = buildReq(nodeReq, body, parsedUrl, extraQuery);
+      const req = buildReq(nodeReq, body, parsedUrl, { slug: fnName });
       const res = buildRes(nodeRes);
       const mod = await import(`${pathToFileURL(handlerPath).href}?t=${Date.now()}`);
       const handler = mod.default || mod.handler;

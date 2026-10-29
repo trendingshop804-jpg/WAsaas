@@ -51,7 +51,11 @@ export default async function handler(req, res) {
     'code_exchange',
     'list_posts',
     'save_post',
-    'delete_post'
+    'delete_post',
+    // Social inbox reads: the CRM inbox sends the session token, but the
+    // handler used to serve these to ANONYMOUS callers with no org filter.
+    'social_conversations',
+    'conversations'
   ]);
   const needsOrg = TENANT_ACTIONS.has(action) || req.method === 'DELETE';
 
@@ -125,14 +129,24 @@ export default async function handler(req, res) {
       const subAction = req.query.subAction || req.body?.subAction || 'list';
       if (subAction === 'messages') {
         const convId = req.query.conversation_id || req.body?.conversation_id;
-        if (supabase) {
-          const { data: messages, error } = await supabase
-            .from('social_messages')
-            .select('*')
-            .eq('conversation_id', convId)
-            .order('created_at', { ascending: true });
-          if (!error && messages && messages.length > 0) {
-            return res.status(200).json({ success: true, messages });
+        if (supabase && convId) {
+          // Messages are only served for a conversation that belongs to the
+          // caller's organization (the admin client bypasses RLS, so this
+          // check is the tenant boundary).
+          const { data: conversation } = await supabase
+            .from('social_conversations')
+            .select('id, organization_id')
+            .eq('id', convId)
+            .maybeSingle();
+          if (conversation && conversation.organization_id === organizationId) {
+            const { data: messages, error } = await supabase
+              .from('social_messages')
+              .select('*')
+              .eq('conversation_id', convId)
+              .order('created_at', { ascending: true });
+            if (!error && messages && messages.length > 0) {
+              return res.status(200).json({ success: true, messages });
+            }
           }
         }
         return res.status(200).json({
@@ -153,6 +167,7 @@ export default async function handler(req, res) {
         const { data: conversations, error } = await supabase
           .from('social_conversations')
           .select('*')
+          .eq('organization_id', organizationId)
           .order('updated_at', { ascending: false });
         if (!error && conversations && conversations.length > 0) {
           return res.status(200).json({ success: true, conversations });

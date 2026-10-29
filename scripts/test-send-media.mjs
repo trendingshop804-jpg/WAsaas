@@ -1,5 +1,5 @@
 // scripts/test-send-media.mjs
-// Offline smoke test for api/send-media.js. Stubs global fetch so no real
+// Offline smoke test for server/api/send-media.js. Stubs global fetch so no real
 // Meta / Supabase calls are made. Run with: node scripts/test-send-media.mjs
 //
 // Also covers the tenant-isolation guarantees added when the endpoint was
@@ -109,7 +109,7 @@ globalThis.fetch = async (input, init = {}) => {
   throw new Error(`Unexpected fetch to ${url}`);
 };
 
-const { default: handler } = await import('../api/messages.js');
+const { default: handler } = await import('../server/api/messages.js');
 
 function mockRes() {
   return {
@@ -141,7 +141,7 @@ async function test(name, fn) {
   }
 }
 
-console.log('=== api/send-media.js ===');
+console.log('=== server/api/send-media.js ===');
 
 // ---------------------------------------------------------------------------
 // Authorization

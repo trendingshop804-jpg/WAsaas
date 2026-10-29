@@ -10,7 +10,7 @@
 //
 // It is skipped by default so it can never be run by accident against
 // production. It also requires the tenant migration to have been applied,
-// because api/messages.js now stamps organization_id on every write and
+// because server/api/messages.js now stamps organization_id on every write and
 // scopes every read to the caller's organization.
 //
 // The offline, no-database equivalent of the auth + send behaviour lives in
@@ -67,8 +67,8 @@ globalThis.fetch = async (url, options = {}) => {
   return realFetch(url, options);
 };
 
-const { default: handler } = await import(pathToFileURL(path.join(rootDir, 'api/messages.js')).href + '?t=' + Date.now());
-const { createSupabaseAdminClient } = await import(pathToFileURL(path.join(rootDir, 'api/_supabase.js')).href);
+const { default: handler } = await import(pathToFileURL(path.join(rootDir, 'server/api/messages.js')).href + '?t=' + Date.now());
+const { createSupabaseAdminClient } = await import(pathToFileURL(path.join(rootDir, 'server/api/_supabase.js')).href);
 const supabase = createSupabaseAdminClient();
 
 function mockRes() {
@@ -81,7 +81,7 @@ function mockRes() {
   };
 }
 
-// api/messages.js requires a real signed-in session; the anon key is not a session.
+// server/api/messages.js requires a real signed-in session; the anon key is not a session.
 const AUTH_HEADERS = { Authorization: `Bearer ${process.env.TEST_SESSION_TOKEN || ''}` };
 
 async function post(extra = {}) {
@@ -123,7 +123,7 @@ if (process.env.RUN_LIVE_DB_TESTS !== '1') {
   process.exit(0);
 }
 if (!process.env.TEST_SESSION_TOKEN) {
-  console.error('ABORTED: TEST_SESSION_TOKEN is required — api/messages.js rejects unauthenticated sends.\n');
+  console.error('ABORTED: TEST_SESSION_TOKEN is required — server/api/messages.js rejects unauthenticated sends.\n');
   process.exit(1);
 }
 

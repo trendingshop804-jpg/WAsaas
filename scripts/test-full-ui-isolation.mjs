@@ -7,7 +7,7 @@ const data = read('nextbright-crm/js/data.js');
 const auth = read('nextbright-crm/js/auth.js');
 const workspace = read('nextbright-crm/js/secure-workspace.js');
 const inbox = read('nextbright-crm/js/ui.js');
-const leadsApi = read('api/leads.js');
+const leadsApi = read('server/api/leads.js');
 const socialInbox = read('nextbright-crm/js/social-inbox.js');
 const admin = read('nextbright-crm/js/admin.js');
 
@@ -37,7 +37,7 @@ assert.match(workspace, /clearLegacyCaches\(\)/);
 assert.match(workspace, /requestJson\('\/api\/leads\?route=workspace'/);
 assert.match(workspace, /requestJson\('\/api\/messages\?limit=500'/);
 assert.match(workspace, /showSetupCard\(authUser\)/);
-assert.match(workspace, /window\.NB\.conversations = \(messagesPayload\.conversations \|\| \[\]\)/);
+assert.match(workspace, /window\.NB\.conversations = \(messagesResult\.value\.conversations \|\| \[\]\)\.map\(mapConversation\)/);
 assert.match(inbox, /window\.NB\.conversations = \[\]/);
 assert.doesNotMatch(inbox, /Showing the last known list/);
 

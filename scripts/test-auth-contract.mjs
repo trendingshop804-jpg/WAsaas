@@ -1,4 +1,4 @@
-﻿// scripts/test-auth-contract.mjs
+// scripts/test-auth-contract.mjs
 // The authentication contract for tenant-scoped APIs, covering the six cases
 // required for /api/messages and every endpoint behind requireOrgAccess().
 //
@@ -98,7 +98,7 @@ globalThis.fetch = async (input, options = {}) => {
     text: async () => JSON.stringify(wantsSingle ? (rows[0] ?? null) : rows) };
 };
 
-const { default: messages } = await import('../api/messages.js');
+const { default: messages } = await import('../server/api/messages.js');
 
 function mockRes() {
   return {

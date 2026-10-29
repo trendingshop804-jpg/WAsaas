@@ -7,7 +7,7 @@
 //
 // Runs the real js/app.js and nextbright-crm/js/app.js call path against a fake
 // window, a fake Supabase session and a fake server, then asserts the exact
-// request that leaves the browser. Also drives api/trigger-call.js itself to
+// request that leaves the browser. Also drives server/api/trigger-call.js itself to
 // prove the MacroDroid webhook flow still works end to end.
 //
 //   node scripts/test-call-button-auth.mjs
@@ -151,7 +151,7 @@ for (const file of ['js/app.js', 'nextbright-crm/js/app.js']) {
 // 2. The server side: /api/trigger-call still drives the MacroDroid webhook
 // ---------------------------------------------------------------------------
 
-console.log('=== api/trigger-call.js (MacroDroid flow still works) ===');
+console.log('=== server/api/trigger-call.js (MacroDroid flow still works) ===');
 
 function loadHandler(env) {
   for (const [k, v] of Object.entries(env)) {

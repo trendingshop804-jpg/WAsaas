@@ -3,12 +3,7 @@
   "framework": null,
   "buildCommand": "node -e \"process.exit(0)\"",
   "outputDirectory": ".",
-  "rewrites": [
-    { "source": "/api/test-connection", "destination": "/api/integration-status?route=test-connection" },
-    { "source": "/api/update-whatsapp-profile", "destination": "/api/meta-oauth-exchange?route=update-whatsapp-profile" },
-    { "source": "/api/send-media", "destination": "/api/messages?route=send-media" },
-    { "source": "/api/onboarding", "destination": "/api/leads?route=onboarding" },
-    { "source": "/api/ai-agents", "destination": "/api/ai-chat?route=ai-agents" },
-    { "source": "/api/knowledge-base", "destination": "/api/ai-chat?route=knowledge-base" }
+  "redirects": [
+    { "source": "/server/(.*)", "destination": "/", "permanent": false }
   ]
 }

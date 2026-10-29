@@ -110,8 +110,8 @@ globalThis.fetch = async (input, options = {}) => {
   throw new Error(`Unexpected fetch to ${url}`);
 };
 
-const { default: handler } = await import('../api/integration-status.js');
-const { encryptToken, decryptToken } = await import('../api/_crypto.js');
+const { default: handler } = await import('../server/api/integration-status.js');
+const { encryptToken, decryptToken } = await import('../server/api/_crypto.js');
 
 function mockRes() {
   return {
@@ -295,7 +295,7 @@ await test('a stored connection is then reported connected with no env vars', as
     auth_token_encrypted: await encryptToken('stored-token'),
     from_number: '+15551234567', region: 'US1', is_active: true
   });
-  const { getIntegrationStatus } = await import('../api/_integration-status.js');
+  const { getIntegrationStatus } = await import('../server/api/_integration-status.js');
   const res = await getIntegrationStatus('twilio', { organizationId: ORG });
   assert.equal(res.status, 'connected', `got ${JSON.stringify(res)}`);
   assert.deepEqual(res.warnings, [], 'a caller number is set, so no warning expected');
@@ -307,7 +307,7 @@ await test('a stored connection is NOT visible to another organization', async (
     auth_token_encrypted: await encryptToken('stored-token'),
     from_number: '+15551234567', region: 'US1', is_active: true
   });
-  const { getIntegrationStatus } = await import('../api/_integration-status.js');
+  const { getIntegrationStatus } = await import('../server/api/_integration-status.js');
   const res = await getIntegrationStatus('twilio', { organizationId: OTHER_ORG });
   assert.equal(res.status, 'not_configured', 'a tenant must never see another tenant provider account');
   assert.deepEqual(res.missing.sort(), ['TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN']);

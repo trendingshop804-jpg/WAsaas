@@ -44,7 +44,7 @@ globalThis.fetch = async (input, options = {}) => {
   throw new Error(`Unexpected request: ${url}`);
 };
 
-const { default: handler } = await import('../api/_update-whatsapp-profile.js');
+const { default: handler } = await import('../server/api/_update-whatsapp-profile.js');
 
 function mockRes() {
   return {

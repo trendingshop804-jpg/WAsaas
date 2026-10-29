@@ -8,7 +8,7 @@ import {
   selectKnowledge,
   missingInformationReply,
   isUnsafeRepeatedReply
-} from '../supabase/functions/meta-webhook/ai-reply.mjs';
+} from '../../supabase/functions/meta-webhook/ai-reply.mjs';
 
 export {
   chronologicalHistory,

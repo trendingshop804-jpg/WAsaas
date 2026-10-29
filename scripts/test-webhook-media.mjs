@@ -1,5 +1,5 @@
 // scripts/test-webhook-media.mjs
-// Comprehensive smoke test for api/meta-webhook.js and api/messages.js.
+// Comprehensive smoke test for server/api/meta-webhook.js and server/api/messages.js.
 // Stubs global fetch — no real Meta / Supabase calls. Run with:
 //   node scripts/test-webhook-media.mjs
 import assert from 'node:assert/strict';
@@ -47,7 +47,7 @@ globalThis.fetch = async (input, init = {}) => {
   // Apply PostgREST query-string filters to an in-memory table.
   //
   // Without this the mock ignored every .eq()/.in()/.gte() and returned the whole
-  // table for any GET. That silently broke duplicate suppression: api/messages.js
+  // table for any GET. That silently broke duplicate suppression: server/api/messages.js
   // asks for outbound rows with matching content inside a time window and then
   // narrows by phone in JS, so a filter-ignoring mock let an *inbound* row match
   // and the response carried messageId: undefined.
@@ -243,8 +243,8 @@ async function test(name, fn) {
   }
 }
 
-const { default: webhook } = await import('../api/meta-webhook.js');
-const { default: messages } = await import('../api/messages.js');
+const { default: webhook } = await import('../server/api/meta-webhook.js');
+const { default: messages } = await import('../server/api/messages.js');
 
 function mediaPayload(type, mediaId, phone = '919999999999', phoneNumberId = '1234567890') {
   return {
@@ -283,7 +283,7 @@ function textPayload(text, msgId, phone = '918111986637', phoneNumberId = '12345
   };
 }
 
-console.log('=== api/meta-webhook.js ===');
+console.log('=== server/api/meta-webhook.js ===');
 
 await test('GET verifies with the correct token', async () => {
   const res = mockRes();
@@ -656,10 +656,10 @@ await test('a message already stored is not duplicated', async () => {
   state.selectResult = [];
 });
 
-// restore the default connection for the api/messages.js section
+// restore the default connection for the server/api/messages.js section
   state.connectionsInDb = [{ organization_id: 'org_1', phone_number_id: '1234567890', is_active: true, access_token_encrypted: 'EAAtest-tenant-token' }];
 
-console.log('=== api/messages.js ===');
+console.log('=== server/api/messages.js ===');
 const SESSION = { headers: { Authorization: 'Bearer test-session-token' } };
 
 await test('rejects an unauthenticated inbox read', async () => {

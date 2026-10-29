@@ -31,6 +31,15 @@ CODEBASE_DOCUMENTATION.md
 migration-review.txt
 index.nextbright-backup.html
 
+# Server-side handlers live in server/api/ (imported by the single api/[slug].js
+# dispatcher — they MUST be uploaded for Vercel to bundle them).
+# Only the archived copies stay excluded:
+server/_retired/
+
+# Nested duplicate checkout of this same repository (extraction artifact) —
+# never serve a second copy of the code or its api/ handlers from the CDN.
+WAsaas-main/
+
 # Backups of prior module versions
 *.bak
 *.before-*

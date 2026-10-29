@@ -110,7 +110,7 @@ globalThis.fetch = async (input, init = {}) => {
   }
 
   // --- auth: session validation + organization membership -------------------
-  // api/instagram.js now requires a signed-in organization member for the
+  // server/api/instagram.js now requires a signed-in organization member for the
   // tenant-scoped actions (test_connection, connect_manual, send_message, ...).
   if (url.includes('/auth/v1/user')) {
     return json({ id: TEST_USER, aud: 'authenticated' });
@@ -149,7 +149,7 @@ async function test(name, fn) {
 
 console.log('=== Instagram Integration Tests ===');
 
-const { default: webhook } = await import('../api/meta-webhook.js');
+const { default: webhook } = await import('../server/api/meta-webhook.js');
 
 await test('Instagram DM webhook ingests inbound text message and creates lead/conversation with channel=instagram', async () => {
   state.inserts.length = 0;
@@ -219,7 +219,7 @@ await test('Instagram DM webhook processes photo attachment and uploads to stora
   assert.ok(insertedMsg.data.media_url, 'Media url stored');
 });
 
-const { default: instagramApi } = await import('../api/instagram.js');
+const { default: instagramApi } = await import('../server/api/instagram.js');
 
 await test('Instagram test_connection validates Meta token and returns account info', async () => {
   const res = mockRes();

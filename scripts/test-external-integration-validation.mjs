@@ -41,8 +41,8 @@ globalThis.fetch = async (input, options = {}) => {
   throw new Error(`Unexpected request: ${url}`);
 };
 
-const { default: handler } = await import('../api/integration-keys.js');
-const { decryptToken } = await import('../api/_crypto.js');
+const { default: handler } = await import('../server/api/integration-keys.js');
+const { decryptToken } = await import('../server/api/_crypto.js');
 
 function response() {
   return {

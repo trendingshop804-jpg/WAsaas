@@ -28,9 +28,9 @@ globalThis.fetch = async (input, options = {}) => {
   throw new Error(`Unexpected request: ${url}`);
 };
 
-const integrationKeys = (await import('../api/integration-keys.js')).default;
-const aiChat = (await import('../api/ai-chat.js')).default;
-const { readableContent } = await import('../api/meta-webhook.js');
+const integrationKeys = (await import('../server/api/integration-keys.js')).default;
+const aiChat = (await import('../server/api/ai-chat.js')).default;
+const { readableContent } = await import('../server/api/meta-webhook.js');
 
 function response() {
   return {
@@ -71,7 +71,7 @@ assert.match(readableContent({ type: 'system', system: { type: 'user_changed_num
 assert.match(readableContent({ type: 'unknown_future_type' }), /unknown_future_type/);
 assert.doesNotMatch(readableContent({ type: 'unknown_future_type' }), /^\[unsupported/i);
 
-const aiSource = fs.readFileSync(new URL('../api/ai-chat.js', import.meta.url), 'utf8');
+const aiSource = fs.readFileSync(new URL('../server/api/ai-chat.js', import.meta.url), 'utf8');
 assert.doesNotMatch(aiSource, /source:\s*['"]default['"]/);
 assert.doesNotMatch(aiSource, /Starter Plan is \$49/);
 assert.doesNotMatch(aiSource, /Hi! Thanks for contacting \$\{agent\.business_name\}/);

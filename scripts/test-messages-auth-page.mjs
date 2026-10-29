@@ -41,7 +41,7 @@ globalThis.fetch = async (input, options = {}) => {
   throw new Error(`Unexpected fetch to ${url}`);
 };
 
-const { default: handler } = await import('../api/messages.js');
+const { default: handler } = await import('../server/api/messages.js');
 
 function mockRes() {
   return {

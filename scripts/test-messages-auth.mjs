@@ -1,6 +1,6 @@
 // scripts/test-messages-auth.mjs
 // ---------------------------------------------------------------------------
-// Verifies the tenant auth gate on api/messages.js.
+// Verifies the tenant auth gate on server/api/messages.js.
 //
 // This suite is FULLY MOCKED: every HTTP call (Supabase auth, PostgREST and the
 // Meta Graph API) is intercepted. It never touches the real database, never
@@ -226,7 +226,7 @@ globalThis.fetch = async (url, options = {}) => {
   throw new Error(`UNMOCKED REQUEST ESCAPED: ${u}`);
 };
 
-const { default: handler } = await import(pathToFileURL(path.join(rootDir, 'api/messages.js')).href + '?t=' + Date.now());
+const { default: handler } = await import(pathToFileURL(path.join(rootDir, 'server/api/messages.js')).href + '?t=' + Date.now());
 
 // --- Harness ----------------------------------------------------------------
 function mockRes() {
@@ -252,7 +252,7 @@ async function t(name, fn) {
   catch (e) { console.log(`  FAIL  ${name}\n        ${e.message}`); fail++; }
 }
 
-console.log('\n=== api/messages.js tenant auth gate (fully mocked) ===\n');
+console.log('\n=== server/api/messages.js tenant auth gate (fully mocked) ===\n');
 
 await t('GET without Authorization header -> 401 and zero DB calls', async () => {
   const { res, calls } = await call({ method: 'GET' });

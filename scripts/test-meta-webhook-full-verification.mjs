@@ -1,5 +1,5 @@
 // scripts/test-meta-webhook-full-verification.mjs
-// Verification suite for WhatsApp AI auto-replies in api/meta-webhook.js
+// Verification suite for WhatsApp AI auto-replies in server/api/meta-webhook.js
 import assert from 'node:assert/strict';
 
 process.env.SUPABASE_URL = 'https://test-project.supabase.co';
@@ -216,14 +216,14 @@ globalThis.fetch = async (input, init = {}) => {
   throw new Error(`Unexpected fetch to ${url}`);
 };
 
-const { default: webhookHandler } = await import('../api/meta-webhook.js');
+const { default: webhookHandler } = await import('../server/api/meta-webhook.js');
 const {
   isOptOut,
   pauseLeadFollowUp,
   handleLeadOptOut,
   sanitizeSecretString,
   sanitizeErrorDetails
-} = await import('../api/_ai-reply.js');
+} = await import('../server/api/_ai-reply.js');
 
 function mockRes() {
   return {

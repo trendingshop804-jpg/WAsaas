@@ -1,6 +1,6 @@
 // scripts/test-instagram-module.mjs
 // Test script for Instagram integration module (crypto, parsing, rules matching)
-import { decryptToken, encryptToken } from '../api/_crypto.js';
+import { decryptToken, encryptToken } from '../server/api/_crypto.js';
 
 async function runTests() {
   console.log('🧪 Starting Instagram Integration Test Suite...\n');

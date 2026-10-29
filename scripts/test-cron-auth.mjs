@@ -2,7 +2,7 @@
 // ---------------------------------------------------------------------------
 // Verifies that the follow-up cron endpoint fails CLOSED.
 //
-// api/daily-followup.js can send REAL WhatsApp messages, so it must never be
+// server/api/daily-followup.js can send REAL WhatsApp messages, so it must never be
 // reachable by an anonymous visitor. It used to return `true` (allow) whenever
 // CRON_SECRET was unset, which meant anyone could trigger real sends with
 // ?force=1.
@@ -63,7 +63,7 @@ globalThis.fetch = async (url, options = {}) => {
   throw new Error(`UNMOCKED REQUEST ESCAPED: ${u}`);
 };
 
-const { authorizeCron } = await import(pathToFileURL(path.join(rootDir, 'api/_lead-followups.js')).href + '?t=' + Date.now());
+const { authorizeCron } = await import(pathToFileURL(path.join(rootDir, 'server/api/_lead-followups.js')).href + '?t=' + Date.now());
 
 function mockRes() {
   return {

@@ -27,7 +27,7 @@ process.env.WHATSAPP_PHONE_NUMBER_ID ||= '1234567890';
 process.env.OPENROUTER_API_KEY ||= 'test-openrouter-key';
 process.env.FOLLOWUP_AUTOMATION_ENABLED = 'false';
 
-const { createSupabaseAdminClient } = await import(pathToFileURL(path.join(rootDir, 'api/_supabase.js')).href);
+const { createSupabaseAdminClient } = await import(pathToFileURL(path.join(rootDir, 'server/api/_supabase.js')).href);
 const supabase = createSupabaseAdminClient();
 
 const realFetch = globalThis.fetch;
@@ -48,7 +48,7 @@ globalThis.fetch = async (url, options = {}) => {
   return realFetch(url, options);
 };
 
-const { default: handler } = await import(pathToFileURL(path.join(rootDir, 'api/daily-followup.js')).href + '?t=' + Date.now());
+const { default: handler } = await import(pathToFileURL(path.join(rootDir, 'server/api/daily-followup.js')).href + '?t=' + Date.now());
 
 function mockRes() {
   return { _status: 200, body: null, headers: {},
@@ -120,7 +120,7 @@ await test('AI prompt is built and sanitised when a lead is processed', async ()
 });
 
 await test('messages mirror insert has no organization_id column', async () => {
-  const src = fs.readFileSync(path.join(rootDir, 'api/daily-followup.js'), 'utf8');
+  const src = fs.readFileSync(path.join(rootDir, 'server/api/daily-followup.js'), 'utf8');
   const mirror = src.slice(src.indexOf('Mirror to messages table'));
   const block = mirror.slice(0, mirror.indexOf('});'));
   // Strip line comments so the explanatory note about the missing column

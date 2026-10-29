@@ -11,10 +11,14 @@
 //    /api/deals, /api/appointments must answer 401 without a session.
 // 3. Live deployment: same endpoints must answer 401 unauthenticated
 //    (proves the security boundary still holds on the deployed app).
+// 4. Vercel Hobby plan constraint: the api/ directory must expose at most 12
+//    serverless functions — everything is routed through the single
+//    api/[slug].js dispatcher, so the count must stay at 1.
 //
 // Run: node scripts/test-crm-persistence-fixes.mjs
 
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import path from 'node:path';
@@ -249,6 +253,14 @@ for (const endpoint of endpoints) {
   });
 }
 
+await test('local /api/social-conversations -> 401 without a session', async () => {
+  // The social inbox used to serve every tenant's conversations to ANONYMOUS
+  // callers (no auth, no org filter). The CRM inbox sends the session token,
+  // so gating it changes nothing for real users.
+  const res = await fetch(`${LOCAL}/api/social-conversations`, { headers: { Accept: 'application/json' } });
+  assert.equal(res.status, 401, `expected 401, got ${res.status}`);
+});
+
 await test('local CRM page still serves', async () => {
   const res = await fetch(`${LOCAL}/nextbright-crm/index.html`);
   assert.equal(res.status, 200);
@@ -276,6 +288,43 @@ if (undeployed.length) {
   console.log('        new in this change set and the deployment has not been updated.');
   console.log('        Deployment is a blocker in this environment (no Vercel token).');
 }
+
+/* ------------------------------------------- Vercel Hobby 12-function limit */
+console.log('\n  --- Vercel Hobby plan function limit ---');
+await test('root api/ exposes at most 12 serverless functions', async () => {
+  const apiDir = path.join(ROOT, 'api');
+  const functions = fs.readdirSync(apiDir)
+    .filter(name => name.endsWith('.js') && !name.startsWith('_'));
+  assert.ok(functions.length <= 12,
+    `found ${functions.length} function file(s) in api/ (${functions.join(', ')}); Vercel Hobby allows 12`);
+});
+await test('all handlers moved to server/api/ behind the single [slug].js dispatcher', async () => {
+  const functions = fs.readdirSync(path.join(ROOT, 'api'))
+    .filter(name => name.endsWith('.js') && !name.startsWith('_'));
+  assert.deepEqual(functions, ['[slug].js'],
+    `api/ should contain only the dispatcher, found: ${functions.join(', ')}`);
+  const handlers = fs.readdirSync(path.join(ROOT, 'server', 'api'))
+    .filter(name => name.endsWith('.js') && !name.startsWith('_'));
+  assert.equal(handlers.length, 14,
+    `expected 14 handlers in server/api/ (12 original + deals + appointments), found ${handlers.length}`);
+});
+await test('dispatcher resolves real routes and rejects unknown ones', async () => {
+  const { default: dispatch } = await import(
+    pathToFileURL(path.join(ROOT, 'api', '[slug].js')).href);
+  const makeRes = () => ({
+    _status: 0, _body: null,
+    status(code) { this._status = code; return this; },
+    json(body) { this._body = body; return this; }
+  });
+  // Unknown route -> 404, no handler invoked.
+  let res = makeRes();
+  await dispatch({ url: '/api/definitely-not-a-route', query: {} }, res);
+  assert.equal(res._status, 404);
+  // Path wins over a spoofed ?slug= query (cannot reach another handler).
+  res = makeRes();
+  await dispatch({ url: '/api/definitely-not-a-route?slug=admin', query: { slug: 'admin' } }, res);
+  assert.equal(res._status, 404, 'client-supplied ?slug= must not change routing');
+});
 
 console.log(`\n${failed ? failed + ' test(s) failed.' : passed + ' passed, 0 failed.'}`);
 process.exit(failed ? 1 : 0);

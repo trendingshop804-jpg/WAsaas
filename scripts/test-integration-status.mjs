@@ -31,7 +31,7 @@ globalThis.fetch = async (input) => {
   throw new Error(`Unexpected fetch to ${url}`);
 };
 
-const { getIntegrationStatus, normalizeIntegrationKey } = await import('../api/_integration-status.js');
+const { getIntegrationStatus, normalizeIntegrationKey } = await import('../server/api/_integration-status.js');
 
 let passed = 0;
 let failed = 0;

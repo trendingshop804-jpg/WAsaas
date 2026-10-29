@@ -96,8 +96,8 @@ globalThis.fetch = async (input, init = {}) => {
 };
 
 // Import modules after fetch & env are configured
-const { checkInstagram } = await import('../api/_integration-status.js');
-const { default: handler } = await import('../api/integration-status.js');
+const { checkInstagram } = await import('../server/api/_integration-status.js');
+const { default: handler } = await import('../server/api/integration-status.js');
 
 function createMockReqRes({ method = 'GET', query = {}, body = {}, headers = {} }) {
   const req = {

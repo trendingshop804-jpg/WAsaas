@@ -4,9 +4,9 @@
 // unauthenticated while using the Supabase service-role key with a
 // client-supplied organizationId (findings C1, C2, C3):
 //
-//   api/meta-oauth-exchange.js  - writes whatsapp_connections / instagram_connections
-//   api/instagram.js            - connect / disconnect / send_message / oauth-exchange
-//   api/messages.js             - outbound WhatsApp messages
+//   server/api/meta-oauth-exchange.js  - writes whatsapp_connections / instagram_connections
+//   server/api/instagram.js            - connect / disconnect / send_message / oauth-exchange
+//   server/api/messages.js             - outbound WhatsApp messages
 //
 // Fully mocked: no database, no network, no Meta calls. The Meta Graph API is
 // stubbed and any unexpected outbound URL aborts the test.
@@ -102,9 +102,9 @@ async function call(handler, req) {
   return res;
 }
 
-const oauth = (await import(pathToFileURL(path.join(rootDir, 'api/meta-oauth-exchange.js')).href + '?t=' + Date.now())).default;
-const instagram = (await import(pathToFileURL(path.join(rootDir, 'api/instagram.js')).href + '?t=' + Date.now())).default;
-const sendMedia = (await import(pathToFileURL(path.join(rootDir, 'api/messages.js')).href + '?t=' + Date.now())).default;
+const oauth = (await import(pathToFileURL(path.join(rootDir, 'server/api/meta-oauth-exchange.js')).href + '?t=' + Date.now())).default;
+const instagram = (await import(pathToFileURL(path.join(rootDir, 'server/api/instagram.js')).href + '?t=' + Date.now())).default;
+const sendMedia = (await import(pathToFileURL(path.join(rootDir, 'server/api/messages.js')).href + '?t=' + Date.now())).default;
 
 const SESSION = { Authorization: 'Bearer mock-session-token' };
 function reset() { writes.length = 0; metaAuthHeaders = []; outboundUrls = []; }
