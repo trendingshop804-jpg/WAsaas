@@ -54,7 +54,7 @@
           <span class="logo-name">NextBright <b>CRM</b></span>
           <span class="logo-tagline">Manage · Automate · Grow</span>
         </div>
-        <button class="sidebar-collapse-btn" id="sidebar-collapse-btn" title="Collapse sidebar">
+        <button class="sidebar-collapse-btn" id="sidebar-collapse-btn" title="Collapse sidebar" aria-label="Collapse sidebar" aria-expanded="true">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
         </button>
       </div>
@@ -162,7 +162,7 @@
             <span class="user-name" id="sb-user-name">Signed-in user</span>
             <span class="user-role">Loading access</span>
           </div>
-          <button class="icon-btn" id="sb-signout-btn" title="Sign out">
+          <button class="icon-btn" id="sb-signout-btn" title="Sign out" aria-label="Sign out">
             <i data-feather="log-out"></i>
           </button>
         </div>
@@ -175,12 +175,12 @@
       <!-- TOPBAR -->
       <header class="topbar" id="topbar">
         <div class="topbar-left">
-          <button class="icon-btn sidebar-mobile-toggle" id="sidebar-mobile-toggle" title="Open menu">
+          <button class="icon-btn sidebar-mobile-toggle" id="sidebar-mobile-toggle" title="Open menu" aria-label="Open menu">
             <i data-feather="menu"></i>
           </button>
           <div class="search-wrap">
             <i data-feather="search" class="search-icon"></i>
-            <input type="text" id="global-search" class="search-input" placeholder="Search leads, customers, deals…">
+            <input type="text" id="global-search" class="search-input" placeholder="Search leads, customers, deals…" aria-label="Search leads, customers, deals">
             <kbd class="search-kbd">⌘K</kbd>
           </div>
         </div>
@@ -188,7 +188,7 @@
           <button class="btn btn-primary btn-sm topbar-quick-add" id="quick-add-btn">
             <i data-feather="plus"></i><span>Quick Add</span>
           </button>
-          <button class="icon-btn notif-btn" title="Notifications" id="notif-btn">
+          <button class="icon-btn notif-btn" title="Notifications" id="notif-btn" aria-label="Notifications" aria-haspopup="dialog">
             <i data-feather="bell"></i>
             <span class="notif-dot"></span>
           </button>
@@ -196,7 +196,7 @@
             <span>Admin</span>
             <i data-feather="chevron-down"></i>
           </div>
-          <button class="topbar-avatar" title="Open profile">
+          <button class="topbar-avatar" title="Open profile" aria-label="Open profile menu" aria-haspopup="dialog">
             <span class="topbar-avatar-initials">PK</span>
             <span class="topbar-profile-copy">
               <strong>Signed-in user</strong>
@@ -268,47 +268,42 @@
             <div class="kpi-card">
               <div class="kpi-top">
                 <div class="kpi-icon blue"><i data-feather="users"></i></div>
-                <span class="kpi-trend trend-up"><i data-feather="trending-up"></i> +15%</span>
               </div>
-              <div class="kpi-value">248</div>
+              <div class="kpi-value" aria-live="polite">—</div>
               <div class="kpi-label">Total Leads</div>
-              <div class="kpi-sub">vs last 7 days</div>
+              <div class="kpi-sub">Loading organization data…</div>
             </div>
             <div class="kpi-card">
               <div class="kpi-top">
                 <div class="kpi-icon green"><i data-feather="user-check"></i></div>
-                <span class="kpi-trend trend-up"><i data-feather="trending-up"></i> +8%</span>
               </div>
-              <div class="kpi-value">86</div>
+              <div class="kpi-value" aria-live="polite">—</div>
               <div class="kpi-label">Customers</div>
-              <div class="kpi-sub">vs last 7 days</div>
+              <div class="kpi-sub">Loading organization data…</div>
             </div>
             <div class="kpi-card">
               <div class="kpi-top">
                 <div class="kpi-icon purple"><i data-feather="phone"></i></div>
-                <span class="kpi-trend trend-down"><i data-feather="trending-down"></i> -3%</span>
               </div>
-              <div class="kpi-value">312</div>
+              <div class="kpi-value" aria-live="polite">—</div>
               <div class="kpi-label">Calls Made</div>
-              <div class="kpi-sub">vs last 7 days</div>
+              <div class="kpi-sub">Call log is not tracked yet</div>
             </div>
             <div class="kpi-card">
               <div class="kpi-top">
                 <div class="kpi-icon orange"><i data-feather="message-circle"></i></div>
-                <span class="kpi-trend trend-up"><i data-feather="trending-up"></i> +22%</span>
               </div>
-              <div class="kpi-value">521</div>
+              <div class="kpi-value" aria-live="polite">—</div>
               <div class="kpi-label">Messages Sent</div>
-              <div class="kpi-sub">vs last 7 days</div>
+              <div class="kpi-sub">Loading organization data…</div>
             </div>
             <div class="kpi-card">
               <div class="kpi-top">
                 <div class="kpi-icon teal"><i data-feather="calendar"></i></div>
-                <span class="kpi-trend trend-up"><i data-feather="trending-up"></i> +11%</span>
               </div>
-              <div class="kpi-value">42</div>
+              <div class="kpi-value" aria-live="polite">—</div>
               <div class="kpi-label">Appointments</div>
-              <div class="kpi-sub">vs last 7 days</div>
+              <div class="kpi-sub">Loading organization data…</div>
             </div>
           </div>
 
@@ -346,7 +341,7 @@
                   <div class="donut-wrap">
                     <canvas id="lead-sources-chart" height="180"></canvas>
                     <div class="source-chart-center" aria-hidden="true">
-                      <strong>248</strong>
+                      <strong id="sources-total">—</strong>
                       <span>Total Leads</span>
                     </div>
                   </div>
@@ -427,15 +422,15 @@
           <div class="filter-bar">
             <div class="search-wrap sm">
               <i data-feather="search" class="search-icon"></i>
-              <input type="text" class="search-input" id="leads-search" placeholder="Search leads…">
+              <input type="text" class="search-input" id="leads-search" placeholder="Search leads…" aria-label="Search leads">
             </div>
             <select class="filter-sel" id="leads-status-filter">
               <option value="">All Statuses</option>
               <option value="New">New</option>
               <option value="Contacted">Contacted</option>
+              <option value="Replied">Replied</option>
               <option value="Qualified">Qualified</option>
-              <option value="Proposal">Proposal</option>
-              <option value="Converted">Converted</option>
+              <option value="Won">Won</option>
               <option value="Lost">Lost</option>
             </select>
             <select class="filter-sel" id="leads-source-filter">
@@ -452,8 +447,8 @@
               <option value="Signed-in user">Signed-in user</option>
             </select>
             <div class="view-toggle">
-              <button class="view-btn active" data-mode="table" title="Table view"><i data-feather="list"></i></button>
-              <button class="view-btn" data-mode="kanban" title="Kanban view"><i data-feather="columns"></i></button>
+              <button class="view-btn active" data-mode="table" title="Table view" aria-label="Table view" aria-pressed="true"><i data-feather="list"></i></button>
+              <button class="view-btn" data-mode="kanban" title="Kanban view" aria-label="Kanban view" aria-pressed="false"><i data-feather="columns"></i></button>
             </div>
           </div>
 
@@ -601,7 +596,7 @@
             <!-- Center: Active Conversation -->
             <div class="conv-chat-panel">
               <div class="conv-chat-header" id="conv-chat-header">
-                <button class="btn btn-secondary btn-sm btn-back-conv" id="btn-back-conv" title="Back to conversations">
+                <button class="btn btn-secondary btn-sm btn-back-conv" id="btn-back-conv" title="Back to conversations" aria-label="Back to conversations">
                   <i data-feather="arrow-left"></i>
                 </button>
                 <div class="conv-avatar" id="conv-chat-avatar">AL</div>
@@ -622,12 +617,12 @@
                 <input type="file" id="msg-file-input" style="display:none;" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.webp">
                 
                 <!-- Attachment Button (Images, Audio, Video, Documents) -->
-                <button type="button" class="btn btn-secondary btn-icon" id="msg-attach-btn" title="Send Image, Audio, Video, or Document" style="padding: 8px 10px; border-radius: 8px; flex-shrink: 0;">
+                <button type="button" class="btn btn-secondary btn-icon" id="msg-attach-btn" title="Send Image, Audio, Video, or Document" aria-label="Attach image, audio, video or document" style="padding: 8px 10px; border-radius: 8px; flex-shrink: 0;">
                   <i data-feather="paperclip"></i>
                 </button>
 
                 <!-- Sticker Button -->
-                <button type="button" class="btn btn-secondary btn-icon" id="msg-sticker-btn" title="Send Sticker / Reaction" style="padding: 8px 10px; border-radius: 8px; font-size: 15px; flex-shrink: 0; line-height: 1;">
+                <button type="button" class="btn btn-secondary btn-icon" id="msg-sticker-btn" title="Send Sticker / Reaction" aria-label="Send sticker or reaction" style="padding: 8px 10px; border-radius: 8px; font-size: 15px; flex-shrink: 0; line-height: 1;">
                   🎨
                 </button>
 
@@ -700,11 +695,11 @@
             </div>
             <div class="card appt-cal">
               <div class="cal-top-bar">
-                <div class="cal-title" id="cal-month-title">September 2026</div>
+                <div class="cal-title" id="cal-month-title">Calendar</div>
                 <div class="cal-nav-btns">
-                  <button class="btn btn-secondary btn-sm" id="cal-btn-prev"><i data-feather="chevron-left"></i></button>
+                  <button class="btn btn-secondary btn-sm" id="cal-btn-prev" title="Previous period" aria-label="Previous period"><i data-feather="chevron-left"></i></button>
                   <button class="btn btn-secondary btn-sm" id="cal-btn-today">Today</button>
-                  <button class="btn btn-secondary btn-sm" id="cal-btn-next"><i data-feather="chevron-right"></i></button>
+                  <button class="btn btn-secondary btn-sm" id="cal-btn-next" title="Next period" aria-label="Next period"><i data-feather="chevron-right"></i></button>
                 </div>
               </div>
               <div class="cal-grid-header">
@@ -759,26 +754,26 @@
           <div class="reports-grid">
             <div class="card">
               <div class="card-title">Lead Conversion Rate</div>
-              <div class="big-stat">14.2%</div>
-              <div class="card-sub">from 1,245 leads this month</div>
+              <div class="big-stat" id="report-conversion-rate" aria-live="polite">—</div>
+              <div class="card-sub" id="report-conversion-sub">Loading organization data…</div>
               <canvas id="conversion-chart" height="100"></canvas>
             </div>
             <div class="card">
               <div class="card-title">Revenue (Closed Deals)</div>
-              <div class="big-stat">₹4,82,000</div>
-              <div class="card-sub">across 18 closed deals</div>
+              <div class="big-stat" id="report-revenue" aria-live="polite">—</div>
+              <div class="card-sub" id="report-revenue-sub">Loading organization data…</div>
               <canvas id="revenue-chart" height="100"></canvas>
             </div>
             <div class="card">
               <div class="card-title">Customer Growth</div>
-              <div class="big-stat">+127</div>
-              <div class="card-sub">new customers this month</div>
+              <div class="big-stat" id="report-growth" aria-live="polite">—</div>
+              <div class="card-sub" id="report-growth-sub">Loading organization data…</div>
               <canvas id="growth-chart" height="100"></canvas>
             </div>
             <div class="card">
               <div class="card-title">Messages Sent</div>
-              <div class="big-stat">2,150</div>
-              <div class="card-sub">98.2% delivery rate</div>
+              <div class="big-stat" id="report-messages" aria-live="polite">—</div>
+              <div class="card-sub" id="report-messages-sub">Loading organization data…</div>
               <canvas id="messages-chart" height="100"></canvas>
             </div>
           </div>
@@ -1999,27 +1994,31 @@ curl -X POST https://your-domain.com/api/leads \
     <div class="modal">
       <div class="modal-header">
         <h2 class="modal-title">Quick Add Lead</h2>
-        <button class="icon-btn modal-close" id="quick-add-close"><i data-feather="x"></i></button>
+        <button class="icon-btn modal-close" aria-label="Close dialog" id="quick-add-close"><i data-feather="x"></i></button>
       </div>
       <div class="modal-body">
         <div class="form-grid">
           <div class="form-group">
-            <label class="form-label">Full Name</label>
-            <input type="text" class="form-input" id="qa-name" placeholder="Lead name">
+            <label class="form-label" for="qa-name">Full Name</label>
+            <input type="text" class="form-input" id="qa-name" placeholder="Lead name" autocomplete="off">
           </div>
           <div class="form-group">
-            <label class="form-label">Phone</label>
+            <label class="form-label" for="qa-phone">Phone</label>
             <input type="text" class="form-input" id="qa-phone" placeholder="+91 9000 000000">
           </div>
           <div class="form-group">
-            <label class="form-label">Source</label>
+            <label class="form-label" for="qa-email">Email <span style="font-weight:400;color:var(--text-muted)">(if no phone)</span></label>
+            <input type="email" class="form-input" id="qa-email" placeholder="lead@example.com" autocomplete="email">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="qa-source">Source</label>
             <select class="form-input" id="qa-source">
               <option>Website</option><option>Instagram</option><option>Facebook</option>
               <option>WhatsApp</option><option>Referral</option><option>Other</option>
             </select>
           </div>
           <div class="form-group">
-            <label class="form-label">Assigned To</label>
+            <label class="form-label" for="qa-assigned">Assigned To</label>
             <select class="form-input" id="qa-assigned">
               <option value="">Unassigned</option>
             </select>
@@ -2038,7 +2037,7 @@ curl -X POST https://your-domain.com/api/leads \
     <div class="modal-container" style="max-width: 600px;">
       <div class="modal-header">
         <h2 class="modal-title" id="c360-title">Customer 360 Profile</h2>
-        <button class="icon-btn modal-close" onclick="document.getElementById('modal-customer-360').classList.remove('open')"><i data-feather="x"></i></button>
+        <button class="icon-btn modal-close" aria-label="Close dialog" onclick="document.getElementById('modal-customer-360').classList.remove('open')"><i data-feather="x"></i></button>
       </div>
       <div class="modal-body">
         <div style="display: flex; gap: 14px; align-items: center; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border-light)">
@@ -2067,24 +2066,28 @@ curl -X POST https://your-domain.com/api/leads \
     <div class="modal">
       <div class="modal-header">
         <h2 class="modal-title">Add New Customer</h2>
-        <button class="icon-btn modal-close" onclick="document.getElementById('modal-add-customer').classList.remove('open')"><i data-feather="x"></i></button>
+        <button class="icon-btn modal-close" aria-label="Close dialog" onclick="document.getElementById('modal-add-customer').classList.remove('open')"><i data-feather="x"></i></button>
       </div>
       <div class="modal-body">
         <div class="form-grid">
           <div class="form-group">
-            <label class="form-label">Customer Name</label>
-            <input type="text" class="form-input" id="ac-name" placeholder="e.g. Rahul Sharma">
+            <label class="form-label" for="ac-name">Customer Name</label>
+            <input type="text" class="form-input" id="ac-name" placeholder="e.g. Rahul Sharma" autocomplete="off">
           </div>
           <div class="form-group">
-            <label class="form-label">Phone</label>
+            <label class="form-label" for="ac-phone">Phone</label>
             <input type="text" class="form-input" id="ac-phone" placeholder="+91 98765 00000">
           </div>
           <div class="form-group">
-            <label class="form-label">Company Name</label>
-            <input type="text" class="form-input" id="ac-company" placeholder="e.g. Sharma Tech Solutions">
+            <label class="form-label" for="ac-email">Email <span style="font-weight:400;color:var(--text-muted)">(if no phone)</span></label>
+            <input type="email" class="form-input" id="ac-email" placeholder="customer@example.com" autocomplete="email">
           </div>
           <div class="form-group">
-            <label class="form-label">Contract / Deal Value</label>
+            <label class="form-label" for="ac-company">Company Name</label>
+            <input type="text" class="form-input" id="ac-company" placeholder="e.g. Sharma Tech Solutions" autocomplete="off">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="ac-revenue">Contract / Deal Value</label>
             <input type="text" class="form-input" id="ac-revenue" placeholder="e.g. ₹50,000">
           </div>
         </div>
@@ -2101,24 +2104,24 @@ curl -X POST https://your-domain.com/api/leads \
     <div class="modal">
       <div class="modal-header">
         <h2 class="modal-title">Create New Deal</h2>
-        <button class="icon-btn modal-close" onclick="document.getElementById('modal-add-deal').classList.remove('open')"><i data-feather="x"></i></button>
+        <button class="icon-btn modal-close" aria-label="Close dialog" onclick="document.getElementById('modal-add-deal').classList.remove('open')"><i data-feather="x"></i></button>
       </div>
       <div class="modal-body">
         <div class="form-grid">
           <div class="form-group">
-            <label class="form-label">Deal Name</label>
-            <input type="text" class="form-input" id="ad-name" placeholder="e.g. Annual CRM Subscription">
+            <label class="form-label" for="ad-name">Deal Name</label>
+            <input type="text" class="form-input" id="ad-name" placeholder="e.g. Annual CRM Subscription" autocomplete="off">
           </div>
           <div class="form-group">
-            <label class="form-label">Customer / Lead</label>
-            <input type="text" class="form-input" id="ad-customer" placeholder="Customer name">
+            <label class="form-label" for="ad-customer">Customer / Lead</label>
+            <input type="text" class="form-input" id="ad-customer" placeholder="Customer name" autocomplete="off">
           </div>
           <div class="form-group">
-            <label class="form-label">Amount</label>
-            <input type="text" class="form-input" id="ad-amount" placeholder="e.g. ₹1,20,000">
+            <label class="form-label" for="ad-amount">Amount (₹)</label>
+            <input type="text" class="form-input" id="ad-amount" placeholder="e.g. ₹1,20,000" inputmode="decimal">
           </div>
           <div class="form-group">
-            <label class="form-label">Pipeline Stage</label>
+            <label class="form-label" for="ad-stage">Pipeline Stage</label>
             <select class="form-input" id="ad-stage">
               <option>New</option><option>Contacted</option><option>Proposal</option>
               <option>Negotiation</option><option>Won</option><option>Lost</option>
@@ -2138,20 +2141,26 @@ curl -X POST https://your-domain.com/api/leads \
     <div class="modal">
       <div class="modal-header">
         <h2 class="modal-title">Add New Task</h2>
-        <button class="icon-btn modal-close" onclick="document.getElementById('modal-add-task').classList.remove('open')"><i data-feather="x"></i></button>
+        <button class="icon-btn modal-close" aria-label="Close dialog" onclick="document.getElementById('modal-add-task').classList.remove('open')"><i data-feather="x"></i></button>
       </div>
       <div class="modal-body">
         <div class="form-grid">
           <div class="form-group">
-            <label class="form-label">Task Description</label>
-            <input type="text" class="form-input" id="at-title" placeholder="e.g. Follow up on proposal details">
+            <label class="form-label" for="at-title">Task Description</label>
+            <input type="text" class="form-input" id="at-title" placeholder="e.g. Follow up on proposal details" autocomplete="off">
           </div>
           <div class="form-group">
-            <label class="form-label">Due Time</label>
-            <input type="text" class="form-input" id="at-time" placeholder="Today · 4:00 PM">
+            <label class="form-label" for="at-lead">Related Lead</label>
+            <select class="form-input" id="at-lead">
+              <option value="">Loading leads…</option>
+            </select>
           </div>
           <div class="form-group">
-            <label class="form-label">Priority</label>
+            <label class="form-label" for="at-time">Due Date &amp; Time</label>
+            <input type="datetime-local" class="form-input" id="at-time">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="at-priority">Priority</label>
             <select class="form-input" id="at-priority">
               <option>High</option><option selected>Medium</option><option>Low</option>
             </select>
@@ -2170,24 +2179,24 @@ curl -X POST https://your-domain.com/api/leads \
     <div class="modal">
       <div class="modal-header">
         <h2 class="modal-title">Schedule Appointment</h2>
-        <button class="icon-btn modal-close" onclick="document.getElementById('modal-add-appointment').classList.remove('open')"><i data-feather="x"></i></button>
+        <button class="icon-btn modal-close" aria-label="Close dialog" onclick="document.getElementById('modal-add-appointment').classList.remove('open')"><i data-feather="x"></i></button>
       </div>
       <div class="modal-body">
         <div class="form-grid">
           <div class="form-group">
-            <label class="form-label">Appointment Title / Service</label>
-            <input type="text" class="form-input" id="ap-type" placeholder="e.g. Dental Consultation">
+            <label class="form-label" for="ap-type">Appointment Title / Service</label>
+            <input type="text" class="form-input" id="ap-type" placeholder="e.g. Dental Consultation" autocomplete="off">
           </div>
           <div class="form-group">
-            <label class="form-label">Customer Name</label>
-            <input type="text" class="form-input" id="ap-customer" placeholder="e.g. Rahul Sharma">
+            <label class="form-label" for="ap-customer">Customer Name</label>
+            <input type="text" class="form-input" id="ap-customer" placeholder="e.g. Rahul Sharma" autocomplete="off">
           </div>
           <div class="form-group">
-            <label class="form-label">Date & Time</label>
-            <input type="text" class="form-input" id="ap-date" placeholder="Tomorrow · 11:00 AM">
+            <label class="form-label" for="ap-date">Date &amp; Time</label>
+            <input type="datetime-local" class="form-input" id="ap-date">
           </div>
           <div class="form-group">
-            <label class="form-label">Assigned Staff</label>
+            <label class="form-label" for="ap-assigned">Assigned Staff</label>
             <select class="form-input" id="ap-assigned">
               <option value="">Unassigned</option>
             </select>

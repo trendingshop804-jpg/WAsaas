@@ -187,12 +187,13 @@ function initLeadsFilters() {
     const src  = sourceFilter ? sourceFilter.value : '';
     const asgn = assignedFilter ? assignedFilter.value : '';
 
-    const filtered = window.NB.leads.filter(l =>
-      (!q || l.name.toLowerCase().includes(q) || l.phone.includes(q)) &&
-      (!stat || l.status === stat) &&
-      (!src  || l.source === src) &&
-      (!asgn || l.assigned === asgn)
-    );
+    const filtered = window.NB.leads.filter(l => {
+      const label = String(l.custom_fields?.source_label || l.source || '');
+      return (!q || String(l.name).toLowerCase().includes(q) || String(l.phone || '').includes(q)) &&
+        (!stat || l.status === stat) &&
+        (!src  || label === src) &&
+        (!asgn || l.assigned === asgn);
+    });
     if (typeof window.renderLeadsTable === 'function') {
       window.renderLeadsTable(filtered);
     }
@@ -855,11 +856,11 @@ function initSectionControls() {
       const input = document.createElement('input');
       input.type = 'file';
       input.accept = '.csv,text/csv';
-      input.addEventListener('change', () => {
+      input.addEventListener('change', async () => {
         const file = input.files && input.files[0];
         if (!file) return;
         const reader = new FileReader();
-        reader.onload = () => {
+        reader.onload = async () => {
           const lines = String(reader.result || '').split(/\r?\n/).filter(Boolean);
           if (lines.length < 2) {
             toast('CSV needs a header and at least one lead row.', 'error');
@@ -868,31 +869,43 @@ function initSectionControls() {
           const headers = lines[0].split(',').map(value => value.trim().toLowerCase());
           const nameIndex = headers.findIndex(value => ['name', 'full name', 'contact'].includes(value));
           const phoneIndex = headers.findIndex(value => ['phone', 'mobile', 'whatsapp'].includes(value));
-          if (nameIndex === -1 || phoneIndex === -1) {
-            toast('CSV must include Name and Phone columns.', 'error');
+          const emailIndex = headers.findIndex(value => ['email', 'email address'].includes(value));
+          if (nameIndex === -1 || (phoneIndex === -1 && emailIndex === -1)) {
+            toast('CSV must include a Name column and a Phone or Email column.', 'error');
             return;
           }
-          let added = 0;
-          lines.slice(1).forEach(line => {
+          const rows = lines.slice(1).map(line => {
             const values = line.split(',').map(value => value.trim().replace(/^"|"$/g, ''));
-            const name = values[nameIndex];
-            const phone = values[phoneIndex];
-            if (!name || !phone) return;
-            window.NB.leads.unshift({
-              id: Date.now() + added,
-              name,
-              phone,
-              source: 'CSV Import',
-              status: 'New',
-              assigned: 'Signed-in user',
-              lastActivity: 'Just now',
-              date: new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
-            });
-            added += 1;
-          });
-          if (typeof window.renderLeadsTable === 'function') window.renderLeadsTable();
-          if (typeof window.renderRecentLeads === 'function') window.renderRecentLeads();
-          toast(`${added} lead${added === 1 ? '' : 's'} imported from CSV.`, 'success');
+            return {
+              name: nameIndex === -1 ? '' : values[nameIndex],
+              phone: phoneIndex === -1 ? '' : values[phoneIndex],
+              email: emailIndex === -1 ? '' : values[emailIndex]
+            };
+          }).filter(row => row.name && (row.phone || row.email));
+
+          if (!rows.length) { toast('No valid rows found: each row needs a name plus a phone or email.', 'error'); return; }
+
+          // Persist each row through the API. Only rows the server confirmed are
+          // counted as imported; failures are reported individually.
+          const results = await Promise.allSettled(rows.map(row => nbApiJson('/api/leads', {
+            method: 'POST',
+            body: JSON.stringify({
+              contactName: row.name,
+              phone: row.phone || undefined,
+              email: row.email || undefined,
+              source: 'Import',
+              customFields: { source_label: 'CSV Import' }
+            })
+          })));
+          const imported = results.filter(result => result.status === 'fulfilled').length;
+          const failed = results.length - imported;
+          if (failed) {
+            const firstError = results.find(result => result.status === 'rejected')?.reason?.message;
+            toast(`${imported} lead${imported === 1 ? '' : 's'} imported. ${failed} row${failed === 1 ? '' : 's'} failed${firstError ? `: ${firstError}` : '.'}`, 'error');
+          } else {
+            toast(`${imported} lead${imported === 1 ? '' : 's'} imported and saved.`, 'success');
+          }
+          await refreshAfterWrite();
         };
         reader.readAsText(file);
       });
@@ -905,7 +918,7 @@ function initSectionControls() {
   if (logCall) logCall.addEventListener('click', () => toast('Call logging is ready. Add the call details from the Calls table.', 'info'));
 
   const addNote = document.getElementById('message-add-note-btn');
-  if (addNote) addNote.addEventListener('click', () => toast('Note added to the active conversation.', 'success'));
+  if (addNote) addNote.addEventListener('click', () => toast('Notes are not stored for conversations yet, so nothing was saved.', 'info'));
 
   const createTask = document.getElementById('message-create-task-btn');
   if (createTask) createTask.addEventListener('click', () => {
@@ -913,58 +926,42 @@ function initSectionControls() {
     setTimeout(() => document.getElementById('add-task-btn')?.click(), 80);
   });
 
-  // Calendar view and navigation controls
-  const calendarTitle = document.getElementById('cal-month-title');
-  let calendarDate = new Date(2026, 8, 1);
-  const updateCalendarTitle = () => {
-    if (!calendarTitle) return;
-    const suffix = document.querySelector('#cal-view-day.active, #cal-view-week.active, #cal-view-month.active');
-    const mode = suffix ? suffix.textContent.trim() : 'Month';
-    calendarTitle.textContent = `${calendarDate.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })} · ${mode}`;
-  };
+  // Calendar view and navigation controls — all of them drive the single
+  // calendar state owned by app.js (window.NB_CALENDAR), so the title, the
+  // selected date, the view mode and the grid can never disagree.
   ['cal-view-day', 'cal-view-week', 'cal-view-month'].forEach(id => {
     const button = document.getElementById(id);
     if (!button) return;
     button.addEventListener('click', () => {
       document.querySelectorAll('#cal-view-day, #cal-view-week, #cal-view-month').forEach(item => item.classList.remove('active'));
       button.classList.add('active');
-      updateCalendarTitle();
+      const mode = id.replace('cal-view-', '');
+      if (window.NB_CALENDAR) window.NB_CALENDAR.setView(mode);
       toast(`Calendar switched to ${button.textContent.trim()} view.`);
     });
   });
-  const moveCalendar = (offset) => {
-    calendarDate.setMonth(calendarDate.getMonth() + offset);
-    updateCalendarTitle();
-    toast(`Calendar moved to ${calendarDate.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}.`);
-  };
-  document.getElementById('cal-btn-prev')?.addEventListener('click', () => moveCalendar(-1));
-  document.getElementById('cal-btn-next')?.addEventListener('click', () => moveCalendar(1));
+  document.getElementById('cal-btn-prev')?.addEventListener('click', () => {
+    if (window.NB_CALENDAR) window.NB_CALENDAR.move(-1);
+    toast(`Showing ${document.getElementById('cal-month-title')?.textContent || 'previous period'}.`);
+  });
+  document.getElementById('cal-btn-next')?.addEventListener('click', () => {
+    if (window.NB_CALENDAR) window.NB_CALENDAR.move(1);
+    toast(`Showing ${document.getElementById('cal-month-title')?.textContent || 'next period'}.`);
+  });
   document.getElementById('cal-btn-today')?.addEventListener('click', () => {
-    const today = new Date();
-    calendarDate = new Date(today.getFullYear(), today.getMonth(), 1);
-    updateCalendarTitle();
+    if (window.NB_CALENDAR) window.NB_CALENDAR.today();
     toast('Calendar moved to today.');
   });
-  updateCalendarTitle();
 
-  // Task filters
+  // Task filters — filter the real task records, never a rendered index.
   const taskFilterButtons = Array.from(document.querySelectorAll('[data-task-filter]'));
   if (taskFilterButtons.length) {
-    const applyTaskFilter = (filter) => {
-      const items = Array.from(document.querySelectorAll('#tasks-full-list .task-full-item'));
-      items.forEach((item, index) => {
-        let visible = true;
-        if (filter === 'today') visible = index < 4;
-        if (filter === 'week') visible = true;
-        if (filter === 'overdue') visible = index === 0 || index === 1;
-        item.style.display = visible ? 'flex' : 'none';
-      });
-    };
     taskFilterButtons.forEach(button => button.addEventListener('click', () => {
       taskFilterButtons.forEach(item => item.classList.remove('active'));
       button.classList.add('active');
-      applyTaskFilter(button.dataset.taskFilter || 'all');
-      toast(`Showing ${button.textContent.trim()} tasks.`);
+      const filter = button.dataset.taskFilter || 'all';
+      if (window.NB_TASKS) window.NB_TASKS.setFilter(filter);
+      toast(`Showing ${button.textContent.trim().toLowerCase()} tasks.`);
     }));
   }
 }
@@ -1625,10 +1622,40 @@ function initSettingsNav() {
 }
 
 /* ---- Modals & Action Event Handlers ---- */
+
+/* Every "Add …" flow below writes through the tenant API and only reports
+   success after the server confirms the record. Nothing is pushed into
+   window.NB directly any more, and no placeholder contact data is invented. */
+async function nbApiJson(path, options = {}) {
+  const response = await window.NB_AUTH.apiFetch(path, options);
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error = new Error(payload.error || payload.message || `Request failed (${response.status})`);
+    error.status = response.status;
+    error.code = payload.code;
+    throw error;
+  }
+  return payload;
+}
+
+/* The lead source dropdown offers friendly labels while the database column is
+   constrained to Manual/WhatsApp/Import/API. The original label is preserved in
+   custom_fields.source_label so reporting still shows what the user chose. */
+function mapLeadSource(label) {
+  const value = String(label || '').trim();
+  return value === 'WhatsApp' ? 'WhatsApp' : 'Manual';
+}
+
+async function refreshAfterWrite() {
+  if (typeof window.NB_WORKSPACE?.reload === 'function') {
+    try { await window.NB_WORKSPACE.reload(); } catch (_) { /* toast already shown by loader */ }
+  }
+}
+
 function initActionModals() {
   const setupModal = (triggerIds, modalId, closeIds) => {
     const modal = document.getElementById(modalId);
-    if (!modal) return;
+    if (!modal) return null;
     const open = () => modal.classList.add('open');
     const close = () => modal.classList.remove('open');
 
@@ -1641,123 +1668,239 @@ function initActionModals() {
       if (el) el.addEventListener('click', close);
     });
     modal.addEventListener('click', e => { if (e.target === modal) close(); });
+    return { modal, open, close };
   };
 
   // 1. Quick Add Lead
-  setupModal(['quick-add-btn', 'add-lead-btn'], 'quick-add-modal', ['quick-add-close', 'qa-cancel']);
+  const quickAdd = setupModal(['quick-add-btn', 'add-lead-btn'], 'quick-add-modal', ['quick-add-close', 'qa-cancel']);
   const qaSave = document.getElementById('qa-save');
   if (qaSave) {
-    qaSave.addEventListener('click', () => {
+    qaSave.addEventListener('click', async () => {
       const name = document.getElementById('qa-name').value.trim();
       const phone = document.getElementById('qa-phone').value.trim();
+      const email = document.getElementById('qa-email')?.value.trim() || '';
       const source = document.getElementById('qa-source').value;
-      const assigned = document.getElementById('qa-assigned').value;
 
       if (!name) { showToast('Please enter lead name', 'error'); return; }
+      if (!phone && !email) { showToast('Enter a phone number or an email address so the lead can be contacted.', 'error'); return; }
+      if (email && !/^\S+@\S+\.\S+$/.test(email)) { showToast('Enter a valid email address.', 'error'); return; }
 
-      const newLead = {
-        id: window.NB.leads.length + 1,
-        name, phone: phone || '+91 98765 00000', source, status: 'New', assigned,
-        lastActivity: 'Just now', date: new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
-      };
-      window.NB.leads.unshift(newLead);
-      if (typeof window.renderLeadsTable === 'function') window.renderLeadsTable();
-      if (typeof window.renderRecentLeads === 'function') window.renderRecentLeads();
-      if (typeof window.renderKanban === 'function') window.renderKanban();
-
-      document.getElementById('quick-add-modal').classList.remove('open');
-      showToast(`Lead "${name}" added successfully!`, 'success');
+      qaSave.disabled = true;
+      const originalLabel = qaSave.textContent;
+      qaSave.textContent = 'Saving…';
+      try {
+        const payload = await nbApiJson('/api/leads', {
+          method: 'POST',
+          body: JSON.stringify({
+            contactName: name,
+            phone,
+            email: email || undefined,
+            source: mapLeadSource(source),
+            customFields: { source_label: source }
+          })
+        });
+        quickAdd?.close();
+        document.getElementById('qa-name').value = '';
+        document.getElementById('qa-phone').value = '';
+        if (document.getElementById('qa-email')) document.getElementById('qa-email').value = '';
+        showToast(`Lead "${name}" saved to your workspace.`, 'success');
+        await refreshAfterWrite();
+      } catch (error) {
+        showToast(`Could not save lead: ${error.message}`, 'error');
+      } finally {
+        qaSave.disabled = false;
+        qaSave.textContent = originalLabel;
+      }
     });
   }
 
-  // 2. Add Customer
-  setupModal(['add-customer-btn'], 'modal-add-customer', []);
+  // 2. Add Customer — persisted as a Won lead so the Customers view, the KPI and
+  //    the reports all read from the same records.
+  const addCustomer = setupModal(['add-customer-btn'], 'modal-add-customer', []);
   const acSave = document.getElementById('ac-save');
   if (acSave) {
-    acSave.addEventListener('click', () => {
+    acSave.addEventListener('click', async () => {
       const name = document.getElementById('ac-name').value.trim();
       const phone = document.getElementById('ac-phone').value.trim();
+      const email = document.getElementById('ac-email')?.value.trim() || '';
       const company = document.getElementById('ac-company').value.trim();
-      const revenue = document.getElementById('ac-revenue').value.trim();
+      const revenueRaw = document.getElementById('ac-revenue').value.trim();
 
       if (!name) { showToast('Please enter customer name', 'error'); return; }
+      if (!phone && !email) { showToast('Enter a phone number or an email address for the customer.', 'error'); return; }
+      const revenue = revenueRaw ? window.parseDealAmount?.(revenueRaw) : null;
+      if (revenueRaw && (revenue === null || revenue === undefined || revenue < 0)) {
+        showToast('Enter a valid contract value: zero or a positive number.', 'error');
+        return;
+      }
 
-      window.NB.customers.unshift({
-        name, phone: phone || '+91 98765 11111', company: company || 'Enterprise',
-        revenue: revenue || '₹50,000', assigned: 'Signed-in user', lastContact: 'Today'
-      });
-      if (typeof window.renderCustomers === 'function') window.renderCustomers();
-
-      document.getElementById('modal-add-customer').classList.remove('open');
-      showToast(`Customer "${name}" added!`, 'success');
+      acSave.disabled = true;
+      const originalLabel = acSave.textContent;
+      acSave.textContent = 'Saving…';
+      try {
+        await nbApiJson('/api/leads', {
+          method: 'POST',
+          body: JSON.stringify({
+            contactName: name,
+            phone,
+            email: email || undefined,
+            companyName: company,
+            status: 'Won',
+            source: 'Manual',
+            customFields: { record_type: 'customer', ...(revenue !== null && revenue !== undefined ? { revenue } : {}) }
+          })
+        });
+        addCustomer?.close();
+        ['ac-name', 'ac-phone', 'ac-email', 'ac-company', 'ac-revenue'].forEach(id => {
+          const field = document.getElementById(id);
+          if (field) field.value = '';
+        });
+        showToast(`Customer "${name}" saved to your workspace.`, 'success');
+        await refreshAfterWrite();
+      } catch (error) {
+        showToast(`Could not save customer: ${error.message}`, 'error');
+      } finally {
+        acSave.disabled = false;
+        acSave.textContent = originalLabel;
+      }
     });
   }
 
   // 3. Add Deal
-  setupModal(['add-deal-btn'], 'modal-add-deal', []);
+  const addDeal = setupModal(['add-deal-btn'], 'modal-add-deal', []);
   const adSave = document.getElementById('ad-save');
   if (adSave) {
-    adSave.addEventListener('click', () => {
+    adSave.addEventListener('click', async () => {
       const name = document.getElementById('ad-name').value.trim();
       const customer = document.getElementById('ad-customer').value.trim();
-      const amount = document.getElementById('ad-amount').value.trim();
+      const amountRaw = document.getElementById('ad-amount').value.trim();
       const stage = document.getElementById('ad-stage').value;
 
       if (!name) { showToast('Please enter deal name', 'error'); return; }
+      if (!amountRaw) { showToast('Enter the deal amount.', 'error'); return; }
+      const amount = window.parseDealAmount ? window.parseDealAmount(amountRaw) : Number(amountRaw);
+      if (amount === null || amount === undefined || !Number.isFinite(amount)) {
+        showToast('Enter a valid deal amount: zero or a positive number.', 'error');
+        return;
+      }
+      if (amount < 0) { showToast('Deal amount cannot be negative.', 'error'); return; }
 
-      if (!window.NB.deals[stage]) window.NB.deals[stage] = [];
-      window.NB.deals[stage].unshift({
-        name, customer: customer || 'Client', amount: amount || '₹1,00,000',
-        prob: '70%', probClass: 'prob-high', owner: 'Signed-in user', lastActivity: 'Just now'
-      });
-      if (typeof window.renderDeals === 'function') window.renderDeals();
-
-      document.getElementById('modal-add-deal').classList.remove('open');
-      showToast(`Deal "${name}" created in ${stage}!`, 'success');
+      adSave.disabled = true;
+      const originalLabel = adSave.textContent;
+      adSave.textContent = 'Saving…';
+      try {
+        await nbApiJson('/api/deals', {
+          method: 'POST',
+          body: JSON.stringify({ title: name, customer_name: customer, amount, stage })
+        });
+        addDeal?.close();
+        ['ad-name', 'ad-customer', 'ad-amount'].forEach(id => {
+          const field = document.getElementById(id);
+          if (field) field.value = '';
+        });
+        showToast(`Deal "${name}" saved in ${stage}.`, 'success');
+        await refreshAfterWrite();
+      } catch (error) {
+        showToast(`Could not save deal: ${error.message}`, 'error');
+      } finally {
+        adSave.disabled = false;
+        adSave.textContent = originalLabel;
+      }
     });
   }
 
-  // 4. Add Task
-  setupModal(['add-task-btn'], 'modal-add-task', []);
+  // 4. Add Task — a task always belongs to a real lead and a real due time.
+  const addTask = setupModal(['add-task-btn'], 'modal-add-task', []);
+  const atLead = document.getElementById('at-lead');
+  if (atLead) {
+    const populateLeadOptions = () => {
+      const leads = Array.isArray(window.NB?.leads) ? window.NB.leads : [];
+      atLead.innerHTML = leads.length
+        ? '<option value="">Select a lead…</option>' + leads.map(lead => `<option value="${window.nbEsc ? window.nbEsc(lead.id) : lead.id}">${window.nbEsc ? window.nbEsc(lead.name) : lead.name}</option>`).join('')
+        : '<option value="">No leads yet — create a lead first</option>';
+    };
+    document.getElementById('add-task-btn')?.addEventListener('click', populateLeadOptions);
+    document.getElementById('message-create-task-btn')?.addEventListener('click', populateLeadOptions);
+  }
   const atSave = document.getElementById('at-save');
   if (atSave) {
-    atSave.addEventListener('click', () => {
+    atSave.addEventListener('click', async () => {
       const title = document.getElementById('at-title').value.trim();
-      const time = document.getElementById('at-time').value.trim();
-      const priority = document.getElementById('at-priority').value;
+      const dueValue = document.getElementById('at-time').value;
+      const leadId = document.getElementById('at-lead')?.value || '';
+      const priority = document.getElementById('at-priority')?.value || 'Medium';
 
       if (!title) { showToast('Please enter task description', 'error'); return; }
+      if (!leadId) { showToast('Select the lead this task belongs to.', 'error'); return; }
+      if (!dueValue) { showToast('Pick a due date and time.', 'error'); return; }
+      const dueAt = new Date(dueValue);
+      if (Number.isNaN(dueAt.getTime())) { showToast('Enter a valid due date and time.', 'error'); return; }
 
-      window.NB.tasks.unshift({
-        title, time: time || 'Today · 5:00 PM', priority, done: false
-      });
-      if (typeof window.renderTodayTasks === 'function') window.renderTodayTasks();
-      if (typeof window.renderFullTasks === 'function') window.renderFullTasks();
-
-      document.getElementById('modal-add-task').classList.remove('open');
-      showToast('New task added successfully!', 'success');
+      atSave.disabled = true;
+      const originalLabel = atSave.textContent;
+      atSave.textContent = 'Saving…';
+      try {
+        await nbApiJson('/api/tasks', {
+          method: 'POST',
+          body: JSON.stringify({ title, lead_id: leadId, due_at: dueAt.toISOString(), notes: `Priority: ${priority}` })
+        });
+        addTask?.close();
+        ['at-title', 'at-time'].forEach(id => {
+          const field = document.getElementById(id);
+          if (field) field.value = '';
+        });
+        showToast('Task saved to your workspace.', 'success');
+        await refreshAfterWrite();
+      } catch (error) {
+        showToast(`Could not save task: ${error.message}`, 'error');
+      } finally {
+        atSave.disabled = false;
+        atSave.textContent = originalLabel;
+      }
     });
   }
 
   // 5. Add Appointment
-  setupModal(['add-appointment-btn'], 'modal-add-appointment', []);
+  const addAppointment = setupModal(['add-appointment-btn'], 'modal-add-appointment', []);
   const apSave = document.getElementById('ap-save');
   if (apSave) {
-    apSave.addEventListener('click', () => {
+    apSave.addEventListener('click', async () => {
       const type = document.getElementById('ap-type').value.trim();
       const customer = document.getElementById('ap-customer').value.trim();
-      const date = document.getElementById('ap-date').value.trim();
-      const assigned = document.getElementById('ap-assigned').value;
+      const dateValue = document.getElementById('ap-date').value.trim();
+      const assigned = document.getElementById('ap-assigned')?.value || '';
 
       if (!type) { showToast('Please enter appointment service title', 'error'); return; }
+      if (!dateValue) { showToast('Pick the appointment date and time.', 'error'); return; }
+      const startsAt = new Date(dateValue);
+      if (Number.isNaN(startsAt.getTime())) { showToast('Enter a valid date and time.', 'error'); return; }
 
-      window.NB.appointments.unshift({
-        type, customer: customer || 'Rahul Sharma', date: date || 'Tomorrow · 11:00 AM', assigned
-      });
-      if (typeof window.renderAppointments === 'function') window.renderAppointments();
-
-      document.getElementById('modal-add-appointment').classList.remove('open');
-      showToast('Appointment scheduled successfully!', 'success');
+      apSave.disabled = true;
+      const originalLabel = apSave.textContent;
+      apSave.textContent = 'Saving…';
+      try {
+        await nbApiJson('/api/appointments', {
+          method: 'POST',
+          body: JSON.stringify({
+            title: type,
+            customer_name: customer,
+            starts_at: startsAt.toISOString(),
+            assigned_agent_id: assigned || undefined
+          })
+        });
+        addAppointment?.close();
+        ['ap-type', 'ap-customer', 'ap-date'].forEach(id => {
+          const field = document.getElementById(id);
+          if (field) field.value = '';
+        });
+        showToast('Appointment scheduled and saved.', 'success');
+        await refreshAfterWrite();
+      } catch (error) {
+        showToast(`Could not schedule appointment: ${error.message}`, 'error');
+      } finally {
+        apSave.disabled = false;
+        apSave.textContent = originalLabel;
+      }
     });
   }
 }

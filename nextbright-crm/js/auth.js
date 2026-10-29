@@ -128,22 +128,22 @@ const NB_AUTH = (() => {
       'font-family:Inter,system-ui,sans-serif','padding:20px'
     ].join(';');
     overlay.innerHTML = `
-      <div style="width:100%;max-width:380px;background:#fff;border-radius:14px;padding:28px;box-shadow:0 24px 60px rgba(0,0,0,.35)">
-        <h2 style="margin:0 0 4px;font-size:20px;color:#111827">NextBright CRM</h2>
+      <div style="width:100%;max-width:380px;background:#fff;border-radius:14px;padding:28px;box-shadow:0 24px 60px rgba(0,0,0,.35)" role="dialog" aria-modal="true" aria-labelledby="nb-auth-title">
+        <h2 id="nb-auth-title" style="margin:0 0 4px;font-size:20px;color:#111827">NextBright CRM</h2>
         <p style="margin:0 0 20px;font-size:13px;color:#6b7280">Sign in to load your organization's inbox.</p>
-        <label style="display:block;font-size:12px;font-weight:600;color:#374151;margin-bottom:6px">Email</label>
-        <input id="nb-auth-email" type="email" autocomplete="username"
+        <label for="nb-auth-email" style="display:block;font-size:12px;font-weight:600;color:#374151;margin-bottom:6px">Email</label>
+        <input id="nb-auth-email" type="email" autocomplete="username" aria-required="true"
                style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:8px;margin-bottom:14px;font-size:14px">
-        <label style="display:block;font-size:12px;font-weight:600;color:#374151;margin-bottom:6px">Password</label>
-        <input id="nb-auth-password" type="password" autocomplete="current-password"
+        <label for="nb-auth-password" style="display:block;font-size:12px;font-weight:600;color:#374151;margin-bottom:6px">Password</label>
+        <input id="nb-auth-password" type="password" autocomplete="current-password" aria-required="true"
                style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:8px;margin-bottom:10px;font-size:14px">
-        <label style="display:block;font-size:12px;font-weight:600;color:#374151;margin-bottom:6px">Organization name <span style="font-weight:400">(for sign up)</span></label>
+        <label for="nb-auth-workspace" style="display:block;font-size:12px;font-weight:600;color:#374151;margin-bottom:6px">Organization name <span style="font-weight:400">(for sign up)</span></label>
         <input id="nb-auth-workspace" type="text" autocomplete="organization" placeholder="Your business name" style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:8px;margin-bottom:16px;font-size:14px">
         <div style="display:flex;gap:8px;margin-bottom:14px">
           <button id="nb-auth-signin"  style="flex:1;padding:10px;border:0;border-radius:8px;background:#2563eb;color:#fff;font-weight:600;cursor:pointer">Sign in</button>
           <button id="nb-auth-signup"  style="flex:1;padding:10px;border:1px solid #d1d5db;border-radius:8px;background:#fff;color:#374151;font-weight:600;cursor:pointer">Sign up</button>
         </div>
-        <p id="nb-auth-error" style="margin:0;font-size:12px;color:#dc2626;min-height:16px"></p>
+        <p id="nb-auth-error" role="alert" style="margin:0;font-size:12px;color:#dc2626;min-height:16px"></p>
       </div>`;
     document.body.appendChild(overlay);
 
@@ -177,6 +177,7 @@ const NB_AUTH = (() => {
 
     overlay.querySelector('#nb-auth-signin').addEventListener('click', () => run('signin'));
     overlay.querySelector('#nb-auth-signup').addEventListener('click', () => run('signup'));
+    emailEl.addEventListener('keydown', e => { if (e.key === 'Enter') run('signin'); });
     passEl.addEventListener('keydown', e => { if (e.key === 'Enter') run('signin'); });
     return overlay;
   }

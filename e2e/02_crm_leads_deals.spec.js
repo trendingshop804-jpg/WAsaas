@@ -65,25 +65,28 @@ test.describe('Flow 2: B2B CRM, Leads & Sales Pipeline Management', () => {
     await page.evaluate(() => window.navigateTo('deals'));
 
     await page.evaluate(() => {
-      if (window.NB && window.NB.deals) {
-        if (!window.NB.deals['Won']) window.NB.deals['Won'] = [];
-        window.NB.deals['Won'].push({
-          name: 'Enterprise Automation Contract',
-          customer: 'Dr. Jacob Dental Center',
-          amount: '₹1,50,000',
-          prob: '100%',
-          probClass: 'high',
-          owner: 'Praveenkumar',
-          lastActivity: 'Just now'
-        });
-        if (typeof window.renderDeals === 'function') window.renderDeals();
-      }
+      // Deals are a persisted array from /api/deals with numeric amounts.
+      if (!Array.isArray(window.NB.deals)) window.NB.deals = [];
+      window.NB.deals.push({
+        id: 'deal-test-1',
+        title: 'Enterprise Automation Contract',
+        customer_name: 'Dr. Jacob Dental Center',
+        amount: 150000,
+        currency: 'INR',
+        stage: 'Won',
+        created_at: new Date().toISOString()
+      });
+      window.NB.dealsStorageAvailable = true;
+      if (typeof window.renderDeals === 'function') window.renderDeals();
     });
 
-    const wonDealsCount = await page.evaluate(() => {
-      return window.NB.deals['Won'] ? window.NB.deals['Won'].length : 0;
+    const wonTotals = await page.evaluate(() => {
+      const won = window.NB.deals.filter(deal => deal.stage === 'Won');
+      const total = won.reduce((sum, deal) => sum + (window.parseDealAmount(deal.amount) || 0), 0);
+      return { count: won.length, total };
     });
-    expect(wonDealsCount).toBeGreaterThan(0);
+    expect(wonTotals.count).toBeGreaterThan(0);
+    expect(wonTotals.total).toBe(150000);
   });
 
   test('2.4 Open Customer 360 Profile Modal', async ({ page }) => {
