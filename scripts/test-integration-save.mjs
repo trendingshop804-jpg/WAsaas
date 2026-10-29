@@ -32,6 +32,8 @@ let membershipRole = 'Owner';
 let membershipError = false;
 let twilioAuthAccepted = true;
 const twilioRows = [];
+const whatsappRows = [];
+const graphCalls = [];
 const writes = [];
 const lookups = [];
 
@@ -107,6 +109,36 @@ globalThis.fetch = async (input, options = {}) => {
       : jsonRes({ code: 20003, message: 'Authenticate' }, 401);
   }
 
+  if (url.includes('/rest/v1/whatsapp_connections')) {
+    if (method === 'POST') {
+      const body = JSON.parse(options.body || '{}');
+      writes.push(body);
+      const merged = { id: 'wa_1', is_active: true, updated_at: new Date().toISOString(), ...body };
+      const i = whatsappRows.findIndex(r => r.organization_id === body.organization_id && r.phone_number_id === body.phone_number_id);
+      if (i >= 0) whatsappRows[i] = merged; else whatsappRows.push(merged);
+      const { access_token_encrypted, ...safe } = merged;
+      return jsonRes(wantsSingle(options) ? safe : [safe], 201);
+    }
+    if (method === 'PATCH' || method === 'DELETE') {
+      return jsonRes(wantsSingle(options) ? null : []);
+    }
+    lookups.push(url);
+    const rows = filterRows(url, whatsappRows);
+    return jsonRes(wantsSingle(options) ? (rows[0] ?? null) : rows);
+  }
+
+  // Live Meta validation: accept only a clean "EAA..." token. Anything else
+  // (including a mangled "Bearer Bearer ..." header) gets Meta's real 401/190
+  // shape so the mapping under test matches production behaviour.
+  if (/graph\.facebook\.com/.test(url)) {
+    const auth = String(options?.headers?.Authorization || options?.headers?.authorization || '');
+    graphCalls.push(auth);
+    const token = auth.replace(/^Bearer\s+/i, '');
+    return /^EAA[A-Za-z0-9._-]+$/.test(token)
+      ? jsonRes({ display_phone_number: '+91 98765 43210', verified_name: 'NextBright', quality_rating: 'HIGH' })
+      : jsonRes({ error: { message: 'Invalid OAuth access token', type: 'OAuthException', code: 190 } }, 401);
+  }
+
   throw new Error(`Unexpected fetch to ${url}`);
 };
 
@@ -134,6 +166,8 @@ const post = async (body, extra = {}) => {
 let passed = 0, failed = 0;
 const test = async (name, fn) => {
   twilioRows.length = 0;
+  whatsappRows.length = 0;
+  graphCalls.length = 0;
   writes.length = 0;
   lookups.length = 0;
   membershipRole = 'Owner';
@@ -311,6 +345,49 @@ await test('a stored connection is NOT visible to another organization', async (
   const res = await getIntegrationStatus('twilio', { organizationId: OTHER_ORG });
   assert.equal(res.status, 'not_configured', 'a tenant must never see another tenant provider account');
   assert.deepEqual(res.missing.sort(), ['TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN']);
+});
+
+console.log('\n=== POST /api/integration-status (whatsapp) ===');
+
+const WA_PHONE_ID = '123456789012345';
+
+await test('a token pasted with a "Bearer " prefix is normalised before validation', async () => {
+  const res = await post({ integration: 'whatsapp', accessToken: 'Bearer EAAnewtoken123', phoneNumberId: WA_PHONE_ID });
+  assert.equal(res.statusCode, 200, JSON.stringify(res.payload));
+  assert.ok(graphCalls.length > 0, 'expected a live Meta validation call');
+  assert.equal(graphCalls.at(-1), 'Bearer EAAnewtoken123', 'the header must not become "Bearer Bearer ..."');
+  assert.equal(
+    await decryptToken(writes[0].access_token_encrypted),
+    'EAAnewtoken123',
+    'the stored token must be the cleaned value'
+  );
+});
+
+await test('quotes and whitespace around a pasted token are stripped', async () => {
+  const res = await post({ integration: 'whatsapp', accessToken: '  "EAAquotedToken99"\n ', phoneNumberId: WA_PHONE_ID });
+  assert.equal(res.statusCode, 200, JSON.stringify(res.payload));
+  assert.equal(await decryptToken(writes[0].access_token_encrypted), 'EAAquotedToken99');
+});
+
+await test('Meta rejecting the token -> 401 invalid-token message, nothing saved', async () => {
+  const res = await post({ integration: 'whatsapp', accessToken: 'SOME_EXPIRED_TOKEN', phoneNumberId: WA_PHONE_ID });
+  assert.equal(res.statusCode, 401, JSON.stringify(res.payload));
+  assert.ok(String(res.payload.error).includes('Invalid or expired access token'), `got "${res.payload.error}"`);
+  assert.equal(writes.length, 0, 'provider-rejected credentials must never be written');
+});
+
+await test('an undecryptable stored token fails fast without calling Meta', async () => {
+  whatsappRows.push({
+    id: 'wa_bad', organization_id: ORG, phone_number_id: WA_PHONE_ID,
+    access_token_encrypted: Buffer.from('this-is-not-valid-ciphertext-xxxxxx').toString('base64'),
+    is_active: true, updated_at: new Date().toISOString()
+  });
+  const before = graphCalls.length;
+  const res = await post({ integration: 'whatsapp', phoneNumberId: WA_PHONE_ID });
+  assert.equal(res.statusCode, 400, JSON.stringify(res.payload));
+  assert.ok(String(res.payload.error).includes('could not be decrypted'), `got "${res.payload.error}"`);
+  assert.equal(graphCalls.length, before, 'an undecryptable value must never be sent to Meta');
+  assert.equal(writes.length, 0, 'nothing may be overwritten');
 });
 
 console.log(`\n${failed ? failed + ' test(s) failed.' : passed + ' passed, 0 failed.'}`);

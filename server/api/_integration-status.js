@@ -7,7 +7,7 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
-import { decryptToken } from './_crypto.js';
+import { decryptToken, decryptTokenInfo, normalizeAccessToken } from './_crypto.js';
 
 const REQUEST_TIMEOUT_MS = 8_000;
 const META_GRAPH_VERSION = process.env.WHATSAPP_API_VERSION || 'v21.0';
@@ -106,17 +106,12 @@ async function getWhatsAppTenantConfig(organizationId) {
     return null;
   }
 
-  let accessToken = null;
-  try {
-    accessToken = await decryptToken(data.access_token_encrypted);
-  } catch (err) {
-    console.error('[integration-status] WhatsApp token decrypt failed:', err.message);
-    return null;
-  }
+  const { token: accessToken, decryptFailed } = await decryptTokenInfo(data.access_token_encrypted);
 
   if (!accessToken) return null;
 
   return {
+    decryptFailed,
     accessToken,
     phoneNumberId: data.phone_number_id,
     wabaId: data.waba_id || null,
@@ -147,7 +142,7 @@ function safeLog(stage, info) {
 async function checkWhatsApp(customConfig = {}) {
   const isCandidateTest = customConfig.testingCandidate || Boolean(customConfig.accessToken || customConfig.phoneNumberId);
 
-  let accessToken = customConfig.accessToken ? String(customConfig.accessToken).trim() : '';
+  let accessToken = normalizeAccessToken(customConfig.accessToken);
   let phoneNumberId = customConfig.phoneNumberId ? String(customConfig.phoneNumberId).trim() : '';
   let tenantConfig = null;
 
@@ -177,6 +172,18 @@ async function checkWhatsApp(customConfig = {}) {
       code: 'MISSING_CREDENTIALS',
       message: 'Enter the WhatsApp access token and Phone Number ID.'
     });
+  }
+
+  // The stored tenant token could not be decrypted (encryption secret changed
+  // between save and read, or the stored value is corrupted). Sending the
+  // undecryptable value to Meta would surface as a misleading "Invalid or
+  // expired access token" — tell the user the actionable truth instead.
+  if (tenantConfig?.decryptFailed) {
+    return result(
+      'error',
+      'The saved WhatsApp token could not be decrypted (server encryption secret changed). Re-save the WhatsApp integration token.',
+      { code: 'TOKEN_DECRYPT_FAILED' }
+    );
   }
 
   const startedAt = Date.now();

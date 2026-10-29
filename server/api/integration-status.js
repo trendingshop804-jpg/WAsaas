@@ -8,7 +8,7 @@ import {
   checkTwilio
 } from './_integration-status.js';
 import { createSupabaseAdminClient, requireOrgAccess } from './_supabase.js';
-import { decryptToken, encryptToken } from './_crypto.js';
+import { decryptToken, decryptTokenInfo, encryptToken, normalizeAccessToken } from './_crypto.js';
 
 /**
  * GET  /api/integration-status[?integration=whatsapp]
@@ -158,7 +158,7 @@ async function saveCredentials(req, res) {
       return res.status(400).json({ error: 'WhatsApp Phone Number ID is required.' });
     }
 
-    const accessTokenRaw = String(body.accessToken || body.access_token || body.system_token || '').trim();
+    const accessTokenRaw = normalizeAccessToken(body.accessToken || body.access_token || body.system_token);
     const wabaId = String(body.wabaId || body.waba_id || body['waba-id'] || '').trim() || null;
     const phoneNumber = String(body.phoneNumber || body.phone_number || '').trim() || null;
     const displayName = String(body.displayName || body.display_name || '').trim() || null;
@@ -171,10 +171,25 @@ async function saveCredentials(req, res) {
       .maybeSingle();
 
     let accessTokenEncrypted = existing?.access_token_encrypted || null;
-    const validationToken = accessTokenRaw || (accessTokenEncrypted ? await decryptToken(accessTokenEncrypted) : '');
+    let storedTokenDecryptFailed = false;
+    let validationToken = accessTokenRaw;
+    if (!validationToken && accessTokenEncrypted) {
+      const decrypted = await decryptTokenInfo(accessTokenEncrypted);
+      validationToken = decrypted.token;
+      storedTokenDecryptFailed = decrypted.decryptFailed;
+    }
 
     if (!validationToken) {
       return res.status(400).json({ error: 'WhatsApp Permanent Access Token is required.' });
+    }
+
+    if (storedTokenDecryptFailed) {
+      // Do not send an undecryptable value to Meta (it would surface as a
+      // misleading "Invalid or expired access token"): the caller must paste
+      // the token again so it can be re-encrypted with the current secret.
+      return res.status(400).json({
+        error: 'The saved WhatsApp token could not be decrypted (server encryption secret changed). Paste the access token again to re-save it.'
+      });
     }
 
     const validation = await checkWhatsApp({
@@ -239,14 +254,13 @@ async function saveCredentials(req, res) {
       return res.status(400).json({ error: 'Instagram Business Account ID must be a numeric Meta ID (10-25 digits).' });
     }
 
-    const accessTokenRaw = String(
+    const accessTokenRaw = normalizeAccessToken(
       body.accessToken ||
       body.access_token ||
       body.page_access_token ||
       body['access-token'] ||
-      body.system_token ||
-      ''
-    ).trim();
+      body.system_token
+    );
 
     const username = String(
       body.username ||
@@ -276,10 +290,22 @@ async function saveCredentials(req, res) {
       .maybeSingle();
 
     let accessTokenEncrypted = existing?.access_token_encrypted || null;
-    const validationToken = accessTokenRaw || (accessTokenEncrypted ? await decryptToken(accessTokenEncrypted) : '');
+    let validationToken = accessTokenRaw;
+    let storedTokenDecryptFailed = false;
+    if (!validationToken && accessTokenEncrypted) {
+      const decrypted = await decryptTokenInfo(accessTokenEncrypted);
+      validationToken = decrypted.token;
+      storedTokenDecryptFailed = decrypted.decryptFailed;
+    }
 
     if (!validationToken) {
       return res.status(400).json({ error: 'Instagram Access Token is required.' });
+    }
+
+    if (storedTokenDecryptFailed) {
+      return res.status(400).json({
+        error: 'The saved Instagram token could not be decrypted (server encryption secret changed). Paste the access token again to re-save it.'
+      });
     }
 
     const validation = await checkInstagram({
