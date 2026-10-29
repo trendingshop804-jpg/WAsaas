@@ -1235,14 +1235,10 @@ async function testIntegrationConnection(key, candidateValues = null) {
     return placeholders.some(p => clean === p || clean.includes('placeholder'));
   };
 
-  if (key === 'whatsapp' && candidateValues) {
-    if (bodyPayload.accessToken || bodyPayload.phoneNumberId) {
-      if (isPlaceholderOrBlank(bodyPayload.accessToken) || isPlaceholderOrBlank(bodyPayload.phoneNumberId)) {
-        showToast('Enter the WhatsApp access token and Phone Number ID.', 'error');
-        return { success: false, code: 'MISSING_CREDENTIALS', message: 'Enter the WhatsApp access token and Phone Number ID.' };
-      }
-    }
-  }
+  // WhatsApp: no client-side half-filled guard here. The server resolves a
+  // missing Phone Number ID from the organization's stored connection (and
+  // returns precise errors when it cannot), so a "paste a new token" save must
+  // reach it instead of being blocked in the browser.
 
   if (key === 'instagram' && candidateValues) {
     if (bodyPayload.accessToken || bodyPayload.instagramBusinessId) {

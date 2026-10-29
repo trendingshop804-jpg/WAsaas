@@ -107,5 +107,21 @@ await test('save paths normalise pasted tokens and refuse undecryptable stored o
   assert.equal(decryptMsgs, 2, `both save paths must report decrypt failures (got ${decryptMsgs})`);
 });
 
+await test('failed WhatsApp checks carry config; token-only candidates are resolved server-side', () => {
+  const statusSrc = readFileSync(path.join(rootDir, 'server/api/_integration-status.js'), 'utf8');
+  const attached = (statusSrc.match(/attachConfig\(result\(/g) || []).length;
+  assert.ok(attached >= 5, `failures must attach non-secret config for modal prefill (got ${attached})`);
+
+  const saveSrc = readFileSync(path.join(rootDir, 'server/api/integration-status.js'), 'utf8');
+  assert.ok(saveSrc.includes('active?.length === 1'),
+    'a blank Phone Number ID must fall back only to a single stored connection');
+  assert.ok(saveSrc.includes('Multiple WhatsApp connections'),
+    'an ambiguous fallback must be rejected with an explicit message');
+
+  const uiSrc = readFileSync(path.join(rootDir, 'nextbright-crm/js/ui.js'), 'utf8');
+  assert.ok(!uiSrc.includes('isPlaceholderOrBlank(bodyPayload.accessToken) || isPlaceholderOrBlank(bodyPayload.phoneNumberId)'),
+    'the modal must not block a token-only candidate client-side');
+});
+
 console.log(`\n${failed ? failed + ' test(s) failed.' : passed + ' passed, 0 failed.'}`);
 process.exit(failed ? 1 : 0);

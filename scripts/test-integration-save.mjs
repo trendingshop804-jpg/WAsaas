@@ -127,14 +127,16 @@ globalThis.fetch = async (input, options = {}) => {
     return jsonRes(wantsSingle(options) ? (rows[0] ?? null) : rows);
   }
 
-  // Live Meta validation: accept only a clean "EAA..." token. Anything else
-  // (including a mangled "Bearer Bearer ..." header) gets Meta's real 401/190
-  // shape so the mapping under test matches production behaviour.
+  // Live Meta validation: accept only a clean "EAA..." token that is not
+  // marked expired/invalid. Anything else (including a mangled
+  // "Bearer Bearer ..." header) gets Meta's real 401/190 shape so the mapping
+  // under test matches production behaviour.
   if (/graph\.facebook\.com/.test(url)) {
     const auth = String(options?.headers?.Authorization || options?.headers?.authorization || '');
     graphCalls.push(auth);
     const token = auth.replace(/^Bearer\s+/i, '');
-    return /^EAA[A-Za-z0-9._-]+$/.test(token)
+    const expiredOrInvalid = /EXPIRED|INVALID/i.test(token);
+    return /^EAA[A-Za-z0-9._-]+$/.test(token) && !expiredOrInvalid
       ? jsonRes({ display_phone_number: '+91 98765 43210', verified_name: 'NextBright', quality_rating: 'HIGH' })
       : jsonRes({ error: { message: 'Invalid OAuth access token', type: 'OAuthException', code: 190 } }, 401);
   }
@@ -420,6 +422,75 @@ await test('the CRM modal payload (kebab-case access-token) delivers the PASTED 
     'the pasted token is what gets stored'
   );
   assert.equal(writes[0].phone_number, '+91 98401 23456', 'display phone must be stored');
+});
+
+await test('a token-only save falls back to the stored Phone Number ID', async () => {
+  whatsappRows.push({
+    id: 'wa_single', organization_id: ORG, phone_number_id: WA_PHONE_ID,
+    access_token_encrypted: await encryptToken('EAAOLD_EXPIRED_TOKEN'),
+    is_active: true, updated_at: new Date().toISOString()
+  });
+  const res = await post({ integration: 'whatsapp', 'access-token': 'EAASOLENEWTOKEN789' });
+  assert.equal(res.statusCode, 200, JSON.stringify(res.payload));
+  assert.equal(graphCalls.at(-1), 'Bearer EAASOLENEWTOKEN789');
+  assert.equal(await decryptToken(writes[0].access_token_encrypted), 'EAASOLENEWTOKEN789');
+  assert.equal(writes[0].phone_number_id, WA_PHONE_ID, 'the stored row keeps its phone id');
+});
+
+await test('a token-only save with no stored connection -> 400 phone id required', async () => {
+  const res = await post({ integration: 'whatsapp', 'access-token': 'EAANOSTOREROW123' });
+  assert.equal(res.statusCode, 400, JSON.stringify(res.payload));
+  assert.ok(String(res.payload.error).includes('Phone Number ID is required'), `got "${res.payload.error}"`);
+  assert.equal(graphCalls.length, 0, 'nothing to validate against');
+  assert.equal(writes.length, 0);
+});
+
+await test('a token-only save with two stored connections is ambiguous -> 400, nothing written', async () => {
+  whatsappRows.push({
+    id: 'wa_a', organization_id: ORG, phone_number_id: '111111111111111',
+    access_token_encrypted: await encryptToken('EAAA1'), is_active: true, updated_at: new Date().toISOString()
+  });
+  whatsappRows.push({
+    id: 'wa_b', organization_id: ORG, phone_number_id: '222222222222222',
+    access_token_encrypted: await encryptToken('EAAA2'), is_active: true, updated_at: new Date().toISOString()
+  });
+  const res = await post({ integration: 'whatsapp', 'access-token': 'EAAB' });
+  assert.equal(res.statusCode, 400, JSON.stringify(res.payload));
+  assert.ok(String(res.payload.error).includes('Multiple WhatsApp connections'), `got "${res.payload.error}"`);
+  assert.equal(writes.length, 0);
+});
+
+await test('a FAILED status check still returns config so the modal can prefill', async () => {
+  whatsappRows.push({
+    id: 'wa_expired', organization_id: ORG, phone_number_id: WA_PHONE_ID,
+    access_token_encrypted: await encryptToken('EAA_EXPIRED_TOKEN'),
+    waba_id: '1016931798166599', display_name: 'NextBright',
+    is_active: true, updated_at: new Date().toISOString()
+  });
+  const { getIntegrationStatus } = await import('../server/api/_integration-status.js');
+  const res = await getIntegrationStatus('whatsapp', { organizationId: ORG });
+  assert.equal(res.status, 'token_expired', JSON.stringify(res));
+  assert.ok(res.config, 'failed checks must still carry non-secret config');
+  assert.equal(res.config.phoneNumberId, WA_PHONE_ID, 'phone id prefills the next modal open');
+  assert.equal(res.config.wabaId, '1016931798166599');
+  assert.equal(res.config.hasToken, true, 'the password field must show "saved" placeholder state');
+});
+
+await test('test-connection with a token only resolves the stored Phone Number ID', async () => {
+  whatsappRows.push({
+    id: 'wa_t', organization_id: ORG, phone_number_id: WA_PHONE_ID,
+    access_token_encrypted: await encryptToken('EAAOLD_EXPIRED_TOKEN'),
+    is_active: true, updated_at: new Date().toISOString()
+  });
+  const res = mockRes();
+  await handler({
+    method: 'POST', ...SESSION,
+    query: { route: 'test-connection' },
+    body: { integration: 'whatsapp', accessToken: 'EAATESTONLY123' }
+  }, res);
+  assert.equal(res.statusCode, 200, JSON.stringify(res.payload));
+  assert.equal(res.payload.success, true);
+  assert.equal(graphCalls.at(-1), 'Bearer EAATESTONLY123');
 });
 
 console.log(`\n${failed ? failed + ' test(s) failed.' : passed + ' passed, 0 failed.'}`);

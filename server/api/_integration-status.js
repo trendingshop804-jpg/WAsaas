@@ -146,8 +146,17 @@ async function checkWhatsApp(customConfig = {}) {
   let phoneNumberId = customConfig.phoneNumberId ? String(customConfig.phoneNumberId).trim() : '';
   let tenantConfig = null;
 
-  if (!isCandidateTest) {
+  // Load the stored connection whenever org context exists — including for
+  // candidate tests (Instagram already worked this way). A candidate may omit
+  // half the pair — e.g. paste a fresh token while the Phone Number ID field
+  // is blank — and the stored row fills the gap. It also lets every result,
+  // even a failed one, carry non-secret config so the edit modal can prefill
+  // its fields next time instead of opening empty.
+  if (customConfig.organizationId) {
     tenantConfig = await getWhatsAppTenantConfig(customConfig.organizationId);
+  }
+
+  if (!isCandidateTest) {
     accessToken = accessToken || tenantConfig?.accessToken || firstEnv(
       'WHATSAPP_ACCESS_TOKEN',
       'WA_ACCESS_TOKEN',
@@ -158,7 +167,23 @@ async function checkWhatsApp(customConfig = {}) {
       'PHONE_NUMBER_ID',
       'WA_PHONE_NUMBER_ID'
     );
+  } else if (tenantConfig) {
+    // Candidate: fill only the missing half from the stored connection.
+    if (!accessToken && tenantConfig.accessToken) accessToken = tenantConfig.accessToken;
+    if (!phoneNumberId && tenantConfig.phoneNumberId) phoneNumberId = tenantConfig.phoneNumberId;
   }
+
+  const attachConfig = (resObj) => {
+    if (tenantConfig || phoneNumberId) {
+      resObj.config = {
+        phoneNumberId: tenantConfig?.phoneNumberId || phoneNumberId || null,
+        wabaId: customConfig.wabaId || tenantConfig?.wabaId || null,
+        displayName: tenantConfig?.displayName || null,
+        hasToken: Boolean(accessToken && !isPlaceholderOrBlank(accessToken))
+      };
+    }
+    return resObj;
+  };
 
   safeLog('Validation', {
     isCandidateTest,
@@ -168,22 +193,23 @@ async function checkWhatsApp(customConfig = {}) {
   });
 
   if (isPlaceholderOrBlank(accessToken) || isPlaceholderOrBlank(phoneNumberId)) {
-    return result('not_configured', 'Enter the WhatsApp access token and Phone Number ID.', {
+    return attachConfig(result('not_configured', 'Enter the WhatsApp access token and Phone Number ID.', {
       code: 'MISSING_CREDENTIALS',
       message: 'Enter the WhatsApp access token and Phone Number ID.'
-    });
+    }));
   }
 
-  // The stored tenant token could not be decrypted (encryption secret changed
-  // between save and read, or the stored value is corrupted). Sending the
-  // undecryptable value to Meta would surface as a misleading "Invalid or
-  // expired access token" — tell the user the actionable truth instead.
-  if (tenantConfig?.decryptFailed) {
-    return result(
+  // The RESOLVED token came from storage and cannot be decrypted (encryption
+  // secret changed between save and read, or the stored value is corrupted).
+  // Sending it to Meta would surface as a misleading "Invalid or expired access
+  // token" — tell the user the actionable truth instead. A caller-supplied
+  // candidate token is a different value and is still validated normally.
+  if (tenantConfig?.decryptFailed && accessToken === tenantConfig.accessToken) {
+    return attachConfig(result(
       'error',
       'The saved WhatsApp token could not be decrypted (server encryption secret changed). Re-save the WhatsApp integration token.',
       { code: 'TOKEN_DECRYPT_FAILED' }
-    );
+    ));
   }
 
   const startedAt = Date.now();
@@ -212,26 +238,26 @@ async function checkWhatsApp(customConfig = {}) {
       const errMsg = errorMessage(payload, response);
 
       if (response.status === 401 || errCode === 190) {
-        return result(
+        return attachConfig(result(
           'token_expired',
           'Invalid or expired access token',
           { latencyMs, code: 'INVALID_CREDENTIALS', httpStatus: response.status }
-        );
+        ));
       }
 
       if (response.status === 403 || errCode === 100 || errCode === 200 || errCode === 10) {
-        return result(
+        return attachConfig(result(
           'permission_missing',
           'Required permissions are missing or invalid Phone Number ID.',
           { latencyMs, code: 'PERMISSION_ERROR', httpStatus: response.status }
-        );
+        ));
       }
 
-      return result(
+      return attachConfig(result(
         'error',
         `WhatsApp connection failed: ${errMsg}`,
         { latencyMs, code: 'INVALID_CREDENTIALS', httpStatus: response.status }
-      );
+      ));
     }
 
     const verifiedName =
@@ -261,11 +287,11 @@ async function checkWhatsApp(customConfig = {}) {
   } catch (error) {
     const latencyMs = Date.now() - startedAt;
     safeLog('ProviderError', { error: error.message, code: error?.code, latencyMs });
-    return result(
+    return attachConfig(result(
       error?.code === 'TIMEOUT' ? 'unavailable' : 'error',
       'Connection failed. Please try again',
       { latencyMs, code: 'CONNECTION_ERROR' }
-    );
+    ));
   }
 }
 

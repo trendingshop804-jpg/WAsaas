@@ -153,7 +153,26 @@ async function saveCredentials(req, res) {
 
   // ── 2. WHATSAPP CLOUD API SAVE ───────────────────────────────────────────
   if (integration === 'whatsapp') {
-    const phoneNumberId = String(body.phoneNumberId || body.phone_number_id || body['phone-number-id'] || '').trim();
+    let phoneNumberId = String(body.phoneNumberId || body.phone_number_id || body['phone-number-id'] || '').trim();
+    if (!phoneNumberId) {
+      // The edit modal often opens with this field blank (a failed status check
+      // used to return no config). Fall back to the organization's single
+      // stored connection so re-saving a new token works without retyping IDs —
+      // Meta still validates the pasted token against that phone number.
+      const { data: active } = await admin
+        .from('whatsapp_connections')
+        .select('phone_number_id')
+        .eq('organization_id', access.organizationId)
+        .eq('is_active', true)
+        .limit(2);
+      if (active?.length === 1) {
+        phoneNumberId = active[0].phone_number_id;
+      } else if (active && active.length > 1) {
+        return res.status(400).json({
+          error: 'Multiple WhatsApp connections exist for this organization — enter the Phone Number ID to choose which one to update.'
+        });
+      }
+    }
     if (!phoneNumberId) {
       return res.status(400).json({ error: 'WhatsApp Phone Number ID is required.' });
     }
