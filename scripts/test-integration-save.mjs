@@ -390,5 +390,37 @@ await test('an undecryptable stored token fails fast without calling Meta', asyn
   assert.equal(writes.length, 0, 'nothing may be overwritten');
 });
 
+await test('the CRM modal payload (kebab-case access-token) delivers the PASTED token, not the stored one', async () => {
+  // Reproduces the Settings modal exactly: input.name = field.id, so the body
+  // carries 'access-token' / 'phone-number-id' / 'display-phone'. An older,
+  // expired token is already stored for this org+phone — the bug re-validated
+  // that stored token, so Meta's 401 on the OLD token was shown no matter what
+  // the user pasted.
+  whatsappRows.push({
+    id: 'wa_old', organization_id: ORG, phone_number_id: WA_PHONE_ID,
+    access_token_encrypted: await encryptToken('EAAOLD_EXPIRED_TOKEN'),
+    is_active: true, updated_at: new Date().toISOString()
+  });
+  const res = await post({
+    integration: 'whatsapp',
+    'phone-number-id': WA_PHONE_ID,
+    'waba-id': '1016931798166599',
+    'display-phone': '+91 98401 23456',
+    'access-token': 'EAABRANDNEWTOKEN456'
+  });
+  assert.equal(res.statusCode, 200, JSON.stringify(res.payload));
+  assert.equal(
+    graphCalls.at(-1),
+    'Bearer EAABRANDNEWTOKEN456',
+    'Meta must validate the token the user just pasted — never the stored one'
+  );
+  assert.equal(
+    await decryptToken(writes[0].access_token_encrypted),
+    'EAABRANDNEWTOKEN456',
+    'the pasted token is what gets stored'
+  );
+  assert.equal(writes[0].phone_number, '+91 98401 23456', 'display phone must be stored');
+});
+
 console.log(`\n${failed ? failed + ' test(s) failed.' : passed + ' passed, 0 failed.'}`);
 process.exit(failed ? 1 : 0);

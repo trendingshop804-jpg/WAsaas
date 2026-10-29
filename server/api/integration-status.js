@@ -158,9 +158,16 @@ async function saveCredentials(req, res) {
       return res.status(400).json({ error: 'WhatsApp Phone Number ID is required.' });
     }
 
-    const accessTokenRaw = normalizeAccessToken(body.accessToken || body.access_token || body.system_token);
+    // The CRM Settings modal posts kebab-case field names (input.name = field.id,
+    // e.g. 'access-token' / 'display-phone'). Reading only camelCase/snake_case
+    // silently discarded the pasted token, so the server re-validated the STORED
+    // one and Meta's 401 on the old token was shown as "Invalid or expired access
+    // token" no matter what the user entered.
+    const accessTokenRaw = normalizeAccessToken(
+      body.accessToken || body.access_token || body['access-token'] || body.system_token
+    );
     const wabaId = String(body.wabaId || body.waba_id || body['waba-id'] || '').trim() || null;
-    const phoneNumber = String(body.phoneNumber || body.phone_number || '').trim() || null;
+    const phoneNumber = String(body.phoneNumber || body.phone_number || body['display-phone'] || '').trim() || null;
     const displayName = String(body.displayName || body.display_name || '').trim() || null;
 
     const { data: existing } = await admin
