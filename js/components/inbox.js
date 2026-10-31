@@ -1054,8 +1054,8 @@ class InboxComponent {
           msgType = 'image';
         }
       }
-      const isMedia = ['image', 'video', 'audio', 'document', 'sticker'].includes(msgType);
-      const isUnsupported = msgType === 'unsupported';
+      const isMedia = ['image', 'video', 'audio', 'voice', 'document', 'sticker'].includes(msgType);
+      const isUnsupported = msgType === 'unsupported' || msgType.startsWith('unknown_');
 
       // Date separator between days
       if (!isSystem) {
@@ -1103,9 +1103,19 @@ class InboxComponent {
 
       let contentHtml = '';
       if (isUnsupported) {
-        contentHtml = this.renderUnsupportedBubble();
+        contentHtml = this.renderUnsupportedBubble(msgType);
       } else if (isMedia) {
         contentHtml = this.renderMediaBubble(msg, msgType, isOutbound);
+      } else if (msgType === 'location') {
+        contentHtml = this.renderLocationBubble(msg);
+      } else if (msgType === 'contacts') {
+        contentHtml = this.renderContactsBubble(msg);
+      } else if (msgType === 'interactive' || msgType === 'button') {
+        contentHtml = this.renderInteractiveBubble(msg, msgType);
+      } else if (msgType === 'reaction') {
+        contentHtml = this.renderReactionBubble(msg);
+      } else if (msgType === 'order') {
+        contentHtml = this.renderOrderBubble(msg);
       } else {
         contentHtml = `<div class="msg-body">${this.escapeHtml(rawContentText || '📩 Inbound message')}</div>`;
       }
@@ -1224,6 +1234,7 @@ class InboxComponent {
       case 'image':
         return this.renderImageBubble(msg, isOutbound, mediaUrl, caption);
       case 'audio':
+      case 'voice':
         return this.renderAudioBubble(msg, isOutbound, mediaUrl, mimeType, mediaSize);
       case 'video':
         return this.renderVideoBubble(msg, isOutbound, mediaUrl, mimeType, caption);
@@ -1232,7 +1243,7 @@ class InboxComponent {
       case 'sticker':
         return this.renderStickerBubble(msg, mediaUrl);
       default:
-        return this.renderUnsupportedBubble();
+        return this.renderUnsupportedBubble(msgType);
     }
   }
 
@@ -1401,11 +1412,100 @@ class InboxComponent {
     `;
   }
 
-  renderUnsupportedBubble() {
-    return `<div class="msg-unsupported">This message type isn't supported</div>`;
+  renderUnsupportedBubble(msgType = '') {
+    const raw = String(msgType || '').replace(/^unknown_/, '');
+    const label = raw ? `${raw} message` : 'message';
+    return `<div class="msg-unsupported" style="display:flex;align-items:center;gap:6px;color:var(--text-muted);font-size:12.5px;font-style:italic;">
+      <span>📩</span><span>${this.escapeHtml(label)} received (preview not available)</span>
+    </div>`;
   }
 
-  generateWaveformBars(count = 28) {
+  renderLocationBubble(msg) {
+    const loc = msg.location || {};
+    const lat  = loc.latitude  || loc.lat  || (msg.content || '').match(/(-?\d+\.\d+),\s*(-?\d+\.\d+)/)?.[1] || '';
+    const lng  = loc.longitude || loc.lng  || (msg.content || '').match(/(-?\d+\.\d+),\s*(-?\d+\.\d+)/)?.[2] || '';
+    const name = loc.name || loc.address || '';
+    const rawContent = String(msg.text || msg.body || msg.content || '').trim();
+    const displayName = name || (rawContent.startsWith('📍') ? rawContent : '');
+    const mapsUrl = lat && lng ? `https://www.google.com/maps?q=${encodeURIComponent(lat)},${encodeURIComponent(lng)}` : '';
+    const label = displayName || (lat && lng ? `${lat}, ${lng}` : rawContent || 'Shared Location');
+    if (mapsUrl) {
+      return `<div class="msg-body" style="display:flex;align-items:flex-start;gap:8px;">
+        <span style="font-size:18px;">📍</span>
+        <div>
+          <div style="font-weight:600;font-size:13px;">${this.escapeHtml(label)}</div>
+          <a href="${this.escapeAttr(mapsUrl)}" target="_blank" rel="noopener noreferrer"
+             style="font-size:11.5px;color:#38bdf8;text-decoration:none;">Open in Maps ↗</a>
+        </div>
+      </div>`;
+    }
+    return `<div class="msg-body">📍 ${this.escapeHtml(label)}</div>`;
+  }
+
+  renderContactsBubble(msg) {
+    const contacts = msg.contacts || [];
+    const rawContent = String(msg.text || msg.body || msg.content || '').trim();
+    if (!contacts.length && rawContent) {
+      return `<div class="msg-body">👤 ${this.escapeHtml(rawContent)}</div>`;
+    }
+    const rows = contacts.map(c => {
+      const name  = c.name?.formatted_name || c.name?.first_name || '';
+      const phone = c.phones?.[0]?.phone || '';
+      const org   = c.org?.company || '';
+      return `<div style="display:flex;flex-direction:column;gap:2px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.07);">
+        <span style="font-weight:600;font-size:13px;">👤 ${this.escapeHtml(name || phone || 'Contact')}</span>
+        ${phone ? `<span style="font-size:12px;color:var(--text-secondary);">${this.escapeHtml(phone)}</span>` : ''}
+        ${org   ? `<span style="font-size:11.5px;color:var(--text-muted);">${this.escapeHtml(org)}</span>` : ''}
+      </div>`;
+    }).join('');
+    return `<div class="msg-body" style="min-width:160px;">${rows}</div>`;
+  }
+
+  renderInteractiveBubble(msg, msgType) {
+    const br = msg.interactive?.button_reply || {};
+    const lr = msg.interactive?.list_reply   || {};
+    const title   = br.title || lr.title || msg.button?.text || '';
+    const payload = br.id    || lr.id    || msg.button?.payload || '';
+    const rawContent = String(msg.text || msg.body || msg.content || '').trim();
+    const display = title || rawContent || payload || 'Reply';
+    return `<div class="msg-body" style="display:flex;align-items:center;gap:6px;">
+      <span style="font-size:15px;">↩️</span>
+      <span>${this.escapeHtml(display)}</span>
+    </div>`;
+  }
+
+  renderReactionBubble(msg) {
+    const reaction = msg.reaction || {};
+    const emoji = reaction.emoji || '';
+    const rawContent = String(msg.text || msg.body || msg.content || '').trim();
+    const display = emoji || rawContent || '👍';
+    return `<div class="msg-body" style="font-size:22px;text-align:center;padding:4px 8px;">${this.escapeHtml(display)}</div>`;
+  }
+
+  renderOrderBubble(msg) {
+    const order = msg.order || {};
+    const rawContent = String(msg.text || msg.body || msg.content || '').trim();
+    const catalogId = order.catalog_id || '';
+    const items = Array.isArray(order.product_items) ? order.product_items : [];
+    if (!catalogId && !rawContent) {
+      return `<div class="msg-body">🛒 WhatsApp order received</div>`;
+    }
+    if (rawContent && !catalogId) {
+      return `<div class="msg-body">🛒 ${this.escapeHtml(rawContent)}</div>`;
+    }
+    const itemRows = items.map(item => {
+      const name = item.product_retailer_id || 'Item';
+      const qty  = item.quantity || 1;
+      const price = item.item_price ? ` – ${item.currency || ''}${item.item_price}` : '';
+      return `<div style="font-size:12px;color:var(--text-secondary);">${this.escapeHtml(name)} × ${qty}${price}</div>`;
+    }).join('');
+    return `<div class="msg-body" style="display:flex;flex-direction:column;gap:4px;">
+      <div style="font-weight:600;font-size:13px;">🛒 Order${catalogId ? ` (Catalog: ${this.escapeHtml(catalogId)})` : ''}</div>
+      ${itemRows}
+    </div>`;
+  }
+
+    generateWaveformBars(count = 28) {
     const bars = [];
     for (let i = 0; i < count; i++) {
       const height = Math.floor(Math.random() * 16) + 4;
@@ -1432,11 +1532,12 @@ class InboxComponent {
    */
   renderMediaPlaceholder(msgType, fileName) {
     const labels = {
-      image: '📎 Image',
-      video: '📎 Video',
-      audio: '🎤 Voice message',
+      image:    '🖼️ Image',
+      video:    '🎬 Video',
+      audio:    '🎤 Voice message',
+      voice:    '🎤 Voice message',
       document: `📎 ${fileName || 'Document'}`,
-      sticker: '🩷 Sticker',
+      sticker:  '💟 Sticker',
     };
     return `<div class="media-placeholder" style="display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,0.05);border-radius:8px;color:var(--text-muted);font-size:13px;">
       ${labels[msgType] || '📎 Media message'}

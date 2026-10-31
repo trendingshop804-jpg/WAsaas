@@ -666,3 +666,12 @@ document.addEventListener('DOMContentLoaded', () => {
     if (typeof feather !== 'undefined') feather.replace();
   }, 100);
 });
+
+// Restore the saved session before choosing the login screen or dashboard.
+document.addEventListener('DOMContentLoaded', () => {
+  window.authComponent?.init().catch(error => {
+    console.error('[Auth] Startup failed:', error);
+    window.authComponent.showAuthScreen();
+    window.authComponent.showError('Unable to restore your session. Please retry.');
+  });
+});

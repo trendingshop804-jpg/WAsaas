@@ -1,20 +1,24 @@
 // api/meta-webhook.js
-import { createClient } from '@supabase/supabase-js';
-import { decryptToken } from './_crypto.js';
+import { createSupabaseAdminClient, missingSupabaseServerConfig } from './_supabase.js';
+import {
+  isOptOut,
+  pauseLeadFollowUp,
+  handleLeadOptOut,
+  loadAutoReplyContext,
+  fetchChatHistory,
+  generateAIReply,
+  decideAutoReply,
+  parseAIResponse,
+  updateLeadFromCRM,
+  getTenantWhatsAppCredentials,
+  sendWhatsAppReply,
+  recordAIOutcome
+} from './_ai-reply.js';
 
-const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
-
-const supabase = createClient(
-  SUPABASE_URL,
-  SUPABASE_SERVICE_ROLE_KEY
-);
-
-const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || '';
-const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN || process.env.WA_ACCESS_TOKEN || '';
-
-const MEDIA_TYPES = new Set(['image', 'video', 'audio', 'document', 'sticker']);
-
+const GRAPH_VERSION = process.env.WHATSAPP_GRAPH_VERSION || 'v21.0';
+// 'voice' is a distinct Meta type (voice notes) — treated identically to audio for media download.
+const MEDIA_TYPES = new Set(['image', 'document', 'audio', 'voice', 'video', 'sticker']);
+const STATUS_MAP = { sent: 'sent', delivered: 'delivered', read: 'read', failed: 'failed' };
 const MIME_TO_EXT = {
   'image/jpeg': 'jpg', 'image/png': 'png', 'image/gif': 'gif', 'image/webp': 'webp', 'image/svg+xml': 'svg', 'image/bmp': 'bmp', 'image/x-icon': 'ico',
   'video/mp4': 'mp4', 'video/3gpp': '3gp', 'video/quicktime': 'mov', 'video/x-msvideo': 'avi', 'video/webm': 'webm', 'video/x-matroska': 'mkv',
@@ -32,6 +36,8 @@ const MIME_TO_EXT = {
   'application/vnd.android.package-archive': 'apk', 'application/x-msdownload': 'exe', 'application/postscript': 'ai', 'image/vnd.adobe.photoshop': 'psd'
 };
 
+const digits = value => String(value || '').replace(/\D/g, '');
+
 function extFromMime(mimeType) {
   const clean = String(mimeType || '').split(';')[0].trim().toLowerCase();
   if (MIME_TO_EXT[clean]) return MIME_TO_EXT[clean];
@@ -39,974 +45,608 @@ function extFromMime(mimeType) {
   return /^[a-z0-9]{1,8}$/.test(sub) ? sub : 'bin';
 }
 
-async function downloadMediaFromMeta(mediaId, customToken) {
-  const token = customToken || WHATSAPP_ACCESS_TOKEN;
-  const headers = token ? { Authorization: `Bearer ${token}` } : {};
-  const metaRes = await fetch(`https://graph.facebook.com/v21.0/${mediaId}`, {
-    headers
-  });
+// In-memory bounded cache to prevent duplicate processing on rapid webhook retries
+const seenInboundMessageIds = new Map();
+function isDuplicateInbound(messageId) {
+  if (!messageId) return false;
+  const now = Date.now();
+  for (const [id, timestamp] of seenInboundMessageIds.entries()) {
+    if (now - timestamp > 10 * 60 * 1000) seenInboundMessageIds.delete(id);
+  }
+  if (seenInboundMessageIds.has(messageId)) return true;
+  seenInboundMessageIds.set(messageId, now);
+  return false;
+}
+
+export function readableContent(message) {
+  const type = String(message?.type || 'unknown');
+  if (type === 'text') {
+    return typeof message.text?.body === 'string' && message.text.body.trim()
+      ? message.text.body.trim()
+      : 'WhatsApp text message did not include readable content.';
+  }
+  if (type === 'interactive') {
+    const br = message.interactive?.button_reply;
+    const lr = message.interactive?.list_reply;
+    if (br?.title) return br.title;
+    if (lr?.title) return lr.title;
+    if (br?.id) return `Button reply: ${br.id}`;
+    if (lr?.id) return `List reply: ${lr.id}`;
+    return 'Interactive WhatsApp reply without readable label.';
+  }
+  if (type === 'button') {
+    return message.button?.text || message.button?.payload || 'WhatsApp button reply without readable label.';
+  }
+  if (type === 'location') {
+    const loc = message.location;
+    if (!loc) return 'WhatsApp location without readable details.';
+    const label = loc.name || loc.address || '';
+    const coords = `${loc.latitude}, ${loc.longitude}`;
+    return label ? `📍 ${label} (${coords})` : `📍 Location: ${coords}`;
+  }
+  if (type === 'contacts') {
+    const contacts = message.contacts;
+    if (!Array.isArray(contacts) || !contacts.length) return 'WhatsApp contact card without readable name.';
+    return contacts.map(c => {
+      const name = c.name?.formatted_name || c.name?.first_name || '';
+      const phone = c.phones?.[0]?.phone || '';
+      return name && phone ? `👤 ${name} (${phone})` : name ? `👤 ${name}` : phone ? `👤 ${phone}` : '👤 Shared Contact';
+    }).join(', ');
+  }
+  if (type === 'reaction') {
+    const emoji = message.reaction?.emoji;
+    return emoji ? `${emoji} Reaction` : 'WhatsApp reaction without an emoji.';
+  }
+  if (type === 'order') {
+    const order = message.order;
+    if (!order) return 'WhatsApp order received; item details were not included in the webhook.';
+    const items = Array.isArray(order.product_items) ? order.product_items.length : 0;
+    return order.catalog_id
+      ? `🛒 Order from catalog ${order.catalog_id}${items ? ` (${items} item${items !== 1 ? 's' : ''})` : ''}.`
+      : 'WhatsApp order received; item details were not included in the webhook.';
+  }
+  if (type === 'system') {
+    return message.system?.body || `WhatsApp system notice${message.system?.type ? `: ${message.system.type}` : ''}.`;
+  }
+  if (type === 'referral') {
+    return message.referral?.headline || message.referral?.body || message.referral?.source_url || 'WhatsApp referral received without readable details.';
+  }
+  if (MEDIA_TYPES.has(type)) {
+    const mediaObj = message[type] || {};
+    const caption = mediaObj.caption || '';
+    if (type === 'audio' || type === 'voice') return caption || '🎤 Voice message';
+    if (type === 'sticker') return caption || '💟 Sticker';
+    if (type === 'image') return caption || '🖼️ Image';
+    if (type === 'video') return caption || '🎬 Video';
+    if (type === 'document') return caption || (mediaObj.filename ? `📄 ${mediaObj.filename}` : '📄 Document');
+    return caption || `${type[0].toUpperCase()}${type.slice(1)} attachment.`;
+  }
+  return `📩 WhatsApp ${type} message received.`;
+}
+
+async function downloadMediaFromMeta(mediaId, accessToken) {
+  if (!accessToken || !mediaId) return null;
+  const headers = { Authorization: `Bearer ${accessToken}` };
+  const metaRes = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${mediaId}`, { headers });
   if (!metaRes.ok) {
-    const err = await metaRes.text();
-    throw new Error(`Meta Media API error ${metaRes.status}: ${err}`);
+    const err = await metaRes.text().catch(() => '');
+    console.warn(`[meta-webhook] Meta media lookup failed ${metaRes.status}:`, err);
+    return null;
   }
-  const meta = await metaRes.json();
+  const meta = await metaRes.json().catch(() => ({}));
   const downloadUrl = meta.url;
-  if (!downloadUrl) throw new Error(`No download URL returned for media ${mediaId}`);
+  if (!downloadUrl) return null;
 
-  const downloadRes = await fetch(downloadUrl, {
-    headers
-  });
+  const downloadRes = await fetch(downloadUrl, { headers });
   if (!downloadRes.ok) {
-    throw new Error(`Failed to download media ${mediaId}: ${downloadRes.status}`);
+    console.warn(`[meta-webhook] Meta media download failed ${downloadRes.status}`);
+    return null;
   }
-
   const buffer = await downloadRes.arrayBuffer();
-  const mimeType = meta.mime_type || meta.content_type || downloadRes.headers.get('content-type') || 'application/octet-stream';
+  const mimeType = meta.mime_type || meta.content_type || downloadRes.headers?.get?.('content-type') || 'application/octet-stream';
   const fileName = meta.filename || `${mediaId}`;
-
   return { buffer, mimeType, fileName };
 }
 
-async function uploadMediaToStorage(senderNumber, mediaId, fileName, mimeType, buffer) {
+async function uploadMediaToStorage(admin, senderNumber, mediaId, fileName, mimeType, buffer) {
   const cleanPhone = String(senderNumber || '').replace(/[^0-9]/g, '').slice(-10) || 'unknown';
   const safeName = String(fileName || `media_${mediaId}`).replace(/[^a-zA-Z0-9._-]/g, '_');
   const hasExt = /\.[a-zA-Z0-9]{1,8}$/.test(safeName);
-  const storagePath = `${cleanPhone}/${mediaId}/${mediaId}_${safeName}${hasExt ? '' : `.${extFromMime(mimeType)}`}`;
+  const ext = hasExt ? '' : `.${extFromMime(mimeType)}`;
+  const storagePath = `${cleanPhone}/${mediaId}/${mediaId}_${safeName}${ext}`;
 
-  const { data: uploadData, error: uploadError } = await supabase
+  const { data: uploadData, error: uploadError } = await admin
     .storage
     .from('whatsapp-media')
     .upload(storagePath, Buffer.from(buffer), {
       contentType: mimeType,
-      upsert: true,
+      upsert: true
     });
 
   if (uploadError) {
-    throw new Error(`Supabase Storage upload error: ${uploadError.message}`);
+    console.warn('[meta-webhook] Storage upload error:', uploadError.message);
+    return null;
   }
-
   return uploadData?.path || storagePath;
 }
 
-async function processInboundMedia(msg, mediaType, customToken) {
-  const mediaId = msg[mediaType]?.id;
-  if (!mediaId) {
-    console.warn(`Media message ${msg.id} has no ${mediaType}.id — skipping media download`);
-    return null;
-  }
+async function processInboundMedia(admin, msg, mediaType, senderNumber, accessToken) {
+  const mediaObj = msg[mediaType];
+  const mediaId = mediaObj?.id;
+  if (!mediaId || !accessToken) return null;
 
   try {
-    const { buffer, mimeType, fileName } = await downloadMediaFromMeta(mediaId, customToken);
-    const storagePath = await uploadMediaToStorage(msg.from, mediaId, fileName, mimeType, buffer);
+    const downloaded = await downloadMediaFromMeta(mediaId, accessToken);
+    if (!downloaded) return null;
+    const storagePath = await uploadMediaToStorage(admin, senderNumber, mediaId, downloaded.fileName, downloaded.mimeType, downloaded.buffer);
     return {
       mediaUrl: storagePath,
-      mediaMimeType: mimeType,
-      fileName: fileName,
-      mediaSize: buffer.byteLength,
+      mediaMimeType: downloaded.mimeType,
+      fileName: downloaded.fileName,
+      mediaSize: downloaded.buffer.byteLength,
+      caption: mediaObj?.caption || null
     };
   } catch (err) {
-    console.error(`Failed to download/store media for message ${msg.id}:`, err.message);
+    console.warn('[meta-webhook] Media processing error:', err?.message || err);
     return null;
   }
 }
 
-async function getWhatsAppOrganizationId(phoneNumberId) {
-  let query = supabase
-    .from('whatsapp_connections')
-    .select('organization_id')
-    .eq('is_active', true);
-
-  if (phoneNumberId) {
-    query = query.or(`phone_number_id.eq.${phoneNumberId},waba_id.eq.${phoneNumberId}`);
-  }
-
-  const { data } = await query.order('updated_at', { ascending: false }).limit(1);
-  if (data?.[0]?.organization_id) return data[0].organization_id;
-
-  const { data: anyConn } = await supabase
-    .from('whatsapp_connections')
-    .select('organization_id')
-    .eq('is_active', true)
-    .order('updated_at', { ascending: false })
-    .limit(1);
-  if (anyConn?.[0]?.organization_id) return anyConn[0].organization_id;
-
-  const { data: orgs } = await supabase.from('organizations').select('id').limit(1);
-  return orgs?.[0]?.id || null;
-}
-
-async function getWhatsAppConnection(phoneNumberId) {
-  let query = supabase
-    .from('whatsapp_connections')
-    .select('*')
-    .eq('is_active', true);
-
-  if (phoneNumberId) {
-    query = query.or(`phone_number_id.eq.${phoneNumberId},waba_id.eq.${phoneNumberId}`);
-  }
-
-  const { data } = await query.order('updated_at', { ascending: false }).limit(1);
-  if (data?.[0]) return data[0];
-
-  const { data: anyConn } = await supabase
-    .from('whatsapp_connections')
-    .select('*')
-    .eq('is_active', true)
-    .order('updated_at', { ascending: false })
-    .limit(1);
-
-  return anyConn?.[0] || null;
-}
-
-async function getInstagramConnection(instagramBusinessId) {
-  const { data } = await supabase
-    .from('instagram_connections')
-    .select('*')
-    .eq('instagram_business_id', instagramBusinessId)
-    .eq('is_active', true)
-    .limit(1);
-
-  return data?.[0] || null;
-}
-
-async function findOrCreateLead(organizationId, phoneNumber, contactName = '', source = 'WhatsApp') {
-  let query = supabase
+async function findOrCreateLead(admin, organizationId, sender, contactName) {
+  const normalized = digits(sender);
+  const { data: existing } = await admin
     .from('leads')
-    .select('id, contact_name')
+    .select('id, name, contact_name, phone, phone_normalized')
     .eq('organization_id', organizationId);
 
-  if (phoneNumber) {
-    query = query.eq('phone', phoneNumber);
-  }
-
-  const { data: existing } = await query.limit(1);
-
-  if (existing && existing.length > 0) {
-    if (contactName && (!existing[0].contact_name || existing[0].contact_name.includes('WhatsApp Lead'))) {
-      await supabase
-        .from('leads')
-        .update({ contact_name: contactName })
-        .eq('id', existing[0].id);
+  // Exact normalized match or valid international formatting match
+  const matched = (existing || []).find(lead => {
+    const pDigits = digits(lead.phone_normalized || lead.phone);
+    if (!pDigits || !normalized) return false;
+    if (pDigits === normalized) return true;
+    if (pDigits.length >= 10 && normalized.length >= 10) {
+      const p10 = pDigits.slice(-10);
+      const n10 = normalized.slice(-10);
+      if (p10 === n10) {
+        const pPrefix = pDigits.slice(0, -10);
+        const nPrefix = normalized.slice(0, -10);
+        if (pPrefix === nPrefix || pPrefix === '0' || nPrefix === '0' || (pPrefix === '91' && !nPrefix) || (nPrefix === '91' && !pPrefix)) {
+          return true;
+        }
+      }
     }
-    return existing[0].id;
+    return false;
+  });
+
+  if (matched?.id) {
+    if (contactName && (!matched.contact_name || matched.contact_name.includes('WhatsApp contact') || matched.contact_name.includes('WhatsApp Lead'))) {
+      await admin.from('leads').update({ contact_name: contactName }).eq('id', matched.id);
+    }
+    return matched.id;
   }
 
-  const defaultName = source === 'Instagram'
-    ? (contactName ? `@${contactName}` : 'Instagram Lead')
-    : (contactName || `WhatsApp Lead (+${phoneNumber || ''})`);
-
-  const { data: newLead, error } = await supabase
+  const name = contactName || `WhatsApp contact (+${sender})`;
+  const { data, error } = await admin
     .from('leads')
     .insert({
       organization_id: organizationId,
-      company_name: 'Inbound WhatsApp',
-      contact_name: defaultName,
-      phone: phoneNumber || null,
-      source: source,
-      status: 'REPLIED',
-      score: 75,
-      score_category: 'WARM',
+      name,
+      contact_name: name,
+      phone: sender,
+      phone_normalized: normalized,
+      source: 'WhatsApp',
+      status: 'Replied'
     })
     .select('id')
     .single();
 
-  if (error) {
-    console.error('Lead creation error:', error);
-    throw new Error(`Failed to create lead: ${error.message}`);
+  if (error?.code === '23505') {
+    const retry = await admin
+      .from('leads')
+      .select('id')
+      .eq('organization_id', organizationId)
+      .eq('phone_normalized', normalized)
+      .maybeSingle();
+    return retry.data?.id || null;
   }
-
-  return newLead.id;
+  if (error) throw error;
+  return data?.id || null;
 }
 
-async function findOrCreateConversation(organizationId, leadId, channel = 'whatsapp') {
-  const { data: existing } = await supabase
+async function findOrCreateConversation(admin, organizationId, leadId) {
+  const { data: current } = await admin
     .from('conversations')
-    .select('id')
+    .select('id, mode')
+    .eq('organization_id', organizationId)
     .eq('lead_id', leadId)
-    .eq('channel', channel)
-    .limit(1);
+    .eq('channel', 'whatsapp')
+    .maybeSingle();
 
-  if (existing && existing.length > 0) {
-    return existing[0].id;
-  }
+  if (current?.id) return { id: current.id, mode: current.mode || 'AI' };
 
-  const { data: fallbackExisting } = await supabase
-    .from('conversations')
-    .select('id')
-    .eq('lead_id', leadId)
-    .limit(1);
-
-  if (fallbackExisting && fallbackExisting.length > 0) {
-    return fallbackExisting[0].id;
-  }
-
-  const { data: newConv, error } = await supabase
+  const { data, error } = await admin
     .from('conversations')
     .insert({
       organization_id: organizationId,
       lead_id: leadId,
-      channel: channel,
+      channel: 'whatsapp',
       mode: 'AI',
-      unread_count: 0,
+      unread_count: 0
     })
-    .select('id')
+    .select('id, mode')
     .single();
 
-  if (error) {
-    console.error('Conversation creation error:', error);
-    throw new Error(`Failed to create conversation: ${error.message}`);
-  }
-
-  return newConv.id;
+  if (error) throw error;
+  return { id: data?.id || null, mode: data?.mode || 'AI' };
 }
 
-async function fetchChatHistory(conversationId, limit = 20) {
-  const { data } = await supabase
-    .from('messages')
-    .select('direction, body, message_type, received_at')
-    .eq('conversation_id', conversationId)
-    .order('received_at', { ascending: true })
-    .limit(limit);
-
-  return data || [];
-}
-
-function buildSystemPrompt(organization) {
-  const businessName = organization?.name || 'our business';
-  const productDescription = organization?.product_description || 'our services';
-  const pricingSummary = organization?.pricing_summary || 'contact us for pricing details';
-  const bookingLink = organization?.booking_link || '';
-
-  return `You are ${businessName}'s WhatsApp assistant. Your job is to greet inbound leads, qualify them, and either book them in or hand them off to a human — all inside a normal WhatsApp chat.
-
-## Voice & format
-- Sound like a helpful person on WhatsApp, not a form. Short messages (1-3 lines max).
-- One question at a time. Never dump multiple questions in one message.
-- Use the lead's name once you have it. Light emoji is fine, don't overdo it.
-- Reply in the language the lead writes in (English, Tamil, Malayalam, or mixed).
-
-## Conversation flow
-1. **Greet + discover intent** — Ask what brought them here in one friendly line.
-2. **Qualify** — Naturally collect, over the course of the chat (not as a checklist):
-   - Name
-   - Business/industry
-   - What problem they're trying to solve / what they're interested in
-   - Budget range (ask softly, e.g. "roughly what budget are you working with?")
-   - Timeline (immediate / this month / just exploring)
-3. **Score the lead** internally as HOT (ready to buy, has budget + timeline), WARM (interested, needs nurturing), or COLD (just browsing/no fit).
-4. **Route**:
-   - HOT → offer to book a call/demo right away, share ${bookingLink}, and flag for human follow-up.
-   - WARM → answer their questions, share relevant info/pricing, ask if they'd like a callback.
-   - COLD → answer politely, add to nurture list, don't push for a call.
-5. **Handoff** — If the lead asks something you're unsure of, asks for a human, or gets frustrated, say so plainly and tag for human takeover. Never pretend to be human if directly asked.
-
-## Hard rules
-- Never invent pricing, features, or timelines you weren't given — say you'll confirm and get back to them.
-- Never ask for sensitive info (passwords, OTPs, card numbers) over chat.
-- Don't repeat a question the lead already answered earlier in the chat.
-- If the lead goes silent, don't follow up more than twice.
-
-## Output for the CRM (structured, not shown to the lead)
-After each exchange, also produce:
-{
-  "lead_status": "HOT | WARM | COLD",
-  "captured_fields": { "name": "", "industry": "", "need": "", "budget": "", "timeline": "" },
-  "next_action": "book_call | send_info | human_handoff | nurture",
-  "notes": ""
-}
-
-## Context
-- Business: ${businessName}
-- Product/Service: ${productDescription}
-- Pricing: ${pricingSummary}
-- Booking link: ${bookingLink}`;
-}
-
-function parseAIResponse(rawContent) {
-  const text = (rawContent || '').trim();
-
-  const jsonMatch = text.match(/(\{[\s\S]*\})\s*$/);
-  let replyText = text;
-  let crmData = null;
-
-  if (jsonMatch) {
-    try {
-      crmData = JSON.parse(jsonMatch[1]);
-      replyText = text.slice(0, jsonMatch.index).trim();
-    } catch (e) {
-      console.warn('Failed to parse AI CRM JSON:', e.message);
+async function applyStatuses(admin, statuses) {
+  for (const receipt of statuses || []) {
+    const status = STATUS_MAP[String(receipt?.status || '').toLowerCase()];
+    if (!receipt?.id || !status) continue;
+    const update = { status };
+    if (status === 'failed') {
+      update.error_code = String(receipt.errors?.[0]?.code || 'META_SEND_FAILED');
+      update.error_message = receipt.errors?.[0]?.title || receipt.errors?.[0]?.message || 'Meta reported delivery failure.';
     }
-  }
-
-  return { replyText, crmData };
-}
-
-async function updateLeadFromCRM(leadId, crmData) {
-  if (!crmData || !leadId) return;
-
-  const updates = {};
-
-  if (crmData.captured_fields) {
-    const fields = crmData.captured_fields;
-    if (fields.name && !updates.contact_name) updates.contact_name = fields.name;
-    if (fields.industry && !updates.industry) updates.industry = fields.industry;
-    if (fields.need && !updates.ai_summary) updates.ai_summary = fields.need;
-  }
-
-  if (crmData.lead_status) {
-    const statusMap = {
-      'HOT': 'QUALIFIED',
-      'WARM': 'REPLIED',
-      'COLD': 'NEW'
-    };
-    updates.status = statusMap[crmData.lead_status] || updates.status;
-    updates.score_category = crmData.lead_status;
-  }
-
-  if (crmData.notes) {
-    updates.notes = crmData.notes;
-  }
-
-  if (Object.keys(updates).length > 0) {
-    const { error } = await supabase
-      .from('leads')
-      .update(updates)
-      .eq('id', leadId);
-
-    if (error) {
-      console.error('Lead CRM update error:', error);
-    }
+    await admin.from('messages').update(update).eq('wa_message_id', receipt.id);
+    await admin.from('follow_up_messages')
+      .update({ status: status === 'sent' ? 'Sent' : status === 'delivered' ? 'Delivered' : status === 'read' ? 'Read' : 'Failed' })
+      .eq('whatsapp_message_id', receipt.id);
   }
 }
 
-async function generateAIReply(organization, history, userMessage) {
-  if (!OPENROUTER_API_KEY) {
-    throw new Error('OpenRouter API key not configured');
-  }
-
-  const systemPrompt = buildSystemPrompt(organization);
-
-  const messages = [
-    { role: 'system', content: systemPrompt },
-    ...history.map(m => ({
-      role: m.direction === 'inbound' ? 'user' : 'assistant',
-      content: m.body || ''
-    })),
-    { role: 'user', content: userMessage }
-  ];
-
-  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
-      'HTTP-Referer': 'https://nexuslead.ai',
-      'X-Title': 'NexusLead AI Agent',
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      model: 'openai/gpt-4o-mini',
-      messages,
-      temperature: 0.7,
-      max_tokens: 600
-    })
-  });
-
-  if (!response.ok) {
-    const errText = await response.text();
-    console.error('[OpenRouter API Error]:', response.status, errText);
-    throw new Error(`OpenRouter API error ${response.status}`);
-  }
-
-  const data = await response.json();
-  const content = data?.choices?.[0]?.message?.content?.trim();
-  if (content) {
-    return content;
-  }
-  throw new Error('Empty completion returned');
-}
-
-async function sendWhatsAppMessage(phoneNumberId, toNumber, text) {
-  const response = await fetch(
-    `https://graph.facebook.com/v21.0/${phoneNumberId}/messages`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-      },
-      body: JSON.stringify({
-        messaging_product: 'whatsapp',
-        to: toNumber,
-        type: 'text',
-        text: { body: text },
-      }),
-    }
-  );
-  const data = await response.json();
-  if (!response.ok) {
-    console.error('WhatsApp send error:', data);
-  } else {
-    console.log('WhatsApp reply sent:', data);
-  }
-  return data;
-}
-
-function isOptOut(messageText = '') {
-  const normalized = String(messageText || '').trim().toLowerCase();
-  return /\b(stop|unsubscribe|remove me|not interested|do not contact|don't contact)\b/i.test(normalized);
-}
-
-// ---------------------------------------------------------------------------
-// Instagram Webhook Helpers: Comments, Auto-Reply, Auto-DM Rules
-// ---------------------------------------------------------------------------
-function matchesKeyword(text, keyword, matchType = 'contains') {
-  if (!text || !keyword) return false;
-  const t = text.trim().toLowerCase();
-  const keywords = keyword.toLowerCase().split(',').map(k => k.trim()).filter(Boolean);
-
-  if (matchType === 'exact') {
-    return keywords.some(k => t === k);
-  }
-  // Default: contains
-  return keywords.some(k => t.includes(k));
-}
-
-async function handleInstagramComment(entry, change, igConnection) {
-  const organizationId = igConnection.organization_id;
-  const value = change.value;
-  const commentId = value.id || value.comment_id;
-  const mediaId = value.media?.id || value.media_id;
-  const from = value.from || {};
-  const fromId = from.id;
-  const fromUsername = from.username || 'user';
-  const text = value.text || '';
-  const parentId = value.parent_id || null;
-
-  if (!commentId || !text) {
-    console.warn('[Instagram Webhook] Missing commentId or text');
-    return;
-  }
-
-  // 1. Persist comment event
-  const { data: savedComment, error: commentErr } = await supabase
-    .from('instagram_comments')
-    .upsert({
-      organization_id: organizationId,
-      ig_comment_id: commentId,
-      ig_media_id: mediaId || 'unknown',
-      from_id: fromId || 'unknown',
-      from_username: fromUsername,
-      text: text,
-      parent_id: parentId,
-      comment_timestamp: new Date().toISOString(),
-      raw_payload: value,
-    }, { onConflict: 'ig_comment_id' })
-    .select('id, replied_publicly, replied_privately')
-    .single();
-
-  if (commentErr) {
-    console.error('[Instagram Webhook] Error persisting comment:', commentErr.message);
-  }
-
-  const rawToken = await decryptToken(igConnection.access_token_encrypted);
-  if (!rawToken) {
-    console.error('[Instagram Webhook] Decrypted access token unavailable for org:', organizationId);
-    return;
-  }
-
-  // 2. Check and Trigger Public Auto-Reply Rules
-  if (!savedComment?.replied_publicly) {
-    const { data: replyRules } = await supabase
-      .from('instagram_reply_rules')
-      .select('*')
-      .eq('organization_id', organizationId)
-      .eq('is_active', true);
-
-    for (const rule of replyRules || []) {
-      if (rule.media_id && mediaId && rule.media_id !== mediaId) continue;
-      if (matchesKeyword(text, rule.trigger_keyword, rule.match_type)) {
-        try {
-          console.log(`[Instagram Auto-Reply] Match rule "${rule.name}" for comment ${commentId}`);
-          const replyRes = await fetch(`https://graph.facebook.com/v22.0/${commentId}/replies`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              message: rule.reply_message,
-              access_token: rawToken,
-            }),
-          });
-          const replyJson = await replyRes.json();
-          if (!replyRes.ok) {
-            console.error('[Instagram Auto-Reply Error]:', replyJson);
-          } else {
-            console.log('[Instagram Auto-Reply Success]:', replyJson);
-            await supabase
-              .from('instagram_comments')
-              .update({ replied_publicly: true })
-              .eq('ig_comment_id', commentId);
-
-            await supabase
-              .from('instagram_reply_rules')
-              .update({ reply_count: (rule.reply_count || 0) + 1 })
-              .eq('id', rule.id);
-          }
-        } catch (err) {
-          console.error('[Instagram Auto-Reply Fetch Error]:', err.message);
-        }
-        break; // matched first active rule
-      }
-    }
-  }
-
-  // 3. Check and Queue Private Auto-DM Rules (Comment-to-DM)
-  if (!savedComment?.replied_privately && fromId) {
-    const { data: dmRules } = await supabase
-      .from('instagram_dm_rules')
-      .select('*')
-      .eq('organization_id', organizationId)
-      .eq('is_active', true);
-
-    for (const rule of dmRules || []) {
-      if (rule.media_id && mediaId && rule.media_id !== mediaId) continue;
-      if (matchesKeyword(text, rule.trigger_keyword, rule.match_type)) {
-        console.log(`[Instagram Auto-DM] Enqueuing comment-to-DM job for comment ${commentId}`);
-        const { error: queueErr } = await supabase
-          .from('instagram_dm_queue')
-          .insert({
-            organization_id: organizationId,
-            rule_id: rule.id,
-            comment_id: commentId,
-            recipient_id: fromId,
-            recipient_username: fromUsername,
-            message_text: rule.dm_message,
-            status: 'pending',
-            scheduled_at: new Date().toISOString(),
-          });
-
-        if (queueErr) {
-          console.warn('[Instagram Auto-DM] Queue insert error (maybe already queued):', queueErr.message);
-        }
-        break;
-      }
-    }
-  }
-}
-
-async function handleInstagramDirectMessage(entry, messagingItem, igConnection) {
-  const organizationId = igConnection.organization_id;
-  const senderId = messagingItem.sender?.id;
-  const recipientId = messagingItem.recipient?.id;
-  const message = messagingItem.message || {};
-  const messageId = message.mid;
-  const messageText = message.text || '';
-  const isEcho = message.is_echo || senderId === igConnection.instagram_business_id;
-
-  if (!messageId) return;
-
-  // 1. Deduplication check
-  const { data: existing } = await supabase
-    .from('messages')
-    .select('id')
-    .eq('wa_message_id', messageId)
-    .limit(1);
-
-  if (existing && existing.length > 0) {
-    console.log('[Instagram Webhook] Duplicate message, skipping:', messageId);
-    return;
-  }
-
-  // 2. Handle attachments (images, video, audio, files)
-  let mediaInfo = null;
-  let msgType = 'text';
-  const attachments = message.attachments || [];
-  if (attachments.length > 0) {
-    const att = attachments[0];
-    const attType = att.type || 'image';
-    msgType = attType === 'file' ? 'document' : attType;
-    const mediaUrl = att.payload?.url;
-    if (mediaUrl) {
-      try {
-        const rawToken = await decryptToken(igConnection.access_token_encrypted);
-        const downloadRes = await fetch(mediaUrl, {
-          headers: rawToken ? { Authorization: `Bearer ${rawToken}` } : {}
-        });
-        if (downloadRes.ok) {
-          const buffer = await downloadRes.arrayBuffer();
-          const mimeType = downloadRes.headers.get('content-type') || 'application/octet-stream';
-          const safeId = String(messageId).replace(/[^a-zA-Z0-9_-]/g, '_');
-          const ext = extFromMime(mimeType);
-          const fileName = `ig_${safeId}.${ext}`;
-          const storagePath = await uploadMediaToStorage(senderId, safeId, fileName, mimeType, buffer);
-          mediaInfo = {
-            mediaUrl: storagePath,
-            mediaMimeType: mimeType,
-            fileName: fileName,
-            mediaSize: buffer.byteLength,
-          };
-        }
-      } catch (err) {
-        console.error('[Instagram Media] Download/Upload failed:', err.message);
-      }
-    }
-  }
-
-  // 3. Lead & Conversation setup
-  let leadId = null;
-  let conversationId = null;
-  try {
-    leadId = await findOrCreateLead(organizationId, senderId, senderId, 'Instagram');
-    conversationId = await findOrCreateConversation(organizationId, leadId, 'instagram');
-  } catch (err) {
-    console.error('[Instagram Webhook] Lead/Conversation error:', err);
-  }
-
-  if (!conversationId) {
-    console.error('[Instagram Webhook] Skipping message — no conversation_id');
-    return;
-  }
-
-  const caption = message.caption || '';
-  const displayContent = messageText || (mediaInfo ? (msgType === 'audio' ? 'Voice message' : `${msgType} message`) : '');
-
-  // 4. Save message in messages table
-  const messageRecord = {
-    conversation_id: conversationId,
-    wa_message_id: messageId,
-    sender_number: senderId,
-    content: displayContent,
-    message_type: msgType,
-    direction: isEcho ? 'outbound' : 'inbound',
-    channel: 'instagram',
-    received_at: new Date(messagingItem.timestamp || Date.now()).toISOString(),
-    media_url: mediaInfo?.mediaUrl || null,
-    media_mime_type: mediaInfo?.mediaMimeType || null,
-    file_name: mediaInfo?.fileName || null,
-    media_caption: caption || null,
-    media_size: mediaInfo?.mediaSize || 0,
-    status: 'SENT',
-  };
-
-  const { error: msgErr } = await supabase.from('messages').insert(messageRecord);
-  if (msgErr) {
-    console.error('[Instagram Message] Supabase insert error:', msgErr);
-  }
-
-  // 5. Update conversation
-  await supabase
-    .from('conversations')
-    .update({
-      last_message: displayContent,
-      last_timestamp: new Date(messagingItem.timestamp || Date.now()).toISOString(),
-      channel: 'instagram',
-    })
-    .eq('id', conversationId);
-
-  // 6. Also upsert in instagram_messages for compatibility
-  await supabase
-    .from('instagram_messages')
-    .upsert({
-      organization_id: organizationId,
-      ig_message_id: messageId,
-      sender_id: senderId || 'unknown',
-      recipient_id: recipientId || 'unknown',
-      content: messageText,
-      message_type: msgType,
-      direction: isEcho ? 'outbound' : 'inbound',
-      received_at: new Date(messagingItem.timestamp || Date.now()).toISOString(),
-    }, { onConflict: 'ig_message_id' });
-}
-
-// ---------------------------------------------------------------------------
-// Main Handler
-// ---------------------------------------------------------------------------
 export default async function handler(req, res) {
   if (req.method === 'GET') {
-    const mode = req.query['hub.mode'];
-    const token = req.query['hub.verify_token'];
-    const challenge = req.query['hub.challenge'];
-    const expectedToken = process.env.META_VERIFY_TOKEN || 'Wasaas@2026';
-
-    if (mode === 'subscribe' && (token === expectedToken || token === 'Wasaas@2026')) {
-      return res.status(200).send(challenge);
+    const expected = String(process.env.META_VERIFY_TOKEN || process.env.WEBHOOK_VERIFY_TOKEN || '').trim();
+    if (req.query?.['hub.mode'] === 'subscribe' && expected && req.query?.['hub.verify_token'] === expected) {
+      return res.status(200).send(req.query['hub.challenge']);
     }
     return res.status(403).send('Forbidden');
   }
 
-  if (req.method === 'POST') {
-    const payload = req.body;
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed.' });
 
-    try {
-      // ---------------------------------------------------------------------
-      // Branch A: Instagram Webhook Payload (object === 'instagram' or page feed events)
-      // ---------------------------------------------------------------------
-      if (payload?.object === 'instagram' || payload?.object === 'page') {
-        const entries = payload.entry || [];
-        for (const entry of entries) {
-          const igBusinessId = entry.id; // Either IG business account ID or Page ID
-          const igConnection = await getInstagramConnection(igBusinessId) ||
-                               (await supabase
-                                  .from('instagram_connections')
-                                  .select('*')
-                                  .or(`instagram_business_id.eq.${igBusinessId},page_id.eq.${igBusinessId}`)
-                                  .eq('is_active', true)
-                                  .limit(1))?.data?.[0];
+  const admin = createSupabaseAdminClient();
+  if (!admin) {
+    return res.status(503).json({
+      error: 'Server database configuration is unavailable.',
+      missing: missingSupabaseServerConfig()
+    });
+  }
 
-          if (!igConnection) {
-            console.warn('[Instagram Webhook] No active connection found for ID:', igBusinessId);
-            continue;
-          }
+  const values = (req.body?.entry || []).flatMap(entry => (entry.changes || []).map(change => change.value)).filter(Boolean);
+  await applyStatuses(admin, values.flatMap(value => Array.isArray(value.statuses) ? value.statuses : []));
 
-          // Handle changes (e.g. comments, mentions)
-          if (Array.isArray(entry.changes)) {
-            for (const change of entry.changes) {
-              if (change.field === 'comments') {
-                await handleInstagramComment(entry, change, igConnection);
-              }
-            }
-          }
+  let stored = 0;
+  for (const value of values) {
+    const phoneNumberId = value.metadata?.phone_number_id;
+    const messages = Array.isArray(value.messages) ? value.messages : [];
+    if (!messages.length) continue;
 
-          // Handle messaging (DMs)
-          if (Array.isArray(entry.messaging)) {
-            for (const item of entry.messaging) {
-              await handleInstagramDirectMessage(entry, item, igConnection);
-            }
-          }
-        }
+    // Resolve tenant organization from active connection
+    const { data: connection } = await admin
+      .from('whatsapp_connections')
+      .select('organization_id, phone_number_id, waba_id, access_token_encrypted, access_token')
+      .eq('phone_number_id', phoneNumberId)
+      .eq('is_active', true)
+      .maybeSingle();
 
-        return res.status(200).json({ received: true });
+    if (!connection?.organization_id) {
+      console.error('[meta-webhook] inbound payload ignored: no active tenant channel for phone_number_id', phoneNumberId);
+      continue;
+    }
+
+    const organizationId = connection.organization_id;
+    const tenantCreds = await getTenantWhatsAppCredentials(admin, organizationId, phoneNumberId);
+
+    for (const message of messages) {
+      if (!message?.id || !message?.from) continue;
+
+      // 1. Deduplication guard (in-memory + database)
+      if (isDuplicateInbound(message.id)) {
+        console.log('[meta-webhook] In-memory duplicate detected, skipping:', message.id);
+        continue;
       }
 
-      // ---------------------------------------------------------------------
-      // Branch B: WhatsApp Webhook Payload (entry[0].changes[0].value.messages)
-      // ---------------------------------------------------------------------
-      const entry = payload?.entry?.[0];
-      const change = entry?.changes?.[0];
-      const value = change?.value;
-      const messages = value?.messages;
-      const phoneNumberId = value?.metadata?.phone_number_id;
+      const { data: duplicate } = await admin
+        .from('messages')
+        .select('id')
+        .eq('organization_id', organizationId)
+        .eq('wa_message_id', message.id)
+        .maybeSingle();
 
-      if (!messages || messages.length === 0) {
-        return res.status(200).json({ received: true });
-      }
-
-      const waConnection = await getWhatsAppConnection(phoneNumberId);
-      const organizationId = waConnection?.organization_id || (await getWhatsAppOrganizationId(phoneNumberId));
-      if (!organizationId) {
-        console.error('[Webhook] No active WhatsApp connection found for phone_number_id:', phoneNumberId);
-        return res.status(200).json({ received: true });
+      if (duplicate?.id) {
+        console.log('[meta-webhook] Duplicate message already stored:', message.id);
+        continue;
       }
 
-      let decryptedToken = null;
-      if (waConnection?.access_token_encrypted) {
-        try {
-          decryptedToken = await decryptToken(waConnection.access_token_encrypted);
-        } catch (e) {
-          console.warn('[Webhook] Could not decrypt org WhatsApp token:', e.message);
-        }
-      }
-      if (!decryptedToken && waConnection?.access_token) {
-        decryptedToken = waConnection.access_token;
-      }
-      if (!decryptedToken) {
-        decryptedToken = WHATSAPP_ACCESS_TOKEN;
-      }
-
-      let orgSettings = {};
       try {
-        const { data } = await supabase
-          .from('organizations')
-          .select('*')
-          .eq('id', organizationId)
-          .limit(1);
-        orgSettings = data?.[0] || {};
-      } catch (err) {
-        console.warn('[Webhook] Could not fetch organization settings:', err.message);
-      }
+        const contactName = value.contacts?.find(item => item.wa_id === message.from)?.profile?.name || '';
+        const leadId = await findOrCreateLead(admin, organizationId, message.from, contactName);
+        if (!leadId) throw new Error('Unable to link inbound message to a lead.');
 
-      for (const msg of messages) {
-        const msgType = msg.type || 'text';
-        const isMedia = MEDIA_TYPES.has(msgType);
-        const sender = msg.from || '';
+        const conv = await findOrCreateConversation(admin, organizationId, leadId);
+        const conversationId = conv?.id;
+        if (!conversationId) throw new Error('Unable to link inbound message to a conversation.');
 
-        if (msg.id) {
-          const { data: existing } = await supabase
-            .from('messages')
-            .select('id')
-            .eq('wa_message_id', msg.id)
-            .limit(1);
-
-          if (existing && existing.length > 0) {
-            console.log('Duplicate message, skipping:', msg.id);
-            continue;
-          }
-        }
+        const type = String(message.type || 'unsupported');
+        const content = readableContent(message);
+        const isMedia = MEDIA_TYPES.has(type);
 
         let mediaInfo = null;
-        if (isMedia) {
-          mediaInfo = await processInboundMedia(msg, msgType, decryptedToken);
-          if (!mediaInfo) {
-            console.warn(`Media download failed for ${msg.id} (${msgType}) — saving message metadata only`);
-          }
+        if (isMedia && tenantCreds?.accessToken) {
+          mediaInfo = await processInboundMedia(admin, message, type, message.from, tenantCreds.accessToken);
         }
 
-        const caption = msg[msgType]?.caption || msg.caption || '';
-        let userText = '';
-        if (msgType === 'text') {
-          userText = msg.text?.body || '';
-        } else if (msgType === 'interactive') {
-          userText = msg.interactive?.button_reply?.title || msg.interactive?.list_reply?.title || msg.interactive?.button_reply?.id || 'Interactive Reply';
-        } else if (msgType === 'button') {
-          userText = msg.button?.text || msg.button?.payload || 'Button Reply';
-        } else if (msgType === 'location') {
-          const loc = msg.location;
-          userText = loc ? `📍 Location: ${loc.name || loc.address || (loc.latitude + ', ' + loc.longitude)}` : '📍 Location';
-        } else if (msgType === 'contacts') {
-          const c = msg.contacts?.[0];
-          userText = c ? `👤 Contact: ${c.name?.formatted_name || c.phones?.[0]?.phone || 'Shared Contact'}` : '👤 Shared Contact';
-        } else if (msgType === 'reaction') {
-          userText = msg.reaction?.emoji ? `Reaction: ${msg.reaction.emoji}` : 'Reaction';
-        } else if (isMedia) {
-          userText = caption || (msgType === 'audio' || msgType === 'voice' ? '🎤 Voice message' : msgType === 'sticker' ? '🩷 Sticker' : `📎 ${msgType} message`);
-        } else {
-          userText = msg.text?.body || '📩 Inbound message';
+        const supportedTypes = ['text', 'interactive', 'button', 'location', 'contacts', 'reaction', 'order', 'system', 'referral', 'unknown'];
+        const messageType = isMedia || supportedTypes.includes(type) ? type : `unknown_${type}`;
+        const receivedAt = new Date().toISOString();
+
+        const insertRecord = {
+          organization_id: organizationId,
+          lead_id: leadId,
+          conversation_id: conversationId,
+          wa_message_id: message.id,
+          sender_number: message.from,
+          direction: 'inbound',
+          channel: 'whatsapp',
+          message_type: messageType,
+          content,
+          body: content,
+          message_body: content,
+          media_url: mediaInfo?.mediaUrl || null,
+          media_mime_type: mediaInfo?.mediaMimeType || (isMedia ? message[type]?.mime_type : null),
+          file_name: mediaInfo?.fileName || (isMedia ? message[type]?.filename : null),
+          media_size: mediaInfo?.mediaSize || 0,
+          media_caption: mediaInfo?.caption || (isMedia ? message[type]?.caption : null),
+          status: 'delivered',
+          received_at: receivedAt
+        };
+
+        const { error: insertErr } = await admin.from('messages').insert(insertRecord);
+        if (insertErr) {
+          // If concurrent insert beat us, skip duplicate
+          if (insertErr.code === '23505') {
+            console.log('[meta-webhook] Concurrent duplicate insert caught:', message.id);
+            continue;
+          }
+          throw insertErr;
         }
 
-        let leadId = null;
-        let conversationId = null;
-        let chatHistory = [];
+        await admin.from('conversations').update({
+          last_message: content,
+          last_timestamp: receivedAt
+        }).eq('id', conversationId);
 
-        try {
-          const contactObj = value?.contacts?.find(c => c.wa_id === sender) || value?.contacts?.[0];
-          const rawContactName = contactObj?.profile?.name || '';
-          const formattedSender = sender && sender.length >= 10
-            ? (sender.startsWith('91') && sender.length === 12 ? `+${sender.slice(0, 2)} ${sender.slice(2, 7)} ${sender.slice(7)}` : `+${sender}`)
-            : sender;
-          const contactName = rawContactName || (formattedSender ? `WhatsApp Contact (${formattedSender})` : 'WhatsApp Contact');
-          leadId = await findOrCreateLead(organizationId, sender, contactName, 'WhatsApp');
-          conversationId = await findOrCreateConversation(organizationId, leadId, 'whatsapp');
+        stored += 1;
 
-          if (isOptOut(userText) && leadId) {
-            await supabase
-              .from('leads')
-              .update({
-                opted_out: true,
-                opted_out_at: new Date().toISOString(),
-                score: 0,
-                next_followup_at: null,
-                followup_count: 0,
-              })
-              .eq('id', leadId);
-          } else {
-            await supabase
-              .from('leads')
-              .update({
-                status: 'REPLIED',
-                follow_up_status: 'Paused',
-                next_followup_at: null,
-                updated_at: new Date().toISOString(),
-              })
-              .eq('id', leadId);
-          }
+        // 2. Pause scheduled follow-up sequence when customer sends ANY message
+        await pauseLeadFollowUp(admin, leadId);
 
-          if (userText && msgType === 'text') {
-            chatHistory = await fetchChatHistory(conversationId);
-          }
-        } catch (err) {
-          console.error('[Webhook] Lead/Conversation setup error:', err);
-        }
-
-        if (!conversationId) {
-          console.error('[Webhook] Skipping message — no conversation_id available');
+        // 3. Opt-out compliance
+        const messageIsOptOut = isOptOut(content);
+        if (messageIsOptOut) {
+          await handleLeadOptOut(admin, leadId);
+          await recordAIOutcome(admin, {
+            organizationId,
+            conversationId,
+            inboundMessageId: message.id,
+            incomingMessage: content,
+            providerOutcome: 'not_called',
+            fallbackReason: 'opt_out',
+            sendResult: 'not_attempted'
+          });
           continue;
         }
 
-        const messageRecord = {
-          conversation_id: conversationId,
-          wa_message_id: msg.id,
-          sender_number: sender,
-          content: userText || '📩 Inbound message',
-          message_type: msgType,
-          direction: 'inbound',
-          channel: 'whatsapp',
-          received_at: new Date().toISOString(),
-          media_url: mediaInfo?.mediaUrl || null,
-          media_mime_type: mediaInfo?.mediaMimeType || null,
-          file_name: mediaInfo?.fileName || null,
-          media_caption: isMedia ? caption : null,
-          media_size: mediaInfo?.mediaSize || 0,
-          status: 'SENT',
-        };
+        // Check if lead was already opted out
+        const { data: leadRecord } = await admin
+          .from('leads')
+          .select('id, opted_out')
+          .eq('id', leadId)
+          .maybeSingle();
 
-        const { error: msgError } = await supabase.from('messages').insert(messageRecord);
-        if (msgError) {
-          console.error('[Webhook] Supabase insert error:', msgError);
-        }
-
-        await supabase
-          .from('conversations')
-          .update({
-            last_message: messageRecord.content,
-            last_timestamp: messageRecord.received_at,
-            channel: 'whatsapp',
-          })
-          .eq('id', conversationId);
-
-        if (userText && msgType === 'text' && leadId && !isOptOut(userText)) {
-          let aiRaw = null;
-          let replyText = "Hi there! I'd love to help you. Could you tell me a bit more about what you're looking for?";
-          let crmData = null;
-
-          try {
-            aiRaw = await generateAIReply(orgSettings, chatHistory, userText);
-            const parsed = parseAIResponse(aiRaw);
-            replyText = parsed.replyText || replyText;
-            crmData = parsed.crmData;
-          } catch (err) {
-            console.error('[AI Agent Webhook Fallback]:', err.message);
-            const msgLower = userText.toLowerCase();
-            if (msgLower.includes('price') || msgLower.includes('cost') || msgLower.includes('rate') || msgLower.includes('how much')) {
-              replyText = "Hi! Our offerings are tailored to your needs — I can share details and pricing on a quick call. Shall we hop on a 10-min chat?";
-            }
-          }
-
-          const sendResult = await sendWhatsAppMessage(phoneNumberId, sender, replyText);
-
-          const sentAt = new Date().toISOString();
-          const { error: outboundError } = await supabase.from('messages').insert({
-            conversation_id: conversationId,
-            wa_message_id: sendResult.messages?.[0]?.id,
-            sender_number: sender,
-            sender: 'agent',
-            body: replyText,
-            message_body: replyText,
-            content: replyText,
-            message_type: 'text',
-            direction: 'outbound',
-            received_at: sentAt,
-            created_at: sentAt,
-            is_ai: true,
-            status: 'sent',
+        if (leadRecord?.opted_out) {
+          await recordAIOutcome(admin, {
+            organizationId,
+            conversationId,
+            inboundMessageId: message.id,
+            incomingMessage: content,
+            providerOutcome: 'not_called',
+            fallbackReason: 'lead_opted_out',
+            sendResult: 'not_attempted'
           });
-          if (outboundError) throw outboundError;
-
-          await updateLeadFromCRM(leadId, crmData);
-
-          await supabase
-            .from('conversations')
-            .update({
-              last_message: replyText,
-              last_timestamp: new Date().toISOString()
-            })
-            .eq('id', conversationId);
+          continue;
         }
-      }
-    } catch (err) {
-      console.error('Error processing webhook payload:', err);
-    }
 
-    return res.status(200).json({ received: true });
+        // 4. Respect manual mode
+        if (conv?.mode === 'Manual') {
+          await recordAIOutcome(admin, {
+            organizationId,
+            conversationId,
+            inboundMessageId: message.id,
+            incomingMessage: content,
+            providerOutcome: 'not_called',
+            fallbackReason: 'conversation_manual_mode',
+            sendResult: 'not_attempted'
+          });
+          continue;
+        }
+
+        // 5. Only incoming text messages qualify for AI auto-reply
+        if (type !== 'text' || !content.trim()) {
+          continue;
+        }
+
+        // 6. Check if AI reply was already executed for this inbound message ID
+        const { data: alreadyReplied } = await admin
+          .from('ai_reply_logs')
+          .select('id')
+          .eq('organization_id', organizationId)
+          .contains('api_result', { inbound_message_id: message.id })
+          .maybeSingle();
+
+        if (alreadyReplied?.id) {
+          console.log('[meta-webhook] Duplicate reply prevented for message:', message.id);
+          continue;
+        }
+
+        // 7. Load auto-reply context (active AI agent & knowledge base)
+        const autoReplyContext = await loadAutoReplyContext(admin, organizationId);
+        if (!autoReplyContext) {
+          await recordAIOutcome(admin, {
+            organizationId,
+            conversationId,
+            inboundMessageId: message.id,
+            incomingMessage: content,
+            providerOutcome: 'not_called',
+            fallbackReason: 'agent_not_enabled_or_schema_unavailable',
+            sendResult: 'not_attempted'
+          });
+          continue;
+        }
+
+        // 8. Fetch chronological conversation history
+        const chatHistory = await fetchChatHistory(admin, organizationId, conversationId, 20);
+
+        // 9. Grounded decision flow
+        const decision = await decideAutoReply({
+          agent: autoReplyContext.agent,
+          knowledge: autoReplyContext.knowledge,
+          history: chatHistory,
+          userMessage: content,
+          provider: ({ agent, sources, history, userMessage }) =>
+            generateAIReply({ agent, sources, history, userMessage })
+        });
+
+        if (!decision.shouldSend) {
+          await recordAIOutcome(admin, {
+            organizationId,
+            conversationId,
+            inboundMessageId: message.id,
+            incomingMessage: content,
+            agentId: autoReplyContext.agent.id,
+            providerOutcome: decision.providerOutcome,
+            providerErrorCode: decision.providerErrorCode,
+            fallbackReason: decision.fallbackReason,
+            intent: decision.intent,
+            sendResult: 'not_attempted',
+            replyKind: decision.replyKind,
+            sources: decision.sources
+          });
+          continue;
+        }
+
+        const parsed = parseAIResponse(decision.reply);
+        const replyText = parsed.replyText;
+        if (!replyText) {
+          console.warn('[meta-webhook] AI response did not contain customer text');
+          continue;
+        }
+
+        // 10. Verify tenant credentials before attempting send
+        if (!tenantCreds?.accessToken || !tenantCreds?.phoneNumberId) {
+          await recordAIOutcome(admin, {
+            organizationId,
+            conversationId,
+            inboundMessageId: message.id,
+            incomingMessage: content,
+            agentId: autoReplyContext.agent.id,
+            reply: replyText,
+            replyKind: decision.replyKind,
+            providerOutcome: decision.providerOutcome,
+            providerErrorCode: decision.providerErrorCode,
+            fallbackReason: 'tenant_credentials_missing',
+            intent: decision.intent,
+            sources: decision.sources,
+            sendResult: 'failed'
+          });
+          console.error('[meta-webhook] WhatsApp tenant credentials missing for org', organizationId);
+          continue;
+        }
+
+        // 11. Send WhatsApp reply via Meta Graph API using tenant credentials
+        let sent;
+        try {
+          sent = await sendWhatsAppReply({
+            phoneNumberId: tenantCreds.phoneNumberId,
+            to: message.from,
+            body: replyText,
+            accessToken: tenantCreds.accessToken
+          });
+        } catch (sendError) {
+          await recordAIOutcome(admin, {
+            organizationId,
+            conversationId,
+            inboundMessageId: message.id,
+            incomingMessage: content,
+            agentId: autoReplyContext.agent.id,
+            reply: replyText,
+            replyKind: decision.replyKind,
+            providerOutcome: decision.providerOutcome,
+            providerErrorCode: decision.providerErrorCode,
+            fallbackReason: decision.fallbackReason || 'meta_send_failed',
+            intent: decision.intent,
+            sources: decision.sources,
+            sendResult: 'failed'
+          });
+          console.error('[meta-webhook] WhatsApp outbound send failed:', sendError?.message || sendError);
+          continue;
+        }
+
+        // 12. Save sent outbound message
+        const sentAt = new Date().toISOString();
+        const outboundWaMessageId = sent.messages?.[0]?.id || null;
+        await admin.from('messages').insert({
+          organization_id: organizationId,
+          conversation_id: conversationId,
+          lead_id: leadId,
+          wa_message_id: outboundWaMessageId,
+          sender_number: message.from,
+          sender: 'agent',
+          body: replyText,
+          message_body: replyText,
+          content: replyText,
+          message_type: 'text',
+          direction: 'outbound',
+          channel: 'whatsapp',
+          received_at: sentAt,
+          created_at: sentAt,
+          is_ai: decision.replyKind === 'ai',
+          status: 'sent'
+        });
+
+        // 13. Record successful outcome in ai_reply_logs
+        await recordAIOutcome(admin, {
+          organizationId,
+          conversationId,
+          inboundMessageId: message.id,
+          incomingMessage: content,
+          agentId: autoReplyContext.agent.id,
+          reply: replyText,
+          replyKind: decision.replyKind,
+          providerOutcome: decision.providerOutcome,
+          providerErrorCode: decision.providerErrorCode,
+          fallbackReason: decision.fallbackReason,
+          intent: decision.intent,
+          sources: decision.sources,
+          sendResult: 'sent',
+          outboundMessageId: outboundWaMessageId
+        });
+
+        // 14. Update CRM captured fields and conversation thread
+        await updateLeadFromCRM(admin, leadId, parsed.crmData);
+        await admin.from('conversations').update({
+          last_message: replyText,
+          last_timestamp: sentAt
+        }).eq('id', conversationId);
+
+      } catch (error) {
+        console.error('[meta-webhook] Inbound message processing failed:', message.id, error.message);
+      }
+    }
   }
 
-  res.setHeader('Allow', ['GET', 'POST']);
-  return res.status(405).json({ error: 'Method Not Allowed' });
+  return res.status(200).json({ received: true, stored });
 }

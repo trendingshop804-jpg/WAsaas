@@ -2,8 +2,7 @@
  * dev-server.js — NexusLead AI Local Dev Server
  * - Reads .env file (sets process.env for API handlers)
  * - Serves static files from project root on http://localhost:3001
- * - Handles /api/* routes via the single api/[slug].js dispatcher (same code
- *   path Vercel uses, including alias rewrites like /api/test-connection)
+ * - Handles /api/* routes by importing the matching api/*.js handler
  * Start with:  node dev-server.js
  */
 import fs from 'fs';
@@ -13,9 +12,20 @@ import { fileURLToPath, pathToFileURL } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = 3001;
 
-// NOTE: API routing (including alias rewrites such as /api/test-connection)
-// lives in api/[slug].js — the same single dispatcher Vercel deploys — so
-// local behaviour and production behaviour cannot drift apart.
+const API_REWRITES = {
+  'onboarding': { target: 'leads', query: { route: 'onboarding' } },
+  'test-connection': { target: 'integration-status', query: { route: 'test-connection' } },
+  'trigger-call': { target: 'integration-status', query: { route: 'trigger-call' } },
+  'send-whatsapp-followup': { target: 'daily-followup', query: { route: 'send-whatsapp-followup' } },
+  'update-whatsapp-profile': { target: 'meta-oauth-exchange', query: { route: 'update-whatsapp-profile' } },
+  'admin-companies': { target: 'admin', query: { resource: 'companies' } },
+  'admin-system': { target: 'admin', query: { resource: 'system' } },
+  'send-media': { target: 'messages', query: { route: 'send-media' } },
+  'social-conversations': { target: 'instagram', query: { action: 'social_conversations' } },
+  'wa-campaigns': { target: 'messages', query: { action: 'wa_campaigns' } },
+  'ai-agents': { target: 'ai-chat', query: { route: 'ai_agents' } },
+  'knowledge-base': { target: 'ai-chat', query: { route: 'knowledge_base' } }
+};
 
 function loadDotEnv() {
   // Match Vercel/Next conventions: .env.local overrides .env for local runs.
@@ -89,6 +99,19 @@ function readBody(req) {
 const server = http.createServer(async (nodeReq, nodeRes) => {
   const parsedUrl = new URL(nodeReq.url, `http://localhost:${PORT}`);
   const pathname = parsedUrl.pathname;
+  if (pathname === '/__nextbright_health') {
+    nodeRes.writeHead(200, { 'Content-Type': 'text/plain', 'Cache-Control': 'no-store' });
+    return nodeRes.end('nextbright-local-v1');
+  }
+  // Local app credentials and server sources must never be downloadable.
+  const segments = decodeURIComponent(pathname).replace(/\\/g, '/').split('/');
+  if (segments.some(part => part.startsWith('.')) ||
+      /\.(?:sql|db|sqlite|sqlite3|ps1|cs|exe|log)$/i.test(pathname) ||
+      ['node_modules', 'backups', 'desktop', 'scripts'].includes(segments[1]) ||
+      pathname.startsWith('/api/') && !/^\/api\/[a-z0-9_-]+\/?$/i.test(pathname)) {
+    nodeRes.writeHead(404);
+    return nodeRes.end('Not found');
+  }
   if (nodeReq.method === 'OPTIONS') {
     nodeRes.writeHead(204, {
       'Access-Control-Allow-Origin': '*',
@@ -98,16 +121,20 @@ const server = http.createServer(async (nodeReq, nodeRes) => {
     return nodeRes.end();
   }
   if (pathname.startsWith('/api/')) {
-    const fnName = pathname.replace('/api/', '').replace(/\/$/, '') || 'index';
-    // Single dispatcher: resolves real handlers and legacy aliases in one place.
-    const handlerPath = path.join(__dirname, 'api', '[slug].js');
+    let fnName = pathname.replace('/api/', '').replace(/\/$/, '') || 'index';
+    let extraQuery = {};
+    if (API_REWRITES[fnName]) {
+      extraQuery = API_REWRITES[fnName].query || {};
+      fnName = API_REWRITES[fnName].target;
+    }
+    const handlerPath = path.join(__dirname, 'api', `${fnName}.js`);
     if (!fs.existsSync(handlerPath)) {
       nodeRes.writeHead(404, { 'Content-Type': 'application/json' });
       return nodeRes.end(JSON.stringify({ error: `API handler not found: ${fnName}` }));
     }
     try {
       const body = await readBody(nodeReq);
-      const req = buildReq(nodeReq, body, parsedUrl, { slug: fnName });
+      const req = buildReq(nodeReq, body, parsedUrl, extraQuery);
       const res = buildRes(nodeRes);
       const mod = await import(`${pathToFileURL(handlerPath).href}?t=${Date.now()}`);
       const handler = mod.default || mod.handler;
@@ -150,7 +177,7 @@ const server = http.createServer(async (nodeReq, nodeRes) => {
     if (!pathname.endsWith('.js') && !pathname.endsWith('.css')) console.log(`  GET ${pathname} 200`);
   });
 });
-server.listen(PORT, () => {
+server.listen(PORT, '127.0.0.1', () => {
   console.log('\n========================================');
   console.log('  NexusLead AI - Dev Server Running');
   console.log(`  =>  http://localhost:${PORT}`);

@@ -14,6 +14,8 @@ const NB_AUTH = (() => {
   let initPromise = null;
   let overlay = null;
   let authSubscriptionReady = false;
+  let sessionCheck = null;
+  let authRevision = 0;
 
   const listeners = new Set();
 
@@ -42,18 +44,26 @@ const NB_AUTH = (() => {
         if (!projectUrl || !anonKey) throw new Error('Supabase is not configured on the server.');
         if (!window.supabase?.createClient) throw new Error('Supabase JS SDK failed to load.');
         client = window.supabase.createClient(projectUrl, anonKey, {
-          auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
+          auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, storage: window.localStorage }
         });
         if (!authSubscriptionReady) {
           authSubscriptionReady = true;
           client.auth.onAuthStateChange((_event, session) => {
+            const revision = ++authRevision;
             if (session) dismissOverlay(session, session.user);
             else showOverlay();
-            emit(session || null, session?.user || null);
+            // Subscribers may call getSession. Run them after the SDK releases
+            // its auth lock, and discard events superseded by another account.
+            setTimeout(() => {
+              if (revision === authRevision) emit(session || null, session?.user || null);
+            }, 0);
           });
         }
         return client;
-      })();
+      })().catch(error => {
+        initPromise = null;
+        throw error;
+      });
     }
     return initPromise;
   }
@@ -202,7 +212,8 @@ const NB_AUTH = (() => {
    * rather than locking the whole CRM behind a panel that cannot be dismissed.
    */
   function requireSession() {
-    return new Promise(resolve => {
+    if (sessionCheck) return sessionCheck;
+    sessionCheck = new Promise(resolve => {
       let settled = false;
       const finish = (session, user) => {
         if (settled) return;
@@ -238,7 +249,8 @@ const NB_AUTH = (() => {
           finish(null, null);
         }
       })();
-    });
+    }).finally(() => { sessionCheck = null; });
+    return sessionCheck;
   }
 
   function clearLocalSession() {

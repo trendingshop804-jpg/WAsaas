@@ -16,7 +16,8 @@ import {
 } from './_ai-reply.js';
 
 const GRAPH_VERSION = process.env.WHATSAPP_GRAPH_VERSION || 'v21.0';
-const MEDIA_TYPES = new Set(['image', 'document', 'audio', 'video', 'sticker']);
+// 'voice' is a distinct Meta type (voice notes) — treated identically to audio for media download.
+const MEDIA_TYPES = new Set(['image', 'document', 'audio', 'voice', 'video', 'sticker']);
 const STATUS_MAP = { sent: 'sent', delivered: 'delivered', read: 'read', failed: 'failed' };
 const MIME_TO_EXT = {
   'image/jpeg': 'jpg', 'image/png': 'png', 'image/gif': 'gif', 'image/webp': 'webp', 'image/svg+xml': 'svg', 'image/bmp': 'bmp', 'image/x-icon': 'ico',
@@ -59,17 +60,68 @@ function isDuplicateInbound(messageId) {
 
 export function readableContent(message) {
   const type = String(message?.type || 'unknown');
-  if (type === 'text') return typeof message.text?.body === 'string' && message.text.body.trim() ? message.text.body.trim() : 'WhatsApp text message did not include readable content.';
-  if (type === 'interactive') return message.interactive?.button_reply?.title || message.interactive?.list_reply?.title || 'Interactive WhatsApp reply without readable label.';
-  if (type === 'button') return message.button?.text || 'WhatsApp button reply without readable label.';
-  if (type === 'location') return message.location?.name || message.location?.address || (message.location ? `Location: ${message.location.latitude}, ${message.location.longitude}` : 'WhatsApp location without readable details.');
-  if (type === 'contacts') return message.contacts?.[0]?.name?.formatted_name || 'WhatsApp contact card without readable name.';
-  if (type === 'reaction') return message.reaction?.emoji ? `Reaction: ${message.reaction.emoji}` : 'WhatsApp reaction without an emoji.';
-  if (type === 'order') return message.order?.catalog_id ? `WhatsApp order from catalog ${message.order.catalog_id}.` : 'WhatsApp order received; item details were not included in the webhook.';
-  if (type === 'system') return message.system?.body || `WhatsApp system notice${message.system?.type ? `: ${message.system.type}` : ''}.`;
-  if (type === 'referral') return message.referral?.headline || message.referral?.body || message.referral?.source_url || 'WhatsApp referral received without readable details.';
-  if (MEDIA_TYPES.has(type)) return message[type]?.caption || `${type[0].toUpperCase()}${type.slice(1)} attachment (no caption).`;
-  return `Meta delivered a WhatsApp ${type} event, but no supported readable content was included.`;
+  if (type === 'text') {
+    return typeof message.text?.body === 'string' && message.text.body.trim()
+      ? message.text.body.trim()
+      : 'WhatsApp text message did not include readable content.';
+  }
+  if (type === 'interactive') {
+    const br = message.interactive?.button_reply;
+    const lr = message.interactive?.list_reply;
+    if (br?.title) return br.title;
+    if (lr?.title) return lr.title;
+    if (br?.id) return `Button reply: ${br.id}`;
+    if (lr?.id) return `List reply: ${lr.id}`;
+    return 'Interactive WhatsApp reply without readable label.';
+  }
+  if (type === 'button') {
+    return message.button?.text || message.button?.payload || 'WhatsApp button reply without readable label.';
+  }
+  if (type === 'location') {
+    const loc = message.location;
+    if (!loc) return 'WhatsApp location without readable details.';
+    const label = loc.name || loc.address || '';
+    const coords = `${loc.latitude}, ${loc.longitude}`;
+    return label ? `📍 ${label} (${coords})` : `📍 Location: ${coords}`;
+  }
+  if (type === 'contacts') {
+    const contacts = message.contacts;
+    if (!Array.isArray(contacts) || !contacts.length) return 'WhatsApp contact card without readable name.';
+    return contacts.map(c => {
+      const name = c.name?.formatted_name || c.name?.first_name || '';
+      const phone = c.phones?.[0]?.phone || '';
+      return name && phone ? `👤 ${name} (${phone})` : name ? `👤 ${name}` : phone ? `👤 ${phone}` : '👤 Shared Contact';
+    }).join(', ');
+  }
+  if (type === 'reaction') {
+    const emoji = message.reaction?.emoji;
+    return emoji ? `${emoji} Reaction` : 'WhatsApp reaction without an emoji.';
+  }
+  if (type === 'order') {
+    const order = message.order;
+    if (!order) return 'WhatsApp order received; item details were not included in the webhook.';
+    const items = Array.isArray(order.product_items) ? order.product_items.length : 0;
+    return order.catalog_id
+      ? `🛒 Order from catalog ${order.catalog_id}${items ? ` (${items} item${items !== 1 ? 's' : ''})` : ''}.`
+      : 'WhatsApp order received; item details were not included in the webhook.';
+  }
+  if (type === 'system') {
+    return message.system?.body || `WhatsApp system notice${message.system?.type ? `: ${message.system.type}` : ''}.`;
+  }
+  if (type === 'referral') {
+    return message.referral?.headline || message.referral?.body || message.referral?.source_url || 'WhatsApp referral received without readable details.';
+  }
+  if (MEDIA_TYPES.has(type)) {
+    const mediaObj = message[type] || {};
+    const caption = mediaObj.caption || '';
+    if (type === 'audio' || type === 'voice') return caption || '🎤 Voice message';
+    if (type === 'sticker') return caption || '💟 Sticker';
+    if (type === 'image') return caption || '🖼️ Image';
+    if (type === 'video') return caption || '🎬 Video';
+    if (type === 'document') return caption || (mediaObj.filename ? `📄 ${mediaObj.filename}` : '📄 Document');
+    return caption || `${type[0].toUpperCase()}${type.slice(1)} attachment.`;
+  }
+  return `📩 WhatsApp ${type} message received.`;
 }
 
 async function downloadMediaFromMeta(mediaId, accessToken) {
@@ -327,8 +379,8 @@ export default async function handler(req, res) {
           mediaInfo = await processInboundMedia(admin, message, type, message.from, tenantCreds.accessToken);
         }
 
-        const supportedTypes = ['text', 'interactive', 'button', 'location', 'contacts', 'reaction', 'order', 'system', 'referral'];
-        const messageType = isMedia || supportedTypes.includes(type) ? type : 'unsupported';
+        const supportedTypes = ['text', 'interactive', 'button', 'location', 'contacts', 'reaction', 'order', 'system', 'referral', 'unknown'];
+        const messageType = isMedia || supportedTypes.includes(type) ? type : `unknown_${type}`;
         const receivedAt = new Date().toISOString();
 
         const insertRecord = {

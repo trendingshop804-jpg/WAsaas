@@ -13,10 +13,11 @@ class AuthService {
     this.currentSession = null;
     this.supabase = null;
     this.authListeners = new Set();
-    this.initSupabaseClient();
+    this.initPromise = null;
   }
 
   initSupabaseClient() {
+    if (this.supabase) return;
     try {
       if (typeof window.supabase !== 'undefined' && window.supabaseConfig && window.supabaseConfig.isSupabaseConfigured()) {
         this.supabase = window.supabase.createClient(
@@ -37,7 +38,12 @@ class AuthService {
     }
   }
 
-  async init() {
+  init() {
+    if (!this.initPromise) this.initPromise = this.restoreSession();
+    return this.initPromise;
+  }
+
+  async restoreSession() {
     if (window.supabaseConfig?.ready) {
       await window.supabaseConfig.ready;
     }
@@ -56,11 +62,12 @@ class AuthService {
         }
 
         // Listen for auth changes (Login, Logout, Token Refresh)
-        this.supabase.auth.onAuthStateChange(async (event, session) => {
+        this.supabase.auth.onAuthStateChange((event, session) => {
           this.currentSession = session;
           this.currentUser = session ? session.user : null;
           if (session) {
-            await this.syncUserProfile();
+            // Defer database requests until the SDK releases its auth lock.
+            setTimeout(() => this.syncUserProfile(), 0);
           } else {
             this.clearLocalUser();
           }
@@ -74,23 +81,25 @@ class AuthService {
 
   async syncUserProfile() {
     if (!this.supabase || !this.currentUser) return;
+    const user = this.currentUser;
     try {
       const { data: profile, error } = await this.supabase
         .from('profiles')
         .select('id, name, email, role')
-        .eq('id', this.currentUser.id)
+        .eq('id', user.id)
         .maybeSingle();
       if (error) throw error;
       const { data: memberships, error: membershipError } = await this.supabase
         .from('organization_users')
         .select('organization_id, role, organizations(id, name, slug)')
-        .eq('user_id', this.currentUser.id)
+        .eq('user_id', user.id)
         .limit(1);
       if (membershipError) throw membershipError;
       const membership = memberships?.[0] || null;
       const organization = membership?.organizations || null;
+      if (this.currentUser !== user) return;
       this.currentUser.profile = { ...profile, organization_id: organization?.id || null, organizationRole: membership?.role || null };
-      window.appState.configureScope({ userId: this.currentUser.id, organization });
+      window.appState?.configureScope({ userId: user.id, organization });
       window.dispatchEvent(new CustomEvent('nb:workspace', { detail: { user: this.currentUser, organization, role: membership?.role || null } }));
     } catch (e) {
       console.warn('[AuthService] Could not sync database profile:', e.message);

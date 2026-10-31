@@ -5,6 +5,28 @@
   let loadEpoch = 0;
   let activeControllers = [];
   let activeScope = null;
+  const setupRequests = new Map();
+
+  function ensureWorkspace(authUser) {
+    if (!setupRequests.has(authUser.id)) {
+      // The server verifies membership before creating anything. Keep the name
+      // stable across reloads so a partially completed setup can be retried.
+      const name = String(authUser.user_metadata?.workspace_name ||
+        `${authUser.email?.split('@')[0] || 'My'} Workspace`).trim().slice(0, 100);
+      const pending = (async () => {
+        const response = await window.NB_AUTH.apiFetch('/api/onboarding', {
+          method: 'POST', body: JSON.stringify({ organizationName: name.length >= 2 ? name : 'My Workspace' })
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok && !(response.status === 409 && payload.code === 'ALREADY_PROVISIONED')) {
+          throw new Error(payload.error || 'Could not complete workspace setup. Please retry.');
+        }
+      })();
+      setupRequests.set(authUser.id, pending);
+      pending.catch(() => { if (setupRequests.get(authUser.id) === pending) setupRequests.delete(authUser.id); });
+    }
+    return setupRequests.get(authUser.id);
+  }
 
   const APP_CACHE_PREFIXES = ['nb_', 'nl_', 'nextbright_', 'nexuslead_'];
   const SCOPE_KEY = 'nextbright:local-cache-scope';
@@ -24,11 +46,8 @@
     activeControllers = [];
     const data = window.NB = window.NB || {};
     Object.assign(data, {
-      leads: [], customers: [], deals: [], calls: [], conversations: [],
-      activityFeed: [], tasks: [], appointments: [],
-      dealsStorageAvailable: undefined,
-      appointmentsStorageAvailable: undefined,
-      loadState: { leads: 'loading', tasks: 'loading', messages: 'loading', deals: 'loading', appointments: 'loading' }
+      leads: [], customers: [], deals: {}, calls: [], conversations: [],
+      activityFeed: [], tasks: [], appointments: []
     });
     window.renderRecentLeads?.();
     window.renderLeadsTable?.();
@@ -42,8 +61,6 @@
     window.renderAppointments?.();
     window.renderFunnel?.();
     window.renderConversationList?.();
-    window.renderCalendar?.();
-    window.renderReports?.();
     const messages = document.getElementById('conv-messages');
     if (messages) messages.innerHTML = '<div class="empty-state">No conversations for this organization.</div>';
     updateDashboardMetrics();
@@ -72,11 +89,7 @@
     setText('.topbar-profile-copy strong', name);
     setText('.topbar-profile-copy small, .topbar-workspace-sel span', role);
     const title = document.querySelector('.dashboard-welcome-copy .page-title');
-    if (title) {
-      const hour = new Date().getHours();
-      const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
-      title.textContent = `${greeting}, ${name}`;
-    }
+    if (title) title.textContent = `Good Morning, ${name} ??`;
     const profileName = document.getElementById('set-prof-name');
     if (profileName) profileName.value = name;
     const workspaceName = document.getElementById('set-ws-name');
@@ -102,82 +115,23 @@
 
   function updateDashboardMetrics() {
     const data = window.NB || {};
-    const state = data.loadState || {};
-
-    // '—' means the number is unknown (still loading, or the source is not
-    // available). It is never replaced by an invented figure.
     const metrics = {
-      'Total Leads': {
-        stateName: state.leads,
-        value: () => (data.leads || []).length,
-        sub: 'Current organization'
-      },
-      'Customers': {
-        stateName: state.leads,
-        value: () => (data.customers || []).length,
-        sub: 'Won or Converted leads'
-      },
-      'Calls Made': {
-        stateName: 'untracked',
-        value: () => null,
-        sub: 'Call log is not tracked yet'
-      },
-      'Messages Sent': {
-        stateName: state.messages,
-        value: () => (data.conversations || []).reduce((total, conversation) => total + (conversation.messages || []).filter(message => (message.dir || message.direction) === 'out' || message.direction === 'outbound').length, 0),
-        sub: 'Outbound messages'
-      },
-      'Appointments': {
-        stateName: state.appointments,
-        value: () => (data.appointments || []).length,
-        sub: 'Scheduled appointments',
-        unavailableSub: 'Appointments storage is not enabled yet'
-      }
+      'Total Leads': (data.leads || []).length,
+      'Customers': (data.leads || []).filter(lead => ['Won', 'Converted'].includes(lead.status)).length,
+      'Calls Made': (data.calls || []).length,
+      'Messages Sent': (data.conversations || []).reduce((total, conversation) => total + (conversation.messages || []).filter(message => (message.dir || message.direction) === 'out').length, 0),
+      'Appointments': (data.appointments || []).length
     };
-
     document.querySelectorAll('.kpi-card').forEach(card => {
       const label = card.querySelector('.kpi-label')?.textContent?.trim();
       if (!(label in metrics)) return;
-      const metric = metrics[label];
       const value = card.querySelector('.kpi-value');
       const trend = card.querySelector('.kpi-trend');
       const sub = card.querySelector('.kpi-sub');
-      const ready = metric.stateName === 'ready';
-      const loading = metric.stateName === 'loading';
-      if (value) {
-        if (loading) value.textContent = '…';
-        else if (!ready) value.textContent = '—';
-        else value.textContent = String(metric.value());
-      }
+      if (value) value.textContent = String(metrics[label]);
       if (trend) trend.style.display = 'none';
-      if (sub) {
-        if (loading) sub.textContent = 'Loading organization data…';
-        else if (metric.stateName === 'untracked') sub.textContent = metric.sub;
-        else if (metric.stateName === 'unavailable') sub.textContent = metric.unavailableSub || 'Not enabled for this workspace';
-        else if (!ready) sub.textContent = 'Could not load organization data';
-        else sub.textContent = metric.sub;
-      }
+      if (sub) sub.textContent = 'Current organization';
     });
-  }
-  window.updateWorkspaceMetrics = updateDashboardMetrics;
-
-  /* Customers are derived from persisted leads marked Won/Converted — the same
-     records the Customers KPI counts, so both views always agree. */
-  function deriveCustomers(leads) {
-    return leads
-      .filter(lead => ['Won', 'Converted'].includes(lead.status))
-      .map(lead => {
-        const revenue = lead.custom_fields && lead.custom_fields.revenue;
-        return {
-          id: lead.id,
-          name: lead.name,
-          phone: lead.phone || '',
-          company: lead.company || '',
-          revenue: revenue ? window.formatINR ? window.formatINR(Number(revenue)) : `₹${revenue}` : '—',
-          assigned: lead.assigned || 'Unassigned',
-          lastContact: lead.updated_at ? new Date(lead.updated_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : ''
-        };
-      });
   }
 
   function mapLead(lead) {
@@ -268,34 +222,23 @@
     });
   }
 
-  function mapAppointment(appointment) {
-    return {
-      ...appointment,
-      title: appointment.title || 'Appointment',
-      customer_name: appointment.customer_name || '',
-      starts_at: appointment.starts_at || null
-    };
-  }
-
   async function loadWorkspace(session, authUser) {
     emptyWorkspace();
     removeSetupCard();
     if (!session || !authUser) {
       activeScope = null;
-      lastSession = null; lastUser = null;
       updateIdentity({ setupRequired: false, user: null, role: 'Signed out' }, null);
       return;
     }
-    lastSession = session; lastUser = authUser;
     const epoch = loadEpoch;
     try {
-      const context = await requestJson('/api/leads?route=workspace', epoch);
-      if (context.setupRequired || !context.organization) {
-        clearLegacyCaches();
-        localStorage.removeItem(SCOPE_KEY);
-        showSetupCard(authUser);
-        return;
+      let context = await requestJson('/api/leads?route=workspace', epoch);
+      if (context.setupRequired === true && !context.organization) {
+        await ensureWorkspace(authUser);
+        if (epoch !== loadEpoch) return;
+        context = await requestJson('/api/leads?route=workspace', epoch);
       }
+      if (!context.organization) throw new Error('Workspace setup is not complete. Please retry.');
       const scope = `${authUser.id}:${context.organization.id}`;
       const previousScope = localStorage.getItem(SCOPE_KEY);
       if (previousScope !== scope) {
@@ -307,119 +250,36 @@
       }
       activeScope = scope;
       updateIdentity(context, authUser);
-
-      const [leadsResult, tasksResult, messagesResult, dealsResult, appointmentsResult] = await Promise.allSettled([
+      const [leadsPayload, tasksPayload, messagesPayload] = await Promise.all([
         requestJson('/api/leads?limit=200', epoch),
         requestJson('/api/tasks?show=all', epoch),
-        requestJson('/api/messages?limit=500', epoch),
-        requestJson('/api/deals?limit=200', epoch),
-        requestJson('/api/appointments?limit=200', epoch)
+        requestJson('/api/messages?limit=500', epoch)
       ]);
       if (epoch !== loadEpoch || activeScope !== scope) return;
-
-      const loadState = window.NB.loadState = window.NB.loadState || {};
-      const failures = [];
-
-      if (leadsResult.status === 'fulfilled') {
-        window.NB.leads = (leadsResult.value.leads || []).map(mapLead);
-        window.NB.customers = deriveCustomers(window.NB.leads);
-        loadState.leads = 'ready';
-      } else {
-        loadState.leads = 'error';
-        failures.push(leadsResult.reason);
-      }
-
-      if (tasksResult.status === 'fulfilled') {
-        window.NB.tasks = (tasksResult.value.tasks || []).map(mapTask);
-        loadState.tasks = 'ready';
-      } else {
-        loadState.tasks = 'error';
-        failures.push(tasksResult.reason);
-      }
-
-      if (messagesResult.status === 'fulfilled') {
-        window.NB.conversations = (messagesResult.value.conversations || []).map(mapConversation);
-        loadState.messages = 'ready';
-      } else {
-        loadState.messages = 'error';
-        failures.push(messagesResult.reason);
-      }
-
-      if (dealsResult.status === 'fulfilled') {
-        window.NB.deals = dealsResult.value.deals || [];
-        window.NB.dealsStorageAvailable = true;
-        loadState.deals = 'ready';
-      } else {
-        const reason = dealsResult.reason || {};
-        // 503 = migration not applied; 404 = endpoint not deployed yet. Neither is
-        // a data error, so both are shown as "storage not enabled" rather than a
-        // failure toast.
-        const storageMissing = reason.status === 503 || reason.status === 404;
-        window.NB.deals = [];
-        window.NB.dealsStorageAvailable = storageMissing ? false : undefined;
-        loadState.deals = storageMissing ? 'unavailable' : 'error';
-        if (!storageMissing) failures.push(reason);
-      }
-
-      if (appointmentsResult.status === 'fulfilled') {
-        window.NB.appointments = (appointmentsResult.value.appointments || []).map(mapAppointment);
-        window.NB.appointmentsStorageAvailable = true;
-        loadState.appointments = 'ready';
-      } else {
-        const reason = appointmentsResult.reason || {};
-        const storageMissing = reason.status === 503 || reason.status === 404;
-        window.NB.appointments = [];
-        window.NB.appointmentsStorageAvailable = storageMissing ? false : undefined;
-        loadState.appointments = storageMissing ? 'unavailable' : 'error';
-        if (!storageMissing) failures.push(reason);
-      }
-
+      window.NB.leads = (leadsPayload.leads || []).map(mapLead);
+      window.NB.tasks = (tasksPayload.tasks || []).map(mapTask);
+      window.NB.conversations = (messagesPayload.conversations || []).map(mapConversation);
       window.renderRecentLeads?.();
       window.renderLeadsTable?.();
       window.renderKanban?.();
-      window.renderCustomers?.();
-      window.renderDeals?.();
       window.renderTodayTasks?.();
       window.renderFullTasks?.();
-      window.renderAppointments?.();
       window.renderFunnel?.();
-      window.renderReports?.();
-      window.renderCalendar?.();
       window.renderConversationList?.();
-      window.refreshCRMCharts?.();
       updateDashboardMetrics();
       removeSetupCard();
-
-      // Surface real failures instead of silently showing empty views. One broken
-      // resource no longer wipes the data that did load.
-      failures.forEach(error => {
-        if (error?.status === 401) { window.NB_AUTH.showOverlay(); return; }
-        window.showToast?.(error?.message || 'Could not load part of your workspace data.', 'error');
-      });
     } catch (error) {
       if (error.name === 'AbortError' || epoch !== loadEpoch) return;
-      if (error.status === 401) {
-        emptyWorkspace();
-        window.NB_AUTH.showOverlay();
-        return;
-      }
-      if (error.status === 403) {
-        showSetupCard(authUser);
-        return;
-      }
-      window.NB.loadState = { leads: 'error', tasks: 'error', messages: 'error', deals: 'error', appointments: 'error' };
-      updateDashboardMetrics();
-      window.showToast?.(error.message || 'Could not load workspace data.', 'error');
+      emptyWorkspace();
+      if (error.status === 401) window.NB_AUTH.showOverlay();
+      else window.showToast?.(error.message || 'Could not load workspace data.', 'error');
     }
   }
 
-  let lastSession = null;
-  let lastUser = null;
-  window.NB_WORKSPACE = {
-    reload: () => loadWorkspace(lastSession, lastUser)
-  };
-
-  window.NB_AUTH.onAuthChange((session, user) => { loadWorkspace(session, user); });
+  window.NB_AUTH.onAuthChange((session, user) => {
+    // Never call getSession (via apiFetch) while the auth SDK holds its lock.
+    setTimeout(() => { loadWorkspace(session, user); }, 0);
+  });
   document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('sb-signout-btn')?.addEventListener('click', () => window.NB_AUTH.signOut());
     const { session, user } = await window.NB_AUTH.requireSession();

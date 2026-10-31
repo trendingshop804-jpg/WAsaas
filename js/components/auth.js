@@ -8,15 +8,17 @@ class AuthComponent {
   }
 
   async init() {
+    if (this.initialized) return;
+    this.initialized = true;
     this.bindEvents();
     if (window.supabaseConfig?.ready) {
       await window.supabaseConfig.ready;
     }
-    this.checkInitialSession();
-
     window.authService.onAuthStateChange((event, session) => {
       this.handleAuthStateChange(event, session);
     });
+    await window.authService.init();
+    this.checkInitialSession();
   }
 
   bindEvents() {
@@ -259,6 +261,8 @@ class AuthComponent {
     const appShell = document.getElementById('app-shell');
     const userProfileEl = document.getElementById('sidebar-user-name');
     const user = window.authService.getUser();
+    const entering = this.activeUserId !== user?.id;
+    this.activeUserId = user?.id;
 
     if (authWrapper) authWrapper.style.display = 'none';
     if (appShell) appShell.style.display = 'flex';
@@ -267,12 +271,13 @@ class AuthComponent {
       userProfileEl.textContent = user.profile?.name || user.name || user.email?.split('@')[0] || 'User';
     }
 
-    if (window.navigationComponent && typeof window.navigationComponent.switchView === 'function') {
+    if (entering && window.navigationComponent && typeof window.navigationComponent.switchView === 'function') {
       window.navigationComponent.switchView('dashboard');
     }
   }
 
   showAuthScreen() {
+    this.activeUserId = null;
     const authWrapper = document.getElementById('auth-fullscreen-wrapper');
     const appShell = document.getElementById('app-shell');
 

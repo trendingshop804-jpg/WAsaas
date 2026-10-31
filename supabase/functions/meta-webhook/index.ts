@@ -12,7 +12,8 @@ const supabaseUrl       = Deno.env.get("SUPABASE_URL") ?? "";
 const openRouterApiKey  = Deno.env.get("OPENROUTER_API_KEY") ?? "";
 const openRouterModel   = Deno.env.get("OPENROUTER_MODEL") ?? "openai/gpt-4o-mini";
 
-const MEDIA_TYPES = ["image", "video", "audio", "document", "sticker"];
+// 'voice' is a distinct Meta type (voice notes) — treated identically to audio for media download.
+const MEDIA_TYPES = ["image", "video", "audio", "voice", "document", "sticker"];
 
 const MIME_TO_EXT: Record<string, string> = {
   "image/jpeg": "jpg", "image/png": "png", "image/gif": "gif", "image/webp": "webp", "image/svg+xml": "svg", "image/bmp": "bmp", "image/x-icon": "ico",
@@ -589,19 +590,39 @@ async function handler(request: Request): Promise<Response> {
         if (type === "text") {
           displayContent = msg.text?.body ?? "";
         } else if (type === "interactive") {
-          displayContent = msg.interactive?.button_reply?.title || msg.interactive?.list_reply?.title || msg.interactive?.button_reply?.id || "Interactive Reply";
+          const br = msg.interactive?.button_reply;
+          const lr = msg.interactive?.list_reply;
+          displayContent = br?.title || lr?.title || (br?.id ? `Button reply: ${br.id}` : lr?.id ? `List reply: ${lr.id}` : "Interactive Reply");
         } else if (type === "button") {
           displayContent = msg.button?.text || msg.button?.payload || "Button Reply";
         } else if (type === "location") {
           const loc = msg.location;
-          displayContent = loc ? `ðŸ“ Location: ${loc.name || loc.address || (loc.latitude + ', ' + loc.longitude)}` : "ðŸ“ Shared Location";
+          if (loc) {
+            const label = loc.name || loc.address || "";
+            const coords = `${loc.latitude}, ${loc.longitude}`;
+            displayContent = label ? `📍 ${label} (${coords})` : `📍 Location: ${coords}`;
+          } else {
+            displayContent = "📍 Shared Location";
+          }
         } else if (type === "contacts") {
-          const c = msg.contacts?.[0];
-          displayContent = c ? `ðŸ‘¤ Contact: ${c.name?.formatted_name || c.phones?.[0]?.phone || 'Shared Contact'}` : "ðŸ‘¤ Shared Contact";
+          if (msg.contacts && msg.contacts.length > 0) {
+            displayContent = msg.contacts.map((c: any) => {
+              const name = c.name?.formatted_name || c.name?.first_name || "";
+              const phone = c.phones?.[0]?.phone || "";
+              return name && phone ? `👤 ${name} (${phone})` : name ? `👤 ${name}` : phone ? `👤 ${phone}` : "👤 Shared Contact";
+            }).join(", ");
+          } else {
+            displayContent = "👤 Shared Contact";
+          }
         } else if (type === "reaction") {
-          displayContent = msg.reaction?.emoji ? `Reaction: ${msg.reaction.emoji}` : "Reaction";
+          const emoji = msg.reaction?.emoji;
+          displayContent = emoji ? `${emoji} Reaction` : "Reaction";
         } else if (type === "order") {
-          displayContent = msg.order?.catalog_id ? `WhatsApp order from catalog ${msg.order.catalog_id}.` : "WhatsApp order received; item details were not included in the webhook.";
+          const order = msg.order;
+          const items = Array.isArray(order?.product_items) ? order.product_items.length : 0;
+          displayContent = order?.catalog_id
+            ? `🛒 Order from catalog ${order.catalog_id}${items ? ` (${items} item${items !== 1 ? "s" : ""})` : ""}.`
+            : "WhatsApp order received; item details were not included in the webhook.";
         } else if (type === "system") {
           displayContent = msg.system?.body || `WhatsApp system notice${msg.system?.type ? `: ${msg.system.type}` : ""}.`;
         } else if (type === "referral") {
@@ -609,9 +630,22 @@ async function handler(request: Request): Promise<Response> {
         } else if (isMedia) {
           mediaInfo      = await processInboundMedia(msg, type, supabaseAdmin);
           caption        = msg[type]?.caption || "";
-          displayContent = caption || (type === "audio" || type === "voice" ? "ðŸŽ¤ Voice message" : type === "sticker" ? "ðŸ©· Sticker" : `ðŸ“Ž ${type} message`);
+          if (type === "audio" || type === "voice") {
+            displayContent = caption || "🎤 Voice message";
+          } else if (type === "sticker") {
+            displayContent = caption || "💟 Sticker";
+          } else if (type === "image") {
+            displayContent = caption || "🖼️ Image";
+          } else if (type === "video") {
+            displayContent = caption || "🎬 Video";
+          } else if (type === "document") {
+            const docObj = msg[type] || {};
+            displayContent = caption || (docObj.filename ? `📄 ${docObj.filename}` : "📄 Document");
+          } else {
+            displayContent = caption || `📎 ${type} message`;
+          }
         } else {
-          displayContent = `Meta delivered a WhatsApp ${type} event, but no supported readable content was included.`;
+          displayContent = `📩 WhatsApp ${type} message received.`;
         }
 
         if (!displayContent) {
