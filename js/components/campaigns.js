@@ -17,6 +17,15 @@ class CampaignsComponent {
       newCampBtn.addEventListener('click', () => this.openCampaignModal());
     }
 
+    // Import CSV button
+    const importCsvBtn = document.getElementById('camp-import-csv-btn');
+    if (importCsvBtn) {
+      importCsvBtn.addEventListener('click', () => {
+        const fileInput = document.getElementById('csv-file-input');
+        if (fileInput) fileInput.click();
+      });
+    }
+
     // Campaign Wizard Form Submit
     const campForm = document.getElementById('new-campaign-form');
     if (campForm) {
