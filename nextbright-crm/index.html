@@ -2537,8 +2537,13 @@ curl -X POST https://your-domain.com/api/leads \
           </select>
         </div>
         <div style="margin-bottom:12px;">
+          <label class="form-label" style="font-size:0.85rem;font-weight:600;">Upload File from Device</label>
+          <input type="file" id="upload-media-file" class="form-control" accept="image/*,video/*,application/pdf">
+        </div>
+        <div style="text-align:center;font-size:0.75rem;color:var(--text-muted);margin-bottom:8px;">— OR ENTER PUBLIC URL —</div>
+        <div style="margin-bottom:12px;">
           <label class="form-label" style="font-size:0.85rem;font-weight:600;">Direct File URL or Public Link</label>
-          <input type="url" id="upload-media-url" class="form-control" placeholder="https://images.unsplash.com/photo-..." required>
+          <input type="url" id="upload-media-url" class="form-control" placeholder="https://images.unsplash.com/photo-...">
         </div>
         <div style="margin-bottom:16px;">
           <label class="form-label" style="font-size:0.85rem;font-weight:600;">Tags (comma-separated)</label>

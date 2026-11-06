@@ -282,29 +282,50 @@
     const title = document.getElementById('upload-media-title')?.value.trim();
     const type = document.getElementById('upload-media-type')?.value || 'image';
     const folder = document.getElementById('upload-media-folder')?.value || 'marketing';
-    const url = document.getElementById('upload-media-url')?.value.trim();
+    const urlInput = document.getElementById('upload-media-url')?.value.trim();
     const tags = (document.getElementById('upload-media-tags')?.value || '').split(',').map(t => t.trim()).filter(Boolean);
+    const fileInput = document.getElementById('upload-media-file');
+    const localFile = fileInput?.files?.[0];
 
-    if (!title || !url) return;
+    const saveAsset = (assetUrl, assetSize = '1.5 MB') => {
+      const assets = getAssets();
+      const assetTitle = title || (localFile ? localFile.name.replace(/\.[^/.]+$/, '') : 'Media Asset');
+      const newAsset = {
+        id: 'asset-' + Date.now(),
+        title: assetTitle,
+        file_type: type,
+        url: assetUrl,
+        size: assetSize,
+        dimensions: type === 'video' ? '1080 x 1920' : '1920 x 1080',
+        folder,
+        tags,
+        created_at: new Date().toISOString()
+      };
 
-    const assets = getAssets();
-    const newAsset = {
-      id: 'asset-' + Date.now(),
-      title,
-      file_type: type,
-      url,
-      size: '1.5 MB',
-      dimensions: type === 'video' ? '1080 x 1920' : '1920 x 1080',
-      folder,
-      tags,
-      created_at: new Date().toISOString()
+      assets.unshift(newAsset);
+      saveAssets(assets);
+      closeUploadModal();
+      renderAssetsGrid();
+      document.getElementById('form-upload-media')?.reset();
+      if (window.showToast) window.showToast(`Asset "${assetTitle}" added to Content Library!`, 'success');
     };
 
-    assets.unshift(newAsset);
-    saveAssets(assets);
-    closeUploadModal();
-    renderAssetsGrid();
-    if (window.showToast) window.showToast('Asset uploaded successfully!', 'success');
+    if (localFile) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const sizeStr = (localFile.size / (1024 * 1024)).toFixed(1) + ' MB';
+        saveAsset(event.target.result, sizeStr);
+      };
+      reader.readAsDataURL(localFile);
+      return;
+    }
+
+    if (!urlInput) {
+      if (window.showToast) window.showToast('Please select a file to upload or enter a URL.', 'error');
+      return;
+    }
+
+    saveAsset(urlInput);
   }
 
   function handleFolderSubmit(e) {

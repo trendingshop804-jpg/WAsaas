@@ -276,10 +276,19 @@
     }
   }
 
+  window.NB_WORKSPACE = {
+    reload: async () => {
+      const client = await window.NB_AUTH?.getClient?.();
+      const { data } = await client?.auth?.getSession?.() || {};
+      return loadWorkspace(data?.session || null, data?.session?.user || null);
+    }
+  };
+
   window.NB_AUTH.onAuthChange((session, user) => {
     // Never call getSession (via apiFetch) while the auth SDK holds its lock.
     setTimeout(() => { loadWorkspace(session, user); }, 0);
   });
+
   document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('sb-signout-btn')?.addEventListener('click', () => window.NB_AUTH.signOut());
     const { session, user } = await window.NB_AUTH.requireSession();

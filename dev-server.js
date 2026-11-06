@@ -116,7 +116,7 @@ const server = http.createServer(async (nodeReq, nodeRes) => {
     nodeRes.writeHead(204, {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-API-Key, apikey, api-key, x-api-token'
     });
     return nodeRes.end();
   }
@@ -127,8 +127,10 @@ const server = http.createServer(async (nodeReq, nodeRes) => {
       extraQuery = API_REWRITES[fnName].query || {};
       fnName = API_REWRITES[fnName].target;
     }
-    const handlerPath = path.join(__dirname, 'api', `${fnName}.js`);
-    if (!fs.existsSync(handlerPath)) {
+    const serverPath = path.join(__dirname, 'server', 'api', `${fnName}.js`);
+    const rootApiPath = path.join(__dirname, 'api', `${fnName}.js`);
+    const handlerPath = fs.existsSync(serverPath) ? serverPath : (fs.existsSync(rootApiPath) ? rootApiPath : null);
+    if (!handlerPath) {
       nodeRes.writeHead(404, { 'Content-Type': 'application/json' });
       return nodeRes.end(JSON.stringify({ error: `API handler not found: ${fnName}` }));
     }

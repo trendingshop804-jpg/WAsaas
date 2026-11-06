@@ -27,7 +27,13 @@
   };
 
   /* ---- Auth helper ---- */
-  function getAuthToken() {
+  async function getAuthToken() {
+    if (window.NB_AUTH?.getAccessToken) {
+      try {
+        const token = await window.NB_AUTH.getAccessToken();
+        if (token) return token;
+      } catch (_) {}
+    }
     return window.supabaseConfig?.accessToken
       || localStorage.getItem('sb-access-token')
       || '';
@@ -35,7 +41,20 @@
 
   /* ---- API helpers ---- */
   async function apiFetch(path, opts = {}) {
-    const token = getAuthToken();
+    if (window.NB_AUTH?.apiFetch) {
+      try {
+        const res = await window.NB_AUTH.apiFetch(path, {
+          headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) },
+          ...opts,
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || `API error ${res.status}`);
+        return data;
+      } catch (err) {
+        // Fall back to direct fetch if NB_AUTH.apiFetch throws
+      }
+    }
+    const token = await getAuthToken();
     const res = await fetch(path, {
       headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(opts.headers || {}) },
       ...opts,

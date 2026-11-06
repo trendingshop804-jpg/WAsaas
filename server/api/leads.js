@@ -82,28 +82,107 @@ export default async function handler(req, res) {
   }
   const body = parseBody(req);
   if (req.method === 'POST') {
-    const name = String(body.contactName || body.contact_name || body.name || '').trim(), phone = String(body.phone || body.phoneNumber || '').trim(), phoneNormalized = phone ? normalizePhone(phone) : null, email = String(body.email || '').trim().toLowerCase() || null;
-    const status = cleanChoice(body.status, LEAD_STATUSES, 'New'), source = cleanChoice(body.source, LEAD_SOURCES, 'Manual');
-    if (!name) return res.status(400).json({ error: 'Lead name is required.' }); if (phone && !phoneNormalized) return res.status(400).json({ error: 'Enter a valid phone number with 7�15 digits.' }); if (!phone && !email) return res.status(400).json({ error: 'A phone number or email address is required.' }); if (email && !/^\S+@\S+\.\S+$/.test(email)) return res.status(400).json({ error: 'Enter a valid email address.' }); if (!status || !source) return res.status(400).json({ error: 'Invalid lead status or source.' });
+    const fullName = [body.first_name, body.last_name].filter(Boolean).join(' ').trim();
+    const name = String(body.contactName || body.contact_name || body.name || body.full_name || fullName || '').trim();
+    const phone = String(body.phone || body.phoneNumber || body.phone_number || body.mobile || body.tel || body.telephone || body.whatsapp || '').trim();
+    const phoneNormalized = phone ? normalizePhone(phone) : null;
+    const email = String(body.email || '').trim().toLowerCase() || null;
+    const companyName = String(body.companyName || body.company_name || body.company || body.organization || '').trim() || null;
+
+    const rawStatus = body.status ? String(body.status).trim() : 'New';
+    const statusMap = { new: 'New', contacted: 'Contacted', replied: 'Replied', qualified: 'Qualified', won: 'Won', lost: 'Lost' };
+    const status = statusMap[rawStatus.toLowerCase()] || 'New';
+
+    const rawSource = body.source ? String(body.source).trim() : (access.isApiKey ? 'API' : 'Manual');
+    const sourceMap = { manual: 'Manual', whatsapp: 'WhatsApp', import: 'Import', api: 'API' };
+    const source = sourceMap[rawSource.toLowerCase()] || (access.isApiKey ? 'API' : 'Manual');
+
+    if (!name) return res.status(400).json({ error: 'Lead name is required.' });
+    if (phone && !phoneNormalized) return res.status(400).json({ error: 'Enter a valid phone number with 7–15 digits.' });
+    if (!phone && !email) return res.status(400).json({ error: 'A phone number or email address is required.' });
+    if (email && !/^\S+@\S+\.\S+$/.test(email)) return res.status(400).json({ error: 'Enter a valid email address.' });
+
     try {
-      if (await phoneExists(admin, access.organizationId, phoneNormalized)) return res.status(409).json({ error: 'A lead with this phone number already exists in your organization.', code: 'DUPLICATE_PHONE' });
+      if (phoneNormalized && (await phoneExists(admin, access.organizationId, phoneNormalized))) {
+        return res.status(409).json({ error: 'A lead with this phone number already exists in your organization.', code: 'DUPLICATE_PHONE' });
+      }
       const withScore = await detectScoreColumn(admin);
-      const row = { organization_id: access.organizationId, contact_name: name, company_name: String(body.companyName || body.company_name || body.company || '').trim() || null, phone: phone || null, phone_normalized: phoneNormalized, email, status, source, assigned_agent_id: body.assignedAgentId || body.assigned_agent_id || null, next_followup_at: body.nextFollowUpAt || body.next_followup_at || null, notes: String(body.notes || '').trim() || null, custom_fields: typeof body.customFields === 'object' && body.customFields ? body.customFields : {} };
+      const row = {
+        organization_id: access.organizationId,
+        contact_name: name,
+        company_name: companyName,
+        phone: phone || null,
+        phone_normalized: phoneNormalized,
+        email,
+        status,
+        source,
+        assigned_agent_id: body.assignedAgentId || body.assigned_agent_id || null,
+        next_followup_at: body.nextFollowUpAt || body.next_followup_at || null,
+        notes: String(body.notes || '').trim() || null,
+        custom_fields: typeof body.customFields === 'object' && body.customFields ? body.customFields : (typeof body.custom_fields === 'object' && body.custom_fields ? body.custom_fields : {})
+      };
       if (withScore) row.score = Number.parseInt(body.score, 10) || 0;
-      const { data, error } = await admin.from('leads').insert(row).select(fields(withScore)).single(); if (error) { if (error.code === '23505') return res.status(409).json({ error: 'A lead with this phone number already exists in your organization.', code: 'DUPLICATE_PHONE' }); throw error; } return res.status(201).json({ success: true, lead: data });
-    } catch (error) { console.error('[leads] create:', error.message); return res.status(500).json({ error: 'Could not create lead.' }); }
+      const { data, error } = await admin.from('leads').insert(row).select(fields(withScore)).single();
+      if (error) {
+        if (error.code === '23505') return res.status(409).json({ error: 'A lead with this phone number already exists in your organization.', code: 'DUPLICATE_PHONE' });
+        throw error;
+      }
+      return res.status(201).json({ success: true, lead: data });
+    } catch (error) {
+      console.error('[leads] create:', error.message);
+      return res.status(500).json({ error: 'Could not create lead.' });
+    }
   }
   if (req.method === 'PATCH' || req.method === 'PUT') {
-    const id = String(query.id || body.id || '').trim(); if (!id) return res.status(400).json({ error: 'Lead id is required.' }); const updates = { updated_at: new Date().toISOString() };
-    if ('contactName' in body || 'contact_name' in body || 'name' in body) { updates.contact_name = String(body.contactName || body.contact_name || body.name || '').trim(); if (!updates.contact_name) return res.status(400).json({ error: 'Lead name is required.' }); }
-    if ('phone' in body || 'phoneNumber' in body) { const phone = String(body.phone || body.phoneNumber || '').trim(), normalized = phone ? normalizePhone(phone) : null; if (phone && !normalized) return res.status(400).json({ error: 'Enter a valid phone number with 7�15 digits.' }); try { if (await phoneExists(admin, access.organizationId, normalized, id)) return res.status(409).json({ error: 'A lead with this phone number already exists in your organization.', code: 'DUPLICATE_PHONE' }); } catch { return res.status(500).json({ error: 'Could not validate phone number.' }); } updates.phone = phone || null; updates.phone_normalized = normalized; }
-    if ('email' in body) { const email = String(body.email || '').trim().toLowerCase(); if (email && !/^\S+@\S+\.\S+$/.test(email)) return res.status(400).json({ error: 'Enter a valid email address.' }); updates.email = email || null; }
-    if ('companyName' in body || 'company_name' in body || 'company' in body) updates.company_name = String(body.companyName || body.company_name || body.company || '').trim() || null;
-    if ('status' in body) { const status = cleanChoice(body.status, LEAD_STATUSES); if (!status) return res.status(400).json({ error: 'Invalid lead status.' }); updates.status = status; }
-    if ('source' in body) { const source = cleanChoice(body.source, LEAD_SOURCES); if (!source) return res.status(400).json({ error: 'Invalid lead source.' }); updates.source = source; }
-    [['assignedAgentId','assigned_agent_id'],['assigned_agent_id','assigned_agent_id'],['nextFollowUpAt','next_followup_at'],['next_followup_at','next_followup_at'],['notes','notes']].forEach(([input,column]) => { if (input in body) updates[column] = body[input] || null; });
+    const id = String(query.id || body.id || '').trim();
+    if (!id) return res.status(400).json({ error: 'Lead id is required.' });
+    const updates = { updated_at: new Date().toISOString() };
+    const fullName = [body.first_name, body.last_name].filter(Boolean).join(' ').trim();
+    const nameCandidate = String(body.contactName || body.contact_name || body.name || body.full_name || fullName || '').trim();
+    if (nameCandidate) updates.contact_name = nameCandidate;
+
+    const phoneCandidate = String(body.phone || body.phoneNumber || body.phone_number || body.mobile || body.tel || '').trim();
+    if (phoneCandidate) {
+      const normalized = normalizePhone(phoneCandidate);
+      if (!normalized) return res.status(400).json({ error: 'Enter a valid phone number with 7–15 digits.' });
+      try {
+        if (await phoneExists(admin, access.organizationId, normalized, id)) {
+          return res.status(409).json({ error: 'A lead with this phone number already exists in your organization.', code: 'DUPLICATE_PHONE' });
+        }
+      } catch {
+        return res.status(500).json({ error: 'Could not validate phone number.' });
+      }
+      updates.phone = phoneCandidate;
+      updates.phone_normalized = normalized;
+    }
+    if ('email' in body) {
+      const email = String(body.email || '').trim().toLowerCase();
+      if (email && !/^\S+@\S+\.\S+$/.test(email)) return res.status(400).json({ error: 'Enter a valid email address.' });
+      updates.email = email || null;
+    }
+    if ('companyName' in body || 'company_name' in body || 'company' in body || 'organization' in body) {
+      updates.company_name = String(body.companyName || body.company_name || body.company || body.organization || '').trim() || null;
+    }
+    if ('status' in body) {
+      const statusMap = { new: 'New', contacted: 'Contacted', replied: 'Replied', qualified: 'Qualified', won: 'Won', lost: 'Lost' };
+      const status = statusMap[String(body.status).trim().toLowerCase()];
+      if (!status) return res.status(400).json({ error: 'Invalid lead status.' });
+      updates.status = status;
+    }
+    if ('source' in body) {
+      const sourceMap = { manual: 'Manual', whatsapp: 'WhatsApp', import: 'Import', api: 'API' };
+      const source = sourceMap[String(body.source).trim().toLowerCase()];
+      if (!source) return res.status(400).json({ error: 'Invalid lead source.' });
+      updates.source = source;
+    }
+    [['assignedAgentId','assigned_agent_id'],['assigned_agent_id','assigned_agent_id'],['nextFollowUpAt','next_followup_at'],['next_followup_at','next_followup_at'],['notes','notes']].forEach(([input,column]) => {
+      if (input in body) updates[column] = body[input] || null;
+    });
     const withScore = await detectScoreColumn(admin);
-    const { data, error } = await admin.from('leads').update(updates).eq('id', id).eq('organization_id', access.organizationId).select(fields(withScore)).maybeSingle(); if (error) return res.status(500).json({ error: 'Could not update lead.' }); if (!data) return res.status(404).json({ error: 'Lead not found.' }); return res.status(200).json({ success: true, lead: data });
+    const { data, error } = await admin.from('leads').update(updates).eq('id', id).eq('organization_id', access.organizationId).select(fields(withScore)).maybeSingle();
+    if (error) return res.status(500).json({ error: 'Could not update lead.' });
+    if (!data) return res.status(404).json({ error: 'Lead not found.' });
+    return res.status(200).json({ success: true, lead: data });
   }
   if (req.method === 'DELETE') { const id = String(query.id || body.id || '').trim(); if (!id) return res.status(400).json({ error: 'Lead id is required.' }); const { error } = await admin.from('leads').delete().eq('id', id).eq('organization_id', access.organizationId); if (error) return res.status(500).json({ error: 'Could not delete lead.' }); return res.status(200).json({ success: true }); }
   return res.status(405).json({ error: 'Method not allowed.' });

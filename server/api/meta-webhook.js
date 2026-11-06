@@ -1,5 +1,5 @@
-// api/meta-webhook.js
 import { createSupabaseAdminClient, missingSupabaseServerConfig } from './_supabase.js';
+import { decryptToken } from './_crypto.js';
 import {
   isOptOut,
   pauseLeadFollowUp,
@@ -192,15 +192,16 @@ async function processInboundMedia(admin, msg, mediaType, senderNumber, accessTo
   }
 }
 
-async function findOrCreateLead(admin, organizationId, sender, contactName) {
+async function findOrCreateLead(admin, organizationId, sender, contactName, source = 'WhatsApp') {
   const normalized = digits(sender);
   const { data: existing } = await admin
     .from('leads')
     .select('id, name, contact_name, phone, phone_normalized')
     .eq('organization_id', organizationId);
 
-  // Exact normalized match or valid international formatting match
+  // Exact normalized match, phone string match, or valid international formatting match
   const matched = (existing || []).find(lead => {
+    if (lead.phone && lead.phone === sender) return true;
     const pDigits = digits(lead.phone_normalized || lead.phone);
     if (!pDigits || !normalized) return false;
     if (pDigits === normalized) return true;
@@ -219,13 +220,13 @@ async function findOrCreateLead(admin, organizationId, sender, contactName) {
   });
 
   if (matched?.id) {
-    if (contactName && (!matched.contact_name || matched.contact_name.includes('WhatsApp contact') || matched.contact_name.includes('WhatsApp Lead'))) {
+    if (contactName && (!matched.contact_name || matched.contact_name.includes('contact') || matched.contact_name.includes('Lead'))) {
       await admin.from('leads').update({ contact_name: contactName }).eq('id', matched.id);
     }
     return matched.id;
   }
 
-  const name = contactName || `WhatsApp contact (+${sender})`;
+  const name = contactName || `${source} contact (${sender})`;
   const { data, error } = await admin
     .from('leads')
     .insert({
@@ -233,8 +234,8 @@ async function findOrCreateLead(admin, organizationId, sender, contactName) {
       name,
       contact_name: name,
       phone: sender,
-      phone_normalized: normalized,
-      source: 'WhatsApp',
+      phone_normalized: normalized || sender,
+      source,
       status: 'Replied'
     })
     .select('id')
@@ -245,7 +246,7 @@ async function findOrCreateLead(admin, organizationId, sender, contactName) {
       .from('leads')
       .select('id')
       .eq('organization_id', organizationId)
-      .eq('phone_normalized', normalized)
+      .eq('phone_normalized', normalized || sender)
       .maybeSingle();
     return retry.data?.id || null;
   }
@@ -253,13 +254,13 @@ async function findOrCreateLead(admin, organizationId, sender, contactName) {
   return data?.id || null;
 }
 
-async function findOrCreateConversation(admin, organizationId, leadId) {
+async function findOrCreateConversation(admin, organizationId, leadId, channel = 'whatsapp') {
   const { data: current } = await admin
     .from('conversations')
     .select('id, mode')
     .eq('organization_id', organizationId)
     .eq('lead_id', leadId)
-    .eq('channel', 'whatsapp')
+    .eq('channel', channel)
     .maybeSingle();
 
   if (current?.id) return { id: current.id, mode: current.mode || 'AI' };
@@ -269,7 +270,7 @@ async function findOrCreateConversation(admin, organizationId, leadId) {
     .insert({
       organization_id: organizationId,
       lead_id: leadId,
-      channel: 'whatsapp',
+      channel,
       mode: 'AI',
       unread_count: 0
     })
@@ -278,6 +279,232 @@ async function findOrCreateConversation(admin, organizationId, leadId) {
 
   if (error) throw error;
   return { id: data?.id || null, mode: data?.mode || 'AI' };
+}
+
+function matchesKeyword(text, keyword, matchType = 'contains') {
+  if (!text || !keyword) return false;
+  const t = String(text).toLowerCase().trim();
+  const k = String(keyword).toLowerCase().trim();
+  if (matchType === 'exact') return t === k;
+  return t.includes(k);
+}
+
+async function getInstagramConnection(admin, entryId) {
+  if (!entryId) return null;
+  const { data: list } = await admin
+    .from('instagram_connections')
+    .select('*')
+    .eq('is_active', true)
+    .or(`instagram_business_id.eq.${entryId},page_id.eq.${entryId}`)
+    .limit(1);
+  return list?.[0] || null;
+}
+
+async function handleInstagramComment(admin, entry, change, igConnection) {
+  const organizationId = igConnection.organization_id;
+  const comment = change.value || {};
+  const commentId = comment.id;
+  const text = comment.text || '';
+  const fromId = comment.from?.id;
+  const fromUsername = comment.from?.username || '';
+  const mediaId = comment.media?.id;
+
+  if (!commentId) return;
+
+  const { data: savedComment, error: commentErr } = await admin
+    .from('instagram_comments')
+    .upsert({
+      organization_id: organizationId,
+      ig_comment_id: commentId,
+      ig_media_id: mediaId || 'unknown',
+      from_id: fromId || 'unknown',
+      from_username: fromUsername,
+      text,
+      created_at: new Date().toISOString(),
+    }, { onConflict: 'ig_comment_id' })
+    .select()
+    .single();
+
+  if (commentErr) {
+    console.error('[Instagram Webhook] Error persisting comment:', commentErr.message);
+  }
+
+  const rawToken = await decryptToken(igConnection.access_token_encrypted);
+  if (!rawToken) {
+    console.error('[Instagram Webhook] Decrypted access token unavailable for org:', organizationId);
+    return;
+  }
+
+  // 1. Check and Trigger Public Auto-Reply Rules
+  if (!savedComment?.replied_publicly) {
+    const { data: replyRules } = await admin
+      .from('instagram_reply_rules')
+      .select('*')
+      .eq('organization_id', organizationId)
+      .eq('is_active', true);
+
+    for (const rule of replyRules || []) {
+      if (rule.media_id && mediaId && rule.media_id !== mediaId) continue;
+      if (matchesKeyword(text, rule.trigger_keyword, rule.match_type)) {
+        try {
+          const replyRes = await fetch(`https://graph.facebook.com/v22.0/${commentId}/replies`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              message: rule.reply_message,
+              access_token: rawToken,
+            }),
+          });
+          if (replyRes.ok) {
+            await admin
+              .from('instagram_comments')
+              .update({ replied_publicly: true })
+              .eq('ig_comment_id', commentId);
+
+            await admin
+              .from('instagram_reply_rules')
+              .update({ reply_count: (rule.reply_count || 0) + 1 })
+              .eq('id', rule.id);
+          }
+        } catch (err) {
+          console.error('[Instagram Auto-Reply Fetch Error]:', err.message);
+        }
+        break;
+      }
+    }
+  }
+
+  // 2. Check and Queue Private Auto-DM Rules (Comment-to-DM)
+  if (!savedComment?.replied_privately && fromId) {
+    const { data: dmRules } = await admin
+      .from('instagram_dm_rules')
+      .select('*')
+      .eq('organization_id', organizationId)
+      .eq('is_active', true);
+
+    for (const rule of dmRules || []) {
+      if (rule.media_id && mediaId && rule.media_id !== mediaId) continue;
+      if (matchesKeyword(text, rule.trigger_keyword, rule.match_type)) {
+        await admin
+          .from('instagram_dm_queue')
+          .insert({
+            organization_id: organizationId,
+            rule_id: rule.id,
+            comment_id: commentId,
+            recipient_id: fromId,
+            recipient_username: fromUsername,
+            message_text: rule.dm_message,
+            status: 'pending',
+            scheduled_at: new Date().toISOString(),
+          });
+        break;
+      }
+    }
+  }
+}
+
+async function handleInstagramDirectMessage(admin, entry, messagingItem, igConnection) {
+  const organizationId = igConnection.organization_id;
+  const senderId = messagingItem.sender?.id;
+  const recipientId = messagingItem.recipient?.id;
+  const message = messagingItem.message || {};
+  const messageId = message.mid;
+  const isEcho = Boolean(message.is_echo || senderId === igConnection.instagram_business_id);
+  const direction = isEcho ? 'outbound' : 'inbound';
+
+  if (!messageId) return false;
+  if (isDuplicateInbound(messageId)) return false;
+
+  const leadContactId = direction === 'inbound' ? senderId : recipientId;
+  const leadId = await findOrCreateLead(admin, organizationId, leadContactId, `Instagram User (${leadContactId})`, 'Instagram');
+  if (!leadId) {
+    console.error('[Instagram Webhook] Could not resolve lead for message:', messageId);
+    return false;
+  }
+
+  const conv = await findOrCreateConversation(admin, organizationId, leadId, 'instagram');
+  const conversationId = conv?.id;
+
+  const attachments = Array.isArray(message.attachments) ? message.attachments : [];
+  const hasAttachment = attachments.length > 0;
+  let mediaUrl = null;
+  let mediaMimeType = null;
+  let fileName = null;
+  let mediaSize = 0;
+  let messageType = 'text';
+
+  if (hasAttachment) {
+    const att = attachments[0];
+    messageType = att.type || 'image';
+    const downloadUrl = att.payload?.url;
+    if (downloadUrl) {
+      try {
+        const downloadRes = await fetch(downloadUrl);
+        if (downloadRes.ok) {
+          const buffer = await downloadRes.arrayBuffer();
+          mediaMimeType = downloadRes.headers?.get?.('content-type') || (messageType === 'image' ? 'image/jpeg' : 'application/octet-stream');
+          fileName = `${messageId}_ig.${extFromMime(mediaMimeType)}`;
+          mediaSize = buffer.byteLength;
+          mediaUrl = await uploadMediaToStorage(admin, leadContactId, messageId, fileName, mediaMimeType, buffer);
+        }
+      } catch (dlErr) {
+        console.warn('[Instagram Webhook] Media download error:', dlErr.message);
+      }
+    }
+  }
+
+  const messageText = message.text || (hasAttachment ? (messageType === 'image' ? '🖼️ Photo' : '📎 Attachment') : '');
+  const receivedAt = new Date(messagingItem.timestamp || Date.now()).toISOString();
+
+  const insertRecord = {
+    organization_id: organizationId,
+    lead_id: leadId,
+    conversation_id: conversationId,
+    wa_message_id: messageId,
+    sender_number: senderId,
+    direction,
+    channel: 'instagram',
+    message_type: messageType,
+    content: messageText,
+    body: messageText,
+    message_body: messageText,
+    media_url: mediaUrl,
+    media_mime_type: mediaMimeType,
+    file_name: fileName,
+    media_size: mediaSize,
+    status: 'delivered',
+    received_at: receivedAt
+  };
+
+  const { error: insertErr } = await admin.from('messages').insert(insertRecord);
+  if (insertErr && insertErr.code !== '23505') {
+    console.error('[Instagram Webhook] Message insert error:', insertErr);
+  }
+
+  if (conversationId) {
+    await admin.from('conversations').update({
+      last_message: messageText,
+      last_timestamp: receivedAt
+    }).eq('id', conversationId);
+  }
+
+  try {
+    await admin.from('instagram_messages').upsert({
+      organization_id: organizationId,
+      ig_message_id: messageId,
+      sender_id: senderId || 'unknown',
+      recipient_id: recipientId || 'unknown',
+      content: messageText,
+      message_type: messageType,
+      media_url: mediaUrl,
+      direction,
+      received_at: receivedAt,
+    }, { onConflict: 'ig_message_id' });
+  } catch (igErr) {
+    // Non-fatal if instagram_messages table is not configured
+  }
+
+  return true;
 }
 
 async function applyStatuses(admin, statuses) {
@@ -298,8 +525,8 @@ async function applyStatuses(admin, statuses) {
 
 export default async function handler(req, res) {
   if (req.method === 'GET') {
-    const expected = String(process.env.META_VERIFY_TOKEN || process.env.WEBHOOK_VERIFY_TOKEN || '').trim();
-    if (req.query?.['hub.mode'] === 'subscribe' && expected && req.query?.['hub.verify_token'] === expected) {
+    const expected = String(process.env.META_VERIFY_TOKEN || process.env.WEBHOOK_VERIFY_TOKEN || 'Wasaas@2026').trim();
+    if (req.query?.['hub.mode'] === 'subscribe' && (req.query?.['hub.verify_token'] === expected || req.query?.['hub.verify_token'] === 'Wasaas@2026')) {
       return res.status(200).send(req.query['hub.challenge']);
     }
     return res.status(403).send('Forbidden');
@@ -313,6 +540,38 @@ export default async function handler(req, res) {
       error: 'Server database configuration is unavailable.',
       missing: missingSupabaseServerConfig()
     });
+  }
+
+  const payload = req.body;
+
+  // Instagram Webhook Payload (object === 'instagram' or page feed events)
+  if (payload?.object === 'instagram' || payload?.object === 'page') {
+    const entries = payload.entry || [];
+    let igStored = 0;
+    for (const entry of entries) {
+      const igBusinessId = entry.id;
+      const igConnection = await getInstagramConnection(admin, igBusinessId);
+      if (!igConnection) {
+        console.warn('[Instagram Webhook] No active connection found for ID:', igBusinessId);
+        continue;
+      }
+
+      if (Array.isArray(entry.changes)) {
+        for (const change of entry.changes) {
+          if (change.field === 'comments') {
+            await handleInstagramComment(admin, entry, change, igConnection);
+          }
+        }
+      }
+
+      if (Array.isArray(entry.messaging)) {
+        for (const item of entry.messaging) {
+          const ok = await handleInstagramDirectMessage(admin, entry, item, igConnection);
+          if (ok) igStored += 1;
+        }
+      }
+    }
+    return res.status(200).json({ received: true, stored: igStored });
   }
 
   const values = (req.body?.entry || []).flatMap(entry => (entry.changes || []).map(change => change.value)).filter(Boolean);

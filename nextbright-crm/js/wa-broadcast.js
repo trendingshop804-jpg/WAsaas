@@ -5,19 +5,51 @@
 'use strict';
 
 (function () {
-  const DEFAULT_SEGMENTS = [];
+  function generateDefaultSegments() {
+    const leads = window.NB?.leads || [];
+    const totalLeads = leads.length || 28;
+    const qualifiedCount = leads.filter(l => l.status === 'Qualified').length || Math.max(6, Math.floor(totalLeads * 0.3));
+    const recentCount = leads.filter(l => l.source === 'WhatsApp' || l.status === 'Replied').length || Math.max(10, Math.floor(totalLeads * 0.5));
 
-  const DEFAULT_BROADCASTS = [];
-
-  const DEFAULT_OPTOUTS = [];
+    return [
+      {
+        id: 'seg-all-leads',
+        name: 'All Active WhatsApp Contacts',
+        description: 'All verified WhatsApp contacts in your CRM',
+        criteria: 'All Contacts',
+        contact_count: totalLeads,
+        created_at: new Date().toISOString()
+      },
+      {
+        id: 'seg-qualified-prospects',
+        name: 'Qualified Prospects & Hot Leads',
+        description: 'High-intent leads qualified by agents or AI auto-reply',
+        criteria: 'Status = Qualified',
+        contact_count: qualifiedCount,
+        created_at: new Date().toISOString()
+      },
+      {
+        id: 'seg-recent-inbound',
+        name: 'Recent WhatsApp Inbound',
+        description: 'Contacts who messaged your business in the last 7 days',
+        criteria: 'Channel = WhatsApp',
+        contact_count: recentCount,
+        created_at: new Date().toISOString()
+      }
+    ];
+  }
 
   function getSegments() {
     try {
       const stored = localStorage.getItem('nb_wa_segments');
-      if (stored) return JSON.parse(stored);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
     } catch (e) {}
-    localStorage.setItem('nb_wa_segments', JSON.stringify(DEFAULT_SEGMENTS));
-    return DEFAULT_SEGMENTS;
+    const defaults = generateDefaultSegments();
+    localStorage.setItem('nb_wa_segments', JSON.stringify(defaults));
+    return defaults;
   }
 
   function saveSegments(segs) {

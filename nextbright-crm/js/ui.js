@@ -393,18 +393,18 @@ function renderConversation(conv) {
 
       const msgType = String(m.messageType || m.message_type || 'text').toLowerCase();
       const mediaUrl = m.mediaUrl || m.media_url || '';
-      const rawText = String(m.text || '').trim();
+      const rawText = String(m.text || m.content || m.body || m.message_body || '').trim();
       const isHistoricalUnsupported = rawText.toLowerCase() === '[unsupported]' ||
                                       rawText.toLowerCase().startsWith('[unsupported:');
-      const isUnsupported = msgType === 'unsupported' || isHistoricalUnsupported;
+      const isExplicitUnsupported = (msgType === 'unsupported' || isHistoricalUnsupported) && !rawText;
 
       let bodyContent = '';
-      if (isUnsupported) {
+      if (isExplicitUnsupported) {
         bodyContent = `<div class="msg-unsupported" style="display:inline-flex; align-items:center; gap:6px; color:var(--text-muted, #888); font-style:italic; font-size:0.8125rem;">
           <span>⚠️</span>
           <span>${escapeHtml(isHistoricalUnsupported
             ? 'Historical message content is unavailable because the original webhook payload was not retained.'
-            : (rawText || 'Meta delivered a message type this inbox cannot display.'))}</span>
+            : 'Meta message received (unsupported format).')}</span>
         </div>`;
       } else if (mediaUrl) {
         if (msgType === 'image') {
@@ -428,6 +428,24 @@ function renderConversation(conv) {
           const label = m.fileName || m.file_name || rawText || 'Download File';
           bodyContent = `<div style="margin-bottom:4px;"><a href="${escapeHtml(mediaUrl)}" target="_blank" rel="noopener" download style="display:inline-flex; align-items:center; gap:6px; padding:6px 10px; background:rgba(255,255,255,0.15); border-radius:6px; text-decoration:none; color:inherit; font-size:12px; font-weight:500;">📎 <span>${escapeHtml(label)}</span> ⬇️</a></div>`;
         }
+      } else if (msgType === 'location') {
+        const coordMatch = rawText.match(/(-?\d+\.\d+),\s*(-?\d+\.\d+)/);
+        const mapUrl = coordMatch ? `https://maps.google.com/?q=${coordMatch[1]},${coordMatch[2]}` : null;
+        bodyContent = `<div style="display:inline-flex; align-items:center; gap:6px;">
+          <span>📍</span>
+          ${mapUrl ? `<a href="${mapUrl}" target="_blank" rel="noopener" style="color:var(--brand-primary, #2563eb); text-decoration:underline; font-size:0.8125rem;">${escapeHtml(rawText || 'View shared location')}</a>` : `<span style="font-size:0.8125rem;">${escapeHtml(rawText || 'Shared location')}</span>`}
+        </div>`;
+      } else if (msgType === 'contacts') {
+        bodyContent = `<div style="display:inline-flex; align-items:center; gap:6px; font-size:0.8125rem; font-weight:500;"><span>👤</span><span>${escapeHtml(rawText || 'Shared Contact Card')}</span></div>`;
+      } else if (msgType === 'interactive' || msgType === 'button') {
+        bodyContent = `<div style="display:inline-flex; align-items:center; gap:6px; background:rgba(37,99,235,0.12); padding:4px 8px; border-radius:6px; font-size:0.8125rem;"><span style="color:#2563eb;">🔘</span><span style="font-weight:500;">${escapeHtml(rawText || 'Interactive button selected')}</span></div>`;
+      } else if (msgType === 'reaction') {
+        bodyContent = `<div style="font-size:1.25rem; line-height:1.2;">${escapeHtml(rawText)}</div>`;
+      } else if (msgType === 'order') {
+        bodyContent = `<div style="display:inline-flex; align-items:center; gap:6px; font-size:0.8125rem; font-weight:500;"><span>🛒</span><span>${escapeHtml(rawText || 'Catalog Order')}</span></div>`;
+      } else if (msgType.startsWith('unknown_') || msgType === 'unsupported') {
+        const typeName = msgType.replace('unknown_', '');
+        bodyContent = `<div><div style="font-size:0.6875rem; opacity:0.8; font-style:italic; margin-bottom:2px;">📩 ${escapeHtml(typeName)}:</div><div>${escapeHtml(rawText || 'Message received')}</div></div>`;
       } else if (msgType !== 'text' && msgType !== '') {
         const iconMap = {
           image: '🖼️ Image',
@@ -436,9 +454,8 @@ function renderConversation(conv) {
           voice: '🎤 Voice message',
           video: '📹 Video',
           document: '📄 Document',
-          location: '📍 Location',
-          contacts: '👤 Contact card',
-          interactive: '🔘 Interactive message'
+          system: 'ℹ️ System notice',
+          referral: '🔗 Referral ad'
         };
         const label = iconMap[msgType] || `📎 ${msgType}`;
         const extraText = rawText ? `<div style="margin-top:4px;">${escapeHtml(rawText)}</div>` : '';
@@ -467,6 +484,26 @@ window.initMessages = initMessages;
 const LIVE_INBOX_POLL_MS = 15_000;
 let liveInboxTimer = null;
 let liveInboxLastCount = null;
+
+function normalizeConversationItem(conv) {
+  return {
+    ...conv,
+    id: conv.id || conv.key,
+    key: conv.key || conv.id,
+    name: conv.name || conv.sender_number || 'Unknown contact',
+    phone: conv.phone || conv.sender_number || '',
+    initials: conv.initials || (window.NB?.initials ? window.NB.initials(conv.name || conv.sender_number || '?') : '?'),
+    messages: (conv.messages || []).map(m => ({
+      ...m,
+      dir: m.dir || (m.direction === 'outbound' ? 'out' : 'in'),
+      text: m.text || m.content || m.body || m.message_body || '',
+      content: m.content || m.text || m.body || m.message_body || '',
+      messageType: m.messageType || m.message_type || 'text',
+      mediaUrl: m.mediaUrl || m.media_url || null,
+      fileName: m.fileName || m.file_name || null
+    }))
+  };
+}
 
 async function fetchLiveConversations() {
   // A real session JWT is required — the anon key is not a session.
@@ -508,10 +545,35 @@ async function refreshLiveInbox() {
       return true;
     }
 
-    window.NB.conversations = live;
+    const mapped = live.map(normalizeConversationItem);
+    const prevCount = liveInboxLastCount;
+    window.NB.conversations = mapped;
+    liveInboxLastCount = mapped.length;
+
     renderConversationList(activeConversationKey);
-    liveInboxLastCount = live.length;
+    if (activeConversationKey) {
+      const current = mapped.find(c => String(c.id) === String(activeConversationKey) || String(c.key) === String(activeConversationKey) || String(c.leadId) === String(activeConversationKey));
+      if (current) renderConversation(current);
+    }
     clearInboxAuthNotice();
+
+    // If new conversation arrived or count increased, refresh CRM leads & board
+    if (prevCount !== null && mapped.length > prevCount) {
+      if (typeof window.NB_WORKSPACE?.reload === 'function') {
+        window.NB_WORKSPACE.reload().catch(() => {});
+      } else if (typeof window.NB_AUTH?.apiFetch === 'function') {
+        window.NB_AUTH.apiFetch('/api/leads?limit=200')
+          .then(res => res.json())
+          .then(data => {
+            if (data?.leads && Array.isArray(data.leads)) {
+              window.NB.leads = data.leads;
+              window.renderRecentLeads?.();
+              window.renderLeadsTable?.();
+              window.renderKanban?.();
+            }
+          }).catch(() => {});
+      }
+    }
     return true;
   } catch (error) {
     window.NB.conversations = [];
@@ -519,7 +581,8 @@ async function refreshLiveInbox() {
     renderConversationList();
     const messages = document.getElementById('conv-messages');
     if (messages) messages.innerHTML = '<div class="empty-state">Messages are unavailable.</div>';
-    setInboxAuthNotice(`Live inbox unavailable - ${error.message}`);    console.warn('[Live Inbox]', error.message);
+    setInboxAuthNotice(`Live inbox unavailable - ${error.message}`);
+    console.warn('[Live Inbox]', error.message);
     return false;
   }
 }

@@ -1,4 +1,4 @@
-﻿// api/messages.js
+// api/messages.js
 // Reads and sends WhatsApp text and media messages for the signed-in user's organization.
 //
 // SECURITY
@@ -760,10 +760,24 @@ export default async function handler(req, res) {
           .eq('organization_id', organizationId)
           .maybeSingle();
 
-        if (conversationError || !conversation || conversation.organization_id !== organizationId) {
+        if (conversation?.id && conversation.organization_id === organizationId) {
+          convId = conversation.id;
+        } else if (!body.lead_id && !body.leadId) {
+          const { data: newConv } = await supabase
+            .from('conversations')
+            .insert({
+              organization_id: organizationId,
+              lead_id: leadId,
+              channel: 'whatsapp',
+              mode: 'AI',
+              unread_count: 0
+            })
+            .select('id')
+            .single();
+          convId = newConv?.id || null;
+        } else {
           return res.status(404).json({ error: 'No conversation found for this lead.' });
         }
-        convId = conversation.id;
       }
 
       const creds = await getTenantWhatsAppCredentials(supabase, organizationId);
@@ -892,11 +906,27 @@ export default async function handler(req, res) {
       organizationHasLeadForPhone(supabase, organizationId, phone)
     ]);
 
+    const allowNewContact = Boolean(access?.isApiKey || body.create_lead || body.allow_new_contact);
     if (!ownsMessage && !ownsLead) {
-      return res.status(403).json({
-        success: false,
-        error: 'This phone number is not part of your organization.'
-      });
+      if (!allowNewContact) {
+        return res.status(403).json({
+          success: false,
+          error: 'This phone number is not part of your organization.'
+        });
+      }
+      // Auto-create lead for external CRM / MCP / explicitly requested new contact
+      const contactName = body.name || body.contact_name || `Contact (+${phone})`;
+      await supabase
+        .from('leads')
+        .insert({
+          organization_id: organizationId,
+          name: contactName,
+          contact_name: contactName,
+          phone: rawPhone,
+          phone_normalized: phone,
+          source: access?.isApiKey ? 'API' : 'WhatsApp',
+          status: 'Contacted'
+        });
     }
 
     const tenantCreds = await getTenantWhatsAppCredentials(supabase, organizationId);
@@ -1012,7 +1042,22 @@ export default async function handler(req, res) {
           .eq('organization_id', organizationId)
           .eq('lead_id', lead.id)
           .limit(1);
-        if (conv?.[0]?.id) conversationId = conv[0].id;
+        if (conv?.[0]?.id) {
+          conversationId = conv[0].id;
+        } else {
+          const { data: newConv } = await supabase
+            .from('conversations')
+            .insert({
+              organization_id: organizationId,
+              lead_id: lead.id,
+              channel: 'whatsapp',
+              mode: 'AI',
+              unread_count: 0
+            })
+            .select('id')
+            .single();
+          conversationId = newConv?.id || null;
+        }
       }
     } catch (_) {}
 

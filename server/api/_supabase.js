@@ -48,15 +48,17 @@ export async function verifyOrganizationAccess(req, organizationId) {
 
 /** Extract the bearer token, or '' when absent. */
 export function getBearerToken(req) {
-  const apiKeyHeader = req.headers?.['x-api-key'] || req.headers?.['X-API-Key'] || req.headers?.['x-api-token'];
+  const apiKeyHeader = req.headers?.['x-api-key'] || req.headers?.['X-API-Key'] || req.headers?.['apikey'] || req.headers?.['api-key'] || req.headers?.['x-api-token'];
   if (apiKeyHeader) return String(apiKeyHeader).trim();
+  const queryApiKey = req.query?.api_key || req.query?.apiKey || req.query?.token;
+  if (queryApiKey) return String(queryApiKey).trim();
   const raw = req.headers?.authorization || req.headers?.Authorization || '';
   return String(raw).replace(/^Bearer\s+/i, '').trim();
 }
 
 /**
  * Validate the bearer JWT with the ANON client (network call to GoTrue)
- * OR validate an organization API key (nl_live_... / nb_live_...) against organization_api_keys.
+ * OR validate an organization API key (nl_live_... / nb_live_... or external CRM key) against organization_api_keys.
  * Returns { user } on success, or { error, status } on failure.
  */
 function authLogFields(req) {
@@ -70,9 +72,11 @@ export async function getAuthenticatedUser(req) {
   const admin = createSupabaseAdminClient();
 
   if (token) {
-    // 1. Check if token is an Organization API Key (e.g. nl_live_..., nb_live_..., or passed via x-api-key)
-    const isLikelyApiKey = token.startsWith('nl_') || token.startsWith('nb_') || Boolean(req.headers?.['x-api-key']);
-    if (isLikelyApiKey && admin) {
+    const isApiKeyHeader = Boolean(req.headers?.['x-api-key'] || req.headers?.['X-API-Key'] || req.headers?.['apikey'] || req.headers?.['api-key'] || req.query?.api_key || req.query?.apiKey);
+    const isApiKeyPrefix = token.startsWith('nl_') || token.startsWith('nb_');
+
+    // 1. If explicit API key header or prefix, validate against organization_api_keys
+    if (admin && (isApiKeyHeader || isApiKeyPrefix)) {
       try {
         const { createHash } = await import('node:crypto');
         const keyHash = createHash('sha256').update(token).digest('hex');
@@ -84,7 +88,6 @@ export async function getAuthenticatedUser(req) {
           .maybeSingle();
 
         if (!keyError && keyRow) {
-          // Update last_used_at asynchronously
           admin.from('organization_api_keys')
             .update({ last_used_at: new Date().toISOString() })
             .eq('id', keyRow.id)
@@ -119,30 +122,56 @@ export async function getAuthenticatedUser(req) {
       }
     }
 
-    // 2. Validate Supabase Auth JWT
-    if (!url || !publishableKey) {
-      console.warn('[getAuthenticatedUser] verification unavailable', authLogFields(req));
-      return { error: 'Authentication unavailable. Please retry.', status: 503 };
-    }
-    try {
-      const publicClient = createClient(url, publishableKey, { auth: { persistSession: false, autoRefreshToken: false } });
-      const { data, error } = await publicClient.auth.getUser(token);
-      if (!error && data?.user) {
-        console.log('[getAuthenticatedUser] token verified', {
-          ...authLogFields(req),
-          verified: true,
-          userId: data.user.id
-        });
-        return { user: data.user };
+    // 2. Validate Supabase Auth session JWT / test token
+    if (url && publishableKey) {
+      try {
+        const publicClient = createClient(url, publishableKey, { auth: { persistSession: false, autoRefreshToken: false } });
+        const { data, error } = await publicClient.auth.getUser(token);
+        if (!error && data?.user) {
+          console.log('[getAuthenticatedUser] token verified', {
+            ...authLogFields(req),
+            verified: true,
+            userId: data.user.id
+          });
+          return { user: data.user };
+        }
+      } catch (e) {
+        console.warn('[getAuthenticatedUser] GoTrue token validation notice:', e.message);
       }
-      console.warn('[getAuthenticatedUser] token rejected', {
-        ...authLogFields(req),
-        verified: false,
-        reason: error?.message || 'no user returned'
-      });
-    } catch (e) {
-      console.warn('[getAuthenticatedUser] GoTrue token validation notice:', e.message);
     }
+
+    // 3. Fallback: Check if Bearer token was an organization API key without prefix
+    if (admin && !isApiKeyHeader && !isApiKeyPrefix) {
+      try {
+        const { createHash } = await import('node:crypto');
+        const keyHash = createHash('sha256').update(token).digest('hex');
+        const { data: keyRow, error: keyError } = await admin
+          .from('organization_api_keys')
+          .select('id, organization_id, name, key_prefix, created_by, revoked_at')
+          .eq('key_hash', keyHash)
+          .is('revoked_at', null)
+          .maybeSingle();
+
+        if (!keyError && keyRow) {
+          admin.from('organization_api_keys')
+            .update({ last_used_at: new Date().toISOString() })
+            .eq('id', keyRow.id)
+            .then(() => {}).catch(() => {});
+
+          return {
+            user: {
+              id: keyRow.created_by || keyRow.id,
+              email: `apikey-${keyRow.name.replace(/[^a-z0-9]/gi, '_')}@integration`,
+              role: 'api_key'
+            },
+            organizationId: keyRow.organization_id,
+            isApiKey: true,
+            apiKeyName: keyRow.name
+          };
+        }
+      } catch (_) {}
+    }
+
     return {
       error: 'Unauthorized',
       message: 'Your session has expired or the token is invalid. Please sign in again.',
