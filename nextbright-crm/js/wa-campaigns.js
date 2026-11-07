@@ -78,9 +78,7 @@
   }
 
   const TEMPLATE_PRESETS = {
-    exclusive_festive_offer: 'Hi {{name}}, get exclusive discounts on NextBright CRM enterprise plans this week only! Reply YES to claim.',
-    lead_welcome_v2: 'Hello {{name}}, thank you for reaching out to NextBright CRM! How can our team assist your business today?',
-    appointment_reminder: 'Hi {{name}}, this is a quick reminder regarding your upcoming consultation with our sales team scheduled for {{time}}.',
+    hello_world: 'Hello World (Official Meta Starter Template - Guaranteed delivery to all contacts)',
     custom_campaign: ''
   };
 
@@ -512,6 +510,9 @@
 
       closeCreateCampaignModal();
       await loadCampaigns();
+      if (typeof window.refreshLiveInbox === 'function') {
+        try { window.refreshLiveInbox(); } catch (_) {}
+      }
       showToast('🎉 Campaign Launched! Successfully sent: ' + (payload.sent || 0) + ', Failed: ' + (payload.failed || 0), 'success');
     } catch (err) {
       console.error('[Launch Campaign Error]', err);

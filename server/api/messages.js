@@ -575,7 +575,7 @@ export default async function handler(req, res) {
 
   // ---- POST/GET action=wa_campaigns ---------------------------------------
   const actionParam = String(req.query?.action || req.body?.action || '').toLowerCase();
-  if (req.method === 'GET' && actionParam === 'templates') {
+  if (req.method === 'GET' && (actionParam === 'templates' || actionParam === 'approved_templates')) {
     const creds = await getTenantWhatsAppCredentials(supabase, organizationId);
     if (!creds) return res.status(409).json({ success: false, error: 'No active WhatsApp connection is configured for your organization.' });
     try {
@@ -914,6 +914,19 @@ export default async function handler(req, res) {
           const { error: insErr } = await supabase.from('messages').insert(msgRecord);
           if (insErr) {
             console.error('[launch_campaign] messages.insert error:', insErr.message);
+          } else {
+            // Update conversation timestamp so it jumps to top of inbox
+            if (convId) {
+              await supabase.from('conversations').update({
+                updated_at: nowIso,
+                unread_count: 0
+              }).eq('id', convId).eq('organization_id', organizationId);
+            }
+            if (leadId) {
+              await supabase.from('leads').update({
+                updated_at: nowIso
+              }).eq('id', leadId).eq('organization_id', organizationId);
+            }
           }
         }
       } catch (err) {
