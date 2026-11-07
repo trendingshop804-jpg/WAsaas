@@ -2,6 +2,7 @@
 
 (function () {
   let campaigns = [];
+  let uploadedExcelRecipients = [];
 
   function request(path, options) {
     if (window.NB_AUTH?.apiFetch) return window.NB_AUTH.apiFetch(path, options);
@@ -87,7 +88,7 @@
     const container = document.getElementById('campaigns-list-container');
     if (!container) return;
     if (!campaigns.length) {
-      container.innerHTML = '<div style="padding:48px;text-align:center;background:#fff;border-radius:12px;border:1px dashed var(--border-light);">No saved campaigns. Create a draft or schedule one after selecting an approved template.</div>';
+      container.innerHTML = '<div style="padding:48px;text-align:center;background:#fff;border-radius:12px;border:1px dashed var(--border-light);">No saved campaigns. Create and launch a bulk campaign by uploading an Excel/CSV leads file.</div>';
       return;
     }
     container.innerHTML = campaigns.map((campaign) => {
@@ -95,7 +96,7 @@
       const delivered = Number(campaign.delivered_count || 0);
       const read = Number(campaign.read_count || 0);
       const failed = Number(campaign.failed_count || 0);
-      const scheduled = campaign.scheduled_at ? new Date(campaign.scheduled_at).toLocaleString() : 'Draft - not scheduled';
+      const scheduled = campaign.scheduled_at ? new Date(campaign.scheduled_at).toLocaleString() : (campaign.status === 'completed' ? 'Completed & Dispatched' : 'Draft');
 
       const descMeta = parseCampaignDescription(campaign.description);
       const messagePreview = campaign.message_text || descMeta.text || '';
@@ -107,20 +108,37 @@
       else if (mediaType === 'audio') mediaBadge = '<span class="badge" style="background:#fce7f3;color:#db2777;font-size:0.75rem;margin-left:6px;">🎤 Voice Note</span>';
       else if (mediaType === 'document') mediaBadge = '<span class="badge" style="background:#f3e8ff;color:#7e22ce;font-size:0.75rem;margin-left:6px;">📄 Document</span>';
 
-      return `<div class="campaign-card" style="background:#fff;border:1px solid var(--border-light);border-radius:12px;padding:18px 20px;margin-bottom:12px;">
-        <div style="display:flex;justify-content:space-between;gap:12px;">
-          <div>
-            <strong>${escapeHtml(campaign.name)}</strong>${mediaBadge}
-            <div style="font-size:.8rem;color:var(--text-muted);margin-top:4px;">Template: <code>${escapeHtml(campaign.template_name)}</code> - ${escapeHtml(campaign.audience_type || 'manual')}</div>
-          </div>
-          <span class="badge badge-secondary">${escapeHtml(campaign.status)}</span>
-        </div>
-        ${messagePreview ? `<div style="font-size:0.82rem;color:#334155;background:#f8fafc;padding:8px 12px;border-radius:6px;margin:10px 0;border-left:3px solid #25d366;">${escapeHtml(messagePreview)}</div>` : ''}
-        <div style="font-size:.8rem;color:var(--text-muted);margin:10px 0;">${scheduled}</div>
-        <div style="display:flex;gap:16px;font-size:.82rem;"><span>${sent} sent</span><span>${delivered} delivered</span><span>${read} read</span><span>${failed} failed</span></div>
-        <div style="font-size:.75rem;color:var(--text-muted);margin-top:10px;">Metrics remain zero until Meta accepts sends and delivery webhooks update this campaign.</div>
-      </div>`;
+      const isCompleted = campaign.status === 'completed';
+      const statusBadge = isCompleted
+        ? '<span class="badge badge-success" style="background:#dcfce7;color:#15803d;padding:4px 8px;border-radius:12px;">✓ Completed</span>'
+        : (campaign.status === 'sending'
+          ? '<span class="badge badge-warning" style="background:#fef3c7;color:#b45309;padding:4px 8px;border-radius:12px;">⏳ Sending...</span>'
+          : '<span class="badge badge-secondary" style="padding:4px 8px;border-radius:12px;">Draft</span>');
+
+      return '<div class="campaign-card" style="background:#fff;border:1px solid var(--border-light);border-radius:12px;padding:18px 20px;margin-bottom:12px;box-shadow:var(--shadow-sm);">' +
+        '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">' +
+          '<div>' +
+            '<strong style="font-size:1rem;color:#0f172a;">' + escapeHtml(campaign.name) + '</strong>' + mediaBadge +
+            '<div style="font-size:.8rem;color:var(--text-muted);margin-top:4px;">Template: <code>' + escapeHtml(campaign.template_name || 'custom') + '</code> • Audience: <strong>' + escapeHtml(campaign.audience_type || 'excel_upload') + '</strong> (' + (campaign.total_recipients || sent) + ' recipients)</div>' +
+          '</div>' +
+          '<div style="display:flex;align-items:center;gap:8px;">' +
+            statusBadge +
+          '</div>' +
+        '</div>' +
+        (messagePreview ? '<div style="font-size:0.84rem;color:#334155;background:#f8fafc;padding:10px 14px;border-radius:8px;margin:12px 0;border-left:4px solid #25d366;">' + escapeHtml(messagePreview) + '</div>' : '') +
+        '<div style="font-size:.8rem;color:var(--text-muted);margin:8px 0;">' + scheduled + '</div>' +
+        '<div style="display:flex;gap:20px;font-size:.84rem;background:#f1f5f9;padding:8px 12px;border-radius:6px;">' +
+          '<span><strong>' + sent + '</strong> Sent</span>' +
+          '<span><strong>' + delivered + '</strong> Delivered</span>' +
+          '<span><strong>' + read + '</strong> Read</span>' +
+          '<span style="color:' + (failed ? '#ef4444' : 'inherit') + ';"><strong>' + failed + '</strong> Failed</span>' +
+        '</div>' +
+      '</div>';
     }).join('');
+
+    if (typeof feather !== 'undefined') {
+      try { feather.replace(); } catch (_) {}
+    }
   }
 
   function updateCampaignPreview() {
@@ -150,19 +168,19 @@
 
     let previewHtml = '';
     if (type === 'image') {
-      previewHtml = `<img src="${escapeHtml(url)}" style="max-width:100%;max-height:160px;border-radius:6px;display:block;object-fit:cover;">`;
+      previewHtml = '<img src="' + escapeHtml(url) + '" style="max-width:100%;max-height:160px;border-radius:6px;display:block;object-fit:cover;">';
     } else if (type === 'video') {
-      previewHtml = `<video src="${escapeHtml(url)}" controls style="max-width:100%;max-height:160px;border-radius:6px;display:block;"></video>`;
+      previewHtml = '<video src="' + escapeHtml(url) + '" controls style="max-width:100%;max-height:160px;border-radius:6px;display:block;"></video>';
     } else if (type === 'audio') {
-      previewHtml = `<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:#e2e8f0;border-radius:6px;">
-        <span style="font-size:1.2rem;">🎤</span>
-        <audio src="${escapeHtml(url)}" controls style="height:32px;flex:1;"></audio>
-      </div>`;
+      previewHtml = '<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:#e2e8f0;border-radius:6px;">' +
+        '<span style="font-size:1.2rem;">🎤</span>' +
+        '<audio src="' + escapeHtml(url) + '" controls style="height:32px;flex:1;"></audio>' +
+      '</div>';
     } else if (type === 'document') {
-      previewHtml = `<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:#e2e8f0;border-radius:6px;">
-        <span style="font-size:1.2rem;">📄</span>
-        <span style="font-size:0.8rem;font-weight:600;word-break:break-all;">${escapeHtml(campaignMedia.name || 'Document')}</span>
-      </div>`;
+      previewHtml = '<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:#e2e8f0;border-radius:6px;">' +
+        '<span style="font-size:1.2rem;">📄</span>' +
+        '<span style="font-size:0.8rem;font-weight:600;word-break:break-all;">' + escapeHtml(campaignMedia.name || 'Document') + '</span>' +
+      '</div>';
     }
 
     if (mediaPreview) {
@@ -179,6 +197,7 @@
     const modal = document.getElementById('modal-create-wa-campaign');
     if (modal) modal.style.display = 'flex';
     updateCampaignPreview();
+    updateRecipientsBadge();
   }
 
   function closeCreateCampaignModal() {
@@ -186,60 +205,33 @@
     if (modal) modal.style.display = 'none';
   }
 
-  async function saveCampaign(event) {
-    event.preventDefault();
-    const name = document.getElementById('camp-name-input')?.value.trim();
-    const templateName = document.getElementById('camp-template-select')?.value;
-    const audienceType = document.getElementById('camp-audience-select')?.value || 'manual';
-    const scheduleValue = document.getElementById('camp-schedule-input')?.value;
-    const messageText = document.getElementById('camp-message-body')?.value.trim() || '';
-    const mediaType = document.getElementById('camp-media-type')?.value || 'none';
-    const mediaUrl = campaignMedia.url || document.getElementById('camp-media-url')?.value.trim() || '';
-    const mediaName = campaignMedia.name || '';
-
-    if (!name || !templateName) return showToast('Campaign name and an approved template are required.', 'error');
-    try {
-      const payload = await readJson(await request('/api/wa-campaigns', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name,
-          template_name: templateName,
-          template_language: 'en_US',
-          audience_type: audienceType,
-          scheduled_at: scheduleValue ? new Date(scheduleValue).toISOString() : null,
-          message_text: messageText,
-          media_type: mediaType,
-          media_url: mediaUrl,
-          media_name: mediaName
-        })
-      }));
-      campaigns.unshift(payload.campaign);
-      closeCreateCampaignModal();
-      renderCampaigns();
-      renderStats();
-      showToast(payload.campaign.status === 'scheduled' ? 'Campaign scheduled. No messages have been sent.' : 'Campaign saved as a draft. No messages have been sent.', 'success');
-    } catch (error) { showToast(error.message, 'error'); }
+  function updateRecipientsBadge() {
+    const badge = document.getElementById('camp-recipients-count-badge');
+    if (!badge) return;
+    const audType = document.querySelector('input[name="camp-audience-type"]:checked')?.value || 'excel';
+    if (audType === 'excel') {
+      badge.textContent = uploadedExcelRecipients.length + ' Contacts Ready';
+      badge.style.background = uploadedExcelRecipients.length > 0 ? '#25d366' : '#94a3b8';
+    } else {
+      const crmCount = (window.NB?.leads || []).filter(l => l.phone).length;
+      badge.textContent = crmCount + ' CRM Leads';
+      badge.style.background = crmCount > 0 ? '#3b82f6' : '#94a3b8';
+    }
   }
 
-  /**
-   * RFC-4180 compliant CSV parser that correctly handles quoted strings,
-   * commas within fields, and newlines.
-   */
+  // ---- CSV PARSER (RFC-4180) ----
   function parseCSVRows(text) {
     const rows = [];
     let currentRow = [];
     let currentCell = '';
     let insideQuotes = false;
-
     for (let i = 0; i < text.length; i++) {
       const char = text[i];
       const nextChar = text[i + 1];
-
       if (char === '"') {
         if (insideQuotes && nextChar === '"') {
           currentCell += '"';
-          i++; // skip escaped quote
+          i++;
         } else {
           insideQuotes = !insideQuotes;
         }
@@ -247,13 +239,9 @@
         currentRow.push(currentCell.trim());
         currentCell = '';
       } else if ((char === '\r' || char === '\n') && !insideQuotes) {
-        if (char === '\r' && nextChar === '\n') {
-          i++;
-        }
+        if (char === '\r' && nextChar === '\n') i++;
         currentRow.push(currentCell.trim());
-        if (currentRow.some(c => c.length > 0)) {
-          rows.push(currentRow);
-        }
+        if (currentRow.some(c => c.length > 0)) rows.push(currentRow);
         currentRow = [];
         currentCell = '';
       } else {
@@ -262,188 +250,329 @@
     }
     if (currentCell.length > 0 || currentRow.length > 0) {
       currentRow.push(currentCell.trim());
-      if (currentRow.some(c => c.length > 0)) {
-        rows.push(currentRow);
-      }
+      if (currentRow.some(c => c.length > 0)) rows.push(currentRow);
     }
     return rows;
   }
 
-  /**
-   * Handle CSV file uploaded from WhatsApp Campaigns section.
-   * Parses rows, validates contact info, normalizes phones, posts to /api/leads,
-   * adds to target audience, and opens the campaign modal.
-   */
-  async function handleCSVImport(file) {
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = async () => {
-      try {
-        const text = String(reader.result || '');
-        const lines = parseCSVRows(text);
-        if (lines.length < 2) {
-          showToast('CSV file is empty or missing data rows.', 'error');
-          return;
+  // ---- NORMALIZE IMPORTED ROWS ----
+  function normalizeImportedRows(rawRows) {
+    if (!rawRows || !rawRows.length) return [];
+    const validRecipients = [];
+    const seenPhones = new Set();
+
+    for (const row of rawRows) {
+      if (!row || typeof row !== 'object') continue;
+      const keys = Object.keys(row);
+      let nameVal = '';
+      let phoneVal = '';
+      let companyVal = '';
+
+      for (const k of keys) {
+        const lk = k.toLowerCase().trim();
+        const v = String(row[k] || '').trim();
+        if (!phoneVal && (lk.includes('phone') || lk.includes('mobile') || lk.includes('whatsapp') || lk.includes('number') || lk.includes('tel') || lk.includes('cell') || lk === 'contact')) {
+          phoneVal = v;
+        } else if (!nameVal && (lk.includes('name') || lk.includes('customer') || lk.includes('lead') || lk.includes('person') || lk.includes('client'))) {
+          nameVal = v;
+        } else if (!companyVal && (lk.includes('company') || lk.includes('business') || lk.includes('org'))) {
+          companyVal = v;
         }
-
-        const headers = lines[0].map(h => String(h || '').trim().toLowerCase());
-
-        // Dynamic column detection
-        const nameIdx = headers.findIndex(h =>
-          ['name', 'full name', 'contact', 'contact name', 'customer', 'customer name', 'person', 'lead', 'first name', 'title'].includes(h) ||
-          (h.includes('name') && !h.includes('company') && !h.includes('file'))
-        );
-        let phoneIdx = headers.findIndex(h =>
-          ['phone', 'mobile', 'whatsapp', 'tel', 'cell', 'phone number', 'contact number', 'mobile number', 'wa_number', 'number'].includes(h) ||
-          h.includes('phone') || h.includes('mobile') || h.includes('whatsapp')
-        );
-        const emailIdx = headers.findIndex(h =>
-          ['email', 'email address', 'e-mail', 'mail'].includes(h) || h.includes('email')
-        );
-        const companyIdx = headers.findIndex(h =>
-          ['company', 'business', 'organization', 'company name', 'business name', 'org'].includes(h) || h.includes('company')
-        );
-
-        // Fallback: search for phone digits if header was non-standard
-        if (phoneIdx === -1) {
-          for (let c = 0; c < headers.length; c++) {
-            const sampleDigits = lines.slice(1, 6).map(r => String(r[c] || '').replace(/\D/g, ''));
-            const validCount = sampleDigits.filter(d => d.length >= 7 && d.length <= 15).length;
-            if (validCount >= Math.min(2, lines.length - 1)) {
-              phoneIdx = c;
-              break;
-            }
-          }
-        }
-
-        if (nameIdx === -1 && phoneIdx === -1) {
-          showToast('CSV must include at least a Name or Phone column.', 'error');
-          return;
-        }
-
-        const rawDataRows = lines.slice(1);
-        const leadsToImport = [];
-
-        for (const row of rawDataRows) {
-          if (!row || !row.length) continue;
-          const rawName = nameIdx !== -1 ? String(row[nameIdx] || '').trim() : '';
-          const rawPhone = phoneIdx !== -1 ? String(row[phoneIdx] || '').trim() : '';
-          const rawEmail = emailIdx !== -1 ? String(row[emailIdx] || '').trim() : '';
-          const rawCompany = companyIdx !== -1 ? String(row[companyIdx] || '').trim() : '';
-
-          // Normalize phone number
-          const digits = rawPhone.replace(/\D/g, '');
-          let phoneFormatted = '';
-          if (digits.length >= 7 && digits.length <= 15) {
-            if (digits.length === 10) {
-              phoneFormatted = '+91 ' + digits.slice(0, 5) + ' ' + digits.slice(5);
-            } else if (digits.startsWith('91') && digits.length === 12) {
-              phoneFormatted = '+91 ' + digits.slice(2, 7) + ' ' + digits.slice(7);
-            } else {
-              phoneFormatted = '+' + digits;
-            }
-          }
-
-          const contactName = rawName || (rawCompany ? rawCompany : (phoneFormatted || 'Valued Customer'));
-          if (!phoneFormatted && !rawEmail) continue;
-
-          leadsToImport.push({
-            contactName,
-            phone: phoneFormatted || undefined,
-            email: rawEmail || undefined,
-            companyName: rawCompany || undefined,
-            source: 'Import',
-            customFields: {
-              source_label: 'WhatsApp Campaign CSV',
-              import_filename: file.name,
-              imported_at: new Date().toISOString()
-            }
-          });
-        }
-
-        if (!leadsToImport.length) {
-          showToast('No valid contact rows found. Each row needs a Name and Phone/Email.', 'error');
-          return;
-        }
-
-        showToast(`Importing ${leadsToImport.length} contacts from ${file.name}...`, 'info');
-
-        let importedCount = 0;
-        let duplicateCount = 0;
-        let failedCount = 0;
-
-        const batchResults = await Promise.allSettled(leadsToImport.map(lead =>
-          request('/api/leads', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(lead)
-          }).then(readJson)
-        ));
-
-        for (const res of batchResults) {
-          if (res.status === 'fulfilled') {
-            importedCount++;
-          } else {
-            const errMsg = res.reason?.message || '';
-            if (errMsg.includes('already exists') || errMsg.includes('DUPLICATE')) {
-              duplicateCount++;
-            } else {
-              failedCount++;
-            }
-          }
-        }
-
-        // Add imported batch as target audience option in campaign modal
-        const audienceSelect = document.getElementById('camp-audience-select');
-        const cleanFileName = file.name.replace(/\.[^/.]+$/, '');
-        const totalEligible = importedCount + duplicateCount;
-        if (audienceSelect) {
-          const optionVal = `Imported: ${cleanFileName} (${totalEligible} contacts)`;
-          const newOption = document.createElement('option');
-          newOption.value = optionVal;
-          newOption.textContent = optionVal;
-          newOption.selected = true;
-          audienceSelect.insertBefore(newOption, audienceSelect.firstChild);
-        }
-
-        // Pre-fill campaign name in modal
-        const campNameInput = document.getElementById('camp-name-input');
-        if (campNameInput) {
-          campNameInput.value = `${cleanFileName} WhatsApp Campaign`;
-        }
-
-        if (importedCount > 0) {
-          showToast(`Successfully imported ${importedCount} contacts${duplicateCount ? ` (${duplicateCount} existing leads added to audience)` : ''}!`, 'success');
-        } else if (duplicateCount > 0) {
-          showToast(`All ${duplicateCount} contacts already exist in CRM and are ready in your campaign audience.`, 'info');
-        } else {
-          showToast(`Import completed with ${failedCount} errors. Please check your CSV format.`, 'error');
-        }
-
-        // Refresh CRM workspace so all tables/kanban reflect newly imported leads
-        if (typeof window.NB_WORKSPACE?.reload === 'function') {
-          try { await window.NB_WORKSPACE.reload(); } catch (_) {}
-        }
-
-        // Open WhatsApp campaign creation modal ready to launch
-        openCreateCampaignModal();
-
-      } catch (err) {
-        console.error('[WhatsApp Campaign CSV Import Error]', err);
-        showToast(`Failed to parse CSV file: ${err.message}`, 'error');
-      } finally {
-        const fileInput = document.getElementById('campaign-csv-input');
-        if (fileInput) fileInput.value = '';
       }
-    };
-    reader.readAsText(file);
+
+      // If phoneVal not found by header, find any field that has 7-15 digits
+      if (!phoneVal) {
+        for (const k of keys) {
+          const v = String(row[k] || '').replace(/\D/g, '');
+          if (v.length >= 7 && v.length <= 15) {
+            phoneVal = row[k];
+            break;
+          }
+        }
+      }
+
+      if (!phoneVal) continue;
+      let digits = String(phoneVal).replace(/\D/g, '');
+      if (digits.length === 10) digits = '91' + digits;
+      if (digits.length < 7 || digits.length > 15) continue;
+      if (seenPhones.has(digits)) continue;
+      seenPhones.add(digits);
+
+      validRecipients.push({
+        name: nameVal || 'Valued Customer',
+        phone: digits,
+        company: companyVal || ''
+      });
+    }
+
+    return validRecipients;
+  }
+
+  // ---- HANDLE EXCEL / CSV LEADS FILE UPLOAD ----
+  async function handleExcelOrCSVFile(file) {
+    if (!file) return;
+    const fileName = file.name;
+    const isExcel = /\.(xlsx|xls)$/i.test(fileName);
+    showToast('Reading ' + fileName + '...', 'info');
+
+    try {
+      let recipients = [];
+      if (isExcel) {
+        if (typeof XLSX === 'undefined') {
+          throw new Error('SheetJS is loading. Please retry in 2 seconds or upload as CSV.');
+        }
+        const data = await file.arrayBuffer();
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const rawJson = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+        recipients = normalizeImportedRows(rawJson);
+      } else {
+        const text = await file.text();
+        const lines = parseCSVRows(text);
+        if (lines.length < 2) throw new Error('File is empty or contains no lead rows.');
+        const headers = lines[0];
+        const rows = lines.slice(1).map(line => {
+          const obj = {};
+          headers.forEach((h, idx) => { obj[h] = line[idx] || ''; });
+          return obj;
+        });
+        recipients = normalizeImportedRows(rows);
+      }
+
+      if (!recipients.length) {
+        showToast('No valid contact numbers found in file. Ensure file contains a column with phone numbers.', 'error');
+        return;
+      }
+
+      uploadedExcelRecipients = recipients;
+
+      // Update UI preview box
+      const promptBox = document.getElementById('camp-excel-prompt');
+      const summaryBox = document.getElementById('camp-excel-summary');
+      const filenameLabel = document.getElementById('camp-excel-filename');
+      const statsLabel = document.getElementById('camp-excel-stats');
+      const previewList = document.getElementById('camp-excel-preview-list');
+
+      if (promptBox) promptBox.style.display = 'none';
+      if (summaryBox) summaryBox.style.display = 'block';
+      if (filenameLabel) filenameLabel.textContent = fileName;
+      if (statsLabel) statsLabel.textContent = recipients.length + ' valid phone numbers ready for launch';
+
+      if (previewList) {
+        previewList.innerHTML = recipients.slice(0, 50).map((r, i) =>
+          '<div style="padding:3px 0;border-bottom:1px solid #f1f5f9;display:flex;justify-content:space-between;">' +
+            '<span>' + (i + 1) + '. <strong>' + escapeHtml(r.name) + '</strong> ' + (r.company ? '(' + escapeHtml(r.company) + ')' : '') + '</span>' +
+            '<span style="color:#0284c7;font-family:monospace;">+' + escapeHtml(r.phone) + '</span>' +
+          '</div>'
+        ).join('') + (recipients.length > 50 ? '<div style="color:#64748b;padding-top:4px;">...and ' + (recipients.length - 50) + ' more</div>' : '');
+      }
+
+      updateRecipientsBadge();
+      showToast('✅ Loaded ' + recipients.length + ' contacts from ' + fileName + '!', 'success');
+
+      // Auto fill campaign name if empty
+      const campNameInput = document.getElementById('camp-name-input');
+      if (campNameInput && !campNameInput.value.trim()) {
+        campNameInput.value = fileName.replace(/\.[^/.]+$/, '') + ' Campaign';
+      }
+    } catch (err) {
+      console.error('[Excel Upload Error]', err);
+      showToast('Failed to process file: ' + err.message, 'error');
+    }
+  }
+
+  function clearExcelFile() {
+    uploadedExcelRecipients = [];
+    const promptBox = document.getElementById('camp-excel-prompt');
+    const summaryBox = document.getElementById('camp-excel-summary');
+    const fileInput = document.getElementById('camp-excel-file-input');
+    if (promptBox) promptBox.style.display = 'block';
+    if (summaryBox) summaryBox.style.display = 'none';
+    if (fileInput) fileInput.value = '';
+    updateRecipientsBadge();
+  }
+
+  // ---- LAUNCH CAMPAIGN ACTION ----
+  async function launchCampaign(isDraftOnly) {
+    const name = document.getElementById('camp-name-input')?.value.trim();
+    const templateName = document.getElementById('camp-template-select')?.value;
+    const audType = document.querySelector('input[name="camp-audience-type"]:checked')?.value || 'excel';
+    const scheduleValue = document.getElementById('camp-schedule-input')?.value;
+    const messageText = document.getElementById('camp-message-body')?.value.trim() || '';
+    const mediaType = document.getElementById('camp-media-type')?.value || 'none';
+    const mediaUrl = campaignMedia.url || document.getElementById('camp-media-url')?.value.trim() || '';
+    const mediaName = campaignMedia.name || '';
+
+    if (!name) return showToast('Please enter a campaign name.', 'error');
+    if (!templateName) return showToast('Please select an approved template or preset.', 'error');
+
+    let recipients = [];
+    if (audType === 'excel') {
+      if (!uploadedExcelRecipients.length) {
+        return showToast('Please upload an Excel (.xlsx, .xls) or CSV file with lead contacts first.', 'error');
+      }
+      recipients = uploadedExcelRecipients;
+    } else {
+      const crmLeads = window.NB?.leads || [];
+      recipients = crmLeads.filter(l => l.phone).map(l => ({
+        name: l.name || l.contact_name || 'Valued Customer',
+        phone: String(l.phone).replace(/\D/g, ''),
+        company: l.company || l.company_name || ''
+      }));
+      if (!recipients.length) {
+        return showToast('No CRM leads with phone numbers found.', 'error');
+      }
+    }
+
+    if (isDraftOnly) {
+      try {
+        const payload = await readJson(await request('/api/wa-campaigns', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name,
+            template_name: templateName,
+            template_language: 'en_US',
+            audience_type: audType === 'excel' ? 'excel_upload' : 'crm_leads',
+            scheduled_at: scheduleValue ? new Date(scheduleValue).toISOString() : null,
+            message_text: messageText,
+            media_type: mediaType,
+            media_url: mediaUrl,
+            media_name: mediaName
+          })
+        }));
+        campaigns.unshift(payload.campaign);
+        closeCreateCampaignModal();
+        renderCampaigns();
+        renderStats();
+        showToast('Campaign saved as draft.', 'success');
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+      return;
+    }
+
+    // REAL BULK DISPATCH TO META GRAPH API
+    if (!confirm('🚀 Are you ready to dispatch this WhatsApp campaign to ' + recipients.length + ' recipients?')) {
+      return;
+    }
+
+    const launchBtn = document.getElementById('camp-launch-btn');
+    if (launchBtn) {
+      launchBtn.disabled = true;
+      launchBtn.innerHTML = '⏳ Dispatching...';
+    }
+
+    showToast('🚀 Launching WhatsApp campaign to ' + recipients.length + ' contacts... Please keep this page open.', 'info');
+
+    try {
+      const payload = await readJson(await request('/api/messages?action=launch_campaign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name,
+          template_name: templateName,
+          template_language: 'en_US',
+          audience_type: audType === 'excel' ? 'excel_upload' : 'crm_leads',
+          message_text: messageText,
+          media_type: mediaType,
+          media_url: mediaUrl,
+          media_name: mediaName,
+          recipients: recipients
+        })
+      }));
+
+      closeCreateCampaignModal();
+      await loadCampaigns();
+      showToast('🎉 Campaign Launched! Successfully sent: ' + (payload.sent || 0) + ', Failed: ' + (payload.failed || 0), 'success');
+    } catch (err) {
+      console.error('[Launch Campaign Error]', err);
+      showToast('Campaign launch failed: ' + err.message, 'error');
+    } finally {
+      if (launchBtn) {
+        launchBtn.disabled = false;
+        launchBtn.innerHTML = '<i data-feather="send"></i> 🚀 Launch Campaign Now';
+        if (typeof feather !== 'undefined') feather.replace();
+      }
+    }
   }
 
   function setup() {
     document.getElementById('create-campaign-btn')?.addEventListener('click', openCreateCampaignModal);
+
+    // Save Draft button
+    document.getElementById('camp-save-draft-btn')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      launchCampaign(true);
+    });
+
+    // Launch Campaign Now submit handler
     const form = document.getElementById('form-create-wa-campaign');
-    if (form) form.onsubmit = saveCampaign;
-    document.getElementById('btn-test-send-campaign')?.addEventListener('click', () => showToast('Test sending requires a verified test recipient and is not simulated.', 'info'));
+    if (form) {
+      form.onsubmit = (e) => {
+        e.preventDefault();
+        launchCampaign(false);
+      };
+    }
+
+    document.getElementById('btn-test-send-campaign')?.addEventListener('click', () => showToast('Test sending requires a verified recipient on Meta WhatsApp Cloud API.', 'info'));
+
+    // Audience Radio Toggle
+    const audExcelRadio = document.getElementById('camp-aud-excel');
+    const audCrmRadio = document.getElementById('camp-aud-crm');
+    const excelBox = document.getElementById('camp-excel-box');
+    const crmBox = document.getElementById('camp-crm-box');
+
+    if (audExcelRadio && audCrmRadio) {
+      audExcelRadio.addEventListener('change', () => {
+        if (excelBox) excelBox.style.display = 'block';
+        if (crmBox) crmBox.style.display = 'none';
+        updateRecipientsBadge();
+      });
+      audCrmRadio.addEventListener('change', () => {
+        if (excelBox) excelBox.style.display = 'none';
+        if (crmBox) crmBox.style.display = 'block';
+        updateRecipientsBadge();
+      });
+    }
+
+    // Excel Upload Click & Drag-Drop
+    const excelFileInput = document.getElementById('camp-excel-file-input');
+    if (excelBox && excelFileInput) {
+      excelBox.addEventListener('click', (e) => {
+        if (e.target.id !== 'camp-excel-clear-btn') {
+          excelFileInput.click();
+        }
+      });
+      excelFileInput.addEventListener('change', (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (file) handleExcelOrCSVFile(file);
+      });
+
+      excelBox.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        excelBox.style.borderColor = '#25d366';
+        excelBox.style.background = '#f0fdf4';
+      });
+      excelBox.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        excelBox.style.borderColor = '#94a3b8';
+        excelBox.style.background = '#fff';
+      });
+      excelBox.addEventListener('drop', (e) => {
+        e.preventDefault();
+        excelBox.style.borderColor = '#94a3b8';
+        excelBox.style.background = '#fff';
+        const file = e.dataTransfer?.files?.[0];
+        if (file) handleExcelOrCSVFile(file);
+      });
+    }
+
+    document.getElementById('camp-excel-clear-btn')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      clearExcelFile();
+    });
 
     // Template selection auto-populates message textarea
     const templateSelect = document.getElementById('camp-template-select');
@@ -463,7 +592,7 @@
       msgBody.addEventListener('input', updateCampaignPreview);
     }
 
-    // Quick tag insertion buttons (+ Name, + Company, + Phone)
+    // Quick variable tags (+ Name, + Company, + Phone)
     document.querySelectorAll('.camp-var-btn').forEach((btn) => {
       btn.addEventListener('click', () => {
         const tag = btn.getAttribute('data-var');
@@ -497,13 +626,12 @@
       });
     }
 
-    // Local file picker for media (FileReader)
+    // Local file picker for campaign media
     if (mediaFileInput) {
       mediaFileInput.addEventListener('change', (e) => {
         const file = e.target.files && e.target.files[0];
         if (!file) return;
 
-        // Auto-select matching media type if set to 'none'
         if (mediaTypeSelect && mediaTypeSelect.value === 'none') {
           if (file.type.startsWith('image/')) mediaTypeSelect.value = 'image';
           else if (file.type.startsWith('video/')) mediaTypeSelect.value = 'video';
@@ -531,23 +659,10 @@
         updateCampaignPreview();
       });
     }
-
-    // Bind CSV Import button and file input
-    const importCsvBtn = document.getElementById('campaign-import-csv-btn');
-    const csvFileInput = document.getElementById('campaign-csv-input');
-    if (importCsvBtn && csvFileInput) {
-      importCsvBtn.addEventListener('click', () => {
-        csvFileInput.click();
-      });
-      csvFileInput.addEventListener('change', (e) => {
-        const file = e.target.files && e.target.files[0];
-        if (file) handleCSVImport(file);
-      });
-    }
   }
 
   function escapeHtml(value) { return String(value || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
   function init() { setup(); loadCampaigns(); }
-  window.NextBrightWACampaigns = { init, openCreateCampaignModal, closeModal: closeCreateCampaignModal, handleCSVImport };
+  window.NextBrightWACampaigns = { init, openCreateCampaignModal, closeModal: closeCreateCampaignModal, handleExcelOrCSVFile };
   document.addEventListener('DOMContentLoaded', init);
 })();

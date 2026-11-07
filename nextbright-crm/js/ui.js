@@ -72,7 +72,22 @@ function navigateTo(viewId, updateHistory = true) {
 
   // Trigger specific view handlers
   try {
-    if (targetView === 'social-dashboard' && window.NextBrightDashboard?.render) window.NextBrightDashboard.render();
+    if (targetView === 'tasks') {
+      window.renderTodayTasks?.();
+      window.renderFullTasks?.();
+    } else if (targetView === 'deals') {
+      window.renderDeals?.();
+      window.renderKanban?.();
+    } else if (targetView === 'appointments') {
+      window.renderAppointments?.();
+    } else if (targetView === 'leads') {
+      window.renderLeadsTable?.();
+      window.renderRecentLeads?.();
+    } else if (targetView === 'customers') {
+      window.renderCustomers?.();
+    } else if (targetView === 'calls') {
+      window.renderCalls?.();
+    } else if (targetView === 'social-dashboard' && window.NextBrightDashboard?.render) window.NextBrightDashboard.render();
     else if (targetView === 'social-inbox' && window.NextBrightInbox?.init) window.NextBrightInbox.init();
     else if (targetView === 'instagram-posts' && window.NextBrightIGPosts?.init) window.NextBrightIGPosts.init();
     else if (targetView === 'content-library' && window.NextBrightLibrary?.init) window.NextBrightLibrary.init();

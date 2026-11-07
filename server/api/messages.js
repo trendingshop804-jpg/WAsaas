@@ -657,6 +657,203 @@ export default async function handler(req, res) {
     return res.status(201).json({ success: true, campaign: responseCampaign });
   }
 
+  // ---- POST action=launch_campaign / launch_bulk ---------------------------
+  if (req.method === 'POST' && (actionParam === 'launch_campaign' || actionParam === 'launch_bulk')) {
+    const creds = await getTenantWhatsAppCredentials(supabase, organizationId);
+    if (!creds) {
+      return res.status(409).json({ success: false, error: 'No active WhatsApp connection configured for your organization.' });
+    }
+
+    const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
+    let recipients = Array.isArray(body.recipients) ? body.recipients : [];
+    const campaignId = body.campaign_id || body.campaignId || null;
+    const campaignName = cleanText(body.name || body.campaign_name, 160) || 'Bulk Campaign';
+    const templateName = cleanText(body.template_name, 160) || 'custom_campaign';
+    const templateLanguage = cleanText(body.template_language, 20) || 'en_US';
+    const messageText = cleanText(body.message_text, 2000) || '';
+    const mediaType = cleanText(body.media_type, 20) || 'none';
+    const mediaUrl = cleanText(body.media_url, 1000) || '';
+    const mediaName = cleanText(body.media_name, 260) || '';
+
+    // If recipients is empty and audience_type is 'all_leads', fetch leads from DB
+    if (!recipients.length && body.audience_type === 'all_leads') {
+      const { data: dbLeads } = await supabase
+        .from('leads')
+        .select('contact_name, name, phone, company_name, company')
+        .eq('organization_id', organizationId)
+        .limit(200);
+      if (dbLeads) {
+        recipients = dbLeads.map(l => ({
+          name: l.contact_name || l.name || '',
+          phone: l.phone || '',
+          company: l.company_name || l.company || ''
+        }));
+      }
+    }
+
+    if (!recipients.length) {
+      return res.status(400).json({ success: false, error: 'No recipients provided. Upload an Excel/CSV file with contact numbers.' });
+    }
+
+    // Update or insert campaign record
+    let targetCampaignId = campaignId;
+    if (targetCampaignId) {
+      await supabase.from('wa_campaigns').update({
+        status: 'sending',
+        total_recipients: recipients.length,
+        updated_at: new Date().toISOString()
+      }).eq('id', targetCampaignId).eq('organization_id', organizationId);
+    } else {
+      let descriptionValue = JSON.stringify({ text: messageText, media_type: mediaType, media_url: mediaUrl, media_name: mediaName });
+      const { data: newCamp } = await supabase.from('wa_campaigns').insert({
+        organization_id: organizationId,
+        created_by: access.user?.id || null,
+        name: campaignName,
+        status: 'sending',
+        template_name: templateName,
+        template_language: templateLanguage,
+        audience_type: body.audience_type || 'excel_upload',
+        description: descriptionValue,
+        total_recipients: recipients.length,
+        sent_count: 0,
+        delivered_count: 0,
+        read_count: 0,
+        failed_count: 0
+      }).select().single();
+      if (newCamp) targetCampaignId = newCamp.id;
+    }
+
+    let sentCount = 0;
+    let failedCount = 0;
+    const results = [];
+
+    // Loop through recipients
+    for (const recipient of recipients) {
+      const rawNumber = String(recipient.phone || recipient.number || recipient.mobile || '').trim();
+      let digits = rawNumber.replace(/[^0-9]/g, '');
+      if (digits.length === 10) digits = '91' + digits;
+      if (digits.length < 7 || digits.length > 15) {
+        failedCount += 1;
+        results.push({ phone: rawNumber, success: false, error: 'Invalid phone number format' });
+        continue;
+      }
+
+      // Variable interpolation
+      const recipientName = String(recipient.name || recipient.contact_name || 'there').trim();
+      const recipientCompany = String(recipient.company || recipient.company_name || '').trim();
+      let personalizedText = messageText
+        .replace(/\{\{name\}\}/gi, recipientName)
+        .replace(/\{\{company\}\}/gi, recipientCompany)
+        .replace(/\{\{phone\}\}/gi, digits);
+
+      // Meta Cloud API payload
+      let metaPayload;
+      if (mediaType && mediaType !== 'none' && mediaUrl) {
+        const metaType = getMetaMediaType(mediaType);
+        metaPayload = {
+          messaging_product: 'whatsapp',
+          to: digits,
+          type: metaType,
+          [metaType]: { link: mediaUrl }
+        };
+        if (personalizedText && ['image', 'video', 'document'].includes(metaType)) {
+          metaPayload[metaType].caption = personalizedText;
+        }
+        if (metaType === 'document' && mediaName) {
+          metaPayload[metaType].filename = mediaName;
+        }
+      } else if (templateName && templateName !== 'custom_campaign') {
+        metaPayload = {
+          messaging_product: 'whatsapp',
+          to: digits,
+          type: 'template',
+          template: {
+            name: templateName,
+            language: { code: templateLanguage || 'en_US' }
+          }
+        };
+      } else {
+        metaPayload = {
+          messaging_product: 'whatsapp',
+          to: digits,
+          type: 'text',
+          text: { body: personalizedText || 'Hello!' }
+        };
+      }
+
+      try {
+        const metaRes = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${creds.phoneNumberId}/messages`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${creds.accessToken}`
+          },
+          body: JSON.stringify(metaPayload)
+        });
+
+        const metaData = await metaRes.json().catch(() => ({}));
+        if (!metaRes.ok || metaData.error) {
+          failedCount += 1;
+          const errMessage = metaData.error?.message || `HTTP ${metaRes.status}`;
+          results.push({ phone: digits, success: false, error: errMessage });
+        } else {
+          sentCount += 1;
+          const wamid = metaData.messages?.[0]?.id || null;
+          results.push({ phone: digits, success: true, wamid });
+
+          // Record in messages table
+          const msgRecord = {
+            organization_id: organizationId,
+            sender_number: creds.phoneNumberId,
+            recipient_number: digits,
+            body: personalizedText || (mediaType ? `[${mediaType}]` : ''),
+            content: personalizedText || (mediaType ? `[${mediaType}]` : ''),
+            direction: 'outbound',
+            channel: 'whatsapp',
+            status: 'sent',
+            metadata: {
+              campaign_id: targetCampaignId,
+              campaign_name: campaignName,
+              meta_message_id: wamid,
+              recipient_name: recipientName
+            }
+          };
+          if (mediaType && mediaType !== 'none') {
+            msgRecord.media_type = mediaType;
+            msgRecord.media_url = mediaUrl;
+          }
+          await supabase.from('messages').insert(msgRecord);
+        }
+      } catch (err) {
+        failedCount += 1;
+        results.push({ phone: digits, success: false, error: err.message });
+      }
+
+      // Small throttling delay (50ms) to stay within Meta rate limits
+      await new Promise(r => setTimeout(r, 50));
+    }
+
+    // Update campaign status
+    if (targetCampaignId) {
+      await supabase.from('wa_campaigns').update({
+        status: 'completed',
+        sent_count: sentCount,
+        failed_count: failedCount,
+        total_recipients: recipients.length,
+        updated_at: new Date().toISOString()
+      }).eq('id', targetCampaignId).eq('organization_id', organizationId);
+    }
+
+    return res.status(200).json({
+      success: true,
+      campaign_id: targetCampaignId,
+      total: recipients.length,
+      sent: sentCount,
+      failed: failedCount,
+      results
+    });
+  }
+
   // ---- POST action=create-lead -------------------------------------------
   // Lives inside this route (not a new api/*.js) because Vercel is already at
   // the 12-function limit. organization_id comes from the verified membership

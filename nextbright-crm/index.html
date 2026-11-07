@@ -30,6 +30,7 @@
   <link rel="stylesheet" href="css/responsive.css">
   <link rel="stylesheet" href="css/social.css">
   <link rel="stylesheet" href="css/reference-theme.css">
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
 <body>
 
@@ -2405,9 +2406,16 @@ curl -X POST https://your-domain.com/api/leads \
               <option value="carousel">Carousel (Multi-Slide)</option>
             </select>
 
-            <label class="form-label" style="font-size:0.85rem;font-weight:600;">Media URL / Asset</label>
+            <label class="form-label" style="font-size:0.85rem;font-weight:600;">Media Upload / Asset</label>
+            <!-- Direct file upload drop zone -->
+            <div id="ig-drop-zone" style="border:2px dashed #cbd5e1;border-radius:8px;padding:14px;text-align:center;background:#f8fafc;cursor:pointer;margin-bottom:10px;transition:all .2s;">
+              <input type="file" id="ig-post-file-input" accept="image/*,video/*" style="display:none;">
+              <div style="font-size:1.4rem;margin-bottom:2px;">📷</div>
+              <div style="font-size:0.82rem;font-weight:600;color:#1e293b;">Click to upload Image or Video, or drag &amp; drop</div>
+              <div style="font-size:0.72rem;color:#64748b;">PNG, JPG, MP4 or MOV</div>
+            </div>
             <div style="display:flex;gap:6px;margin-bottom:12px;">
-              <input type="url" id="ig-post-media-url" class="form-control" placeholder="https://images.unsplash.com/..." required style="flex:1;">
+              <input type="url" id="ig-post-media-url" class="form-control" placeholder="Or enter media URL (https://...)" required style="flex:1;font-size:0.82rem;">
               <button type="button" class="btn btn-secondary btn-sm" onclick="window.switchView('content-library')" title="Pick from library"><i data-feather="folder"></i></button>
             </div>
 
@@ -2466,14 +2474,53 @@ curl -X POST https://your-domain.com/api/leads \
           <label class="form-label" style="font-size:0.85rem;font-weight:600;">Campaign Name</label>
           <input type="text" id="camp-name-input" class="form-control" placeholder="e.g. Festive Flash Sale Announcement" required>
         </div>
-        <div style="margin-bottom:12px;">
-          <label class="form-label" style="font-size:0.85rem;font-weight:600;">Target Audience</label>
-          <select id="camp-audience-select" class="form-control">
-            <option value="All Leads (320 contacts)">All Leads (320 contacts)</option>
-            <option value="High Value Leads (150 contacts)">High Value Leads (150 contacts)</option>
-            <option value="Hot Opportunities (45 contacts)">Hot Opportunities (45 contacts)</option>
-            <option value="New Inbound Contacts (85 contacts)">New Inbound Contacts (85 contacts)</option>
-          </select>
+        <!-- TARGET AUDIENCE & EXCEL/CSV LEADS UPLOAD -->
+        <div style="margin-bottom:14px;background:#f8fafc;padding:14px;border-radius:10px;border:1px solid var(--border-light);">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+            <label class="form-label" style="font-size:0.85rem;font-weight:700;margin:0;">🎯 Target Audience / Leads</label>
+            <span id="camp-recipients-count-badge" class="badge" style="background:#25d366;color:#fff;font-size:0.75rem;padding:3px 8px;border-radius:12px;">0 Contacts Loaded</span>
+          </div>
+
+          <div style="display:flex;gap:16px;margin-bottom:10px;">
+            <label style="font-size:0.82rem;display:flex;align-items:center;gap:6px;cursor:pointer;">
+              <input type="radio" name="camp-audience-type" id="camp-aud-excel" value="excel" checked>
+              <strong>📁 Upload Excel / CSV File (Recommended)</strong>
+            </label>
+            <label style="font-size:0.82rem;display:flex;align-items:center;gap:6px;cursor:pointer;">
+              <input type="radio" name="camp-audience-type" id="camp-aud-crm" value="crm">
+              <span>👥 Existing CRM Leads</span>
+            </label>
+          </div>
+
+          <!-- Excel Upload Zone -->
+          <div id="camp-excel-box" style="border:2px dashed #94a3b8;border-radius:8px;padding:16px;text-align:center;background:#fff;cursor:pointer;transition:all .2s;">
+            <input type="file" id="camp-excel-file-input" accept=".xlsx, .xls, .csv" style="display:none;">
+            <div id="camp-excel-prompt">
+              <div style="font-size:1.6rem;margin-bottom:4px;">📊</div>
+              <div style="font-size:0.85rem;font-weight:600;color:#1e293b;">Click to upload Excel (.xlsx, .xls) or CSV Leads file</div>
+              <div style="font-size:0.75rem;color:#64748b;margin-top:2px;">Columns supported: <strong>Name, Phone / WhatsApp, Company</strong></div>
+            </div>
+            <!-- Uploaded file summary -->
+            <div id="camp-excel-summary" style="display:none;text-align:left;background:#f0fdf4;border:1px solid #bbf7d0;padding:10px 14px;border-radius:6px;color:#166534;">
+              <div style="display:flex;justify-content:space-between;align-items:center;">
+                <div>
+                  <strong id="camp-excel-filename">leads.xlsx</strong>
+                  <div id="camp-excel-stats" style="font-size:0.78rem;color:#15803d;margin-top:2px;">0 valid contact numbers ready to send</div>
+                </div>
+                <button type="button" class="btn btn-secondary btn-sm" id="camp-excel-clear-btn" style="padding:2px 8px;font-size:0.75rem;">Change File</button>
+              </div>
+              <div id="camp-excel-preview-list" style="max-height:110px;overflow-y:auto;margin-top:8px;background:#fff;padding:6px;border-radius:4px;border:1px solid #dcfce7;font-size:0.75rem;"></div>
+            </div>
+          </div>
+
+          <!-- CRM Select Zone (Hidden when Excel radio is selected) -->
+          <div id="camp-crm-box" style="display:none;margin-top:8px;">
+            <select id="camp-crm-select" class="form-control" style="font-size:0.85rem;">
+              <option value="all">All CRM Leads with Phone Numbers</option>
+              <option value="hot">Hot Opportunities / High Value Leads</option>
+              <option value="won">Won / Converted Customers</option>
+            </select>
+          </div>
         </div>
         <div style="margin-bottom:12px;">
           <label class="form-label" style="font-size:0.85rem;font-weight:600;">Approved WhatsApp Template / Preset</label>
@@ -2550,7 +2597,8 @@ curl -X POST https://your-domain.com/api/leads \
           <button type="button" class="btn btn-secondary btn-sm" id="btn-test-send-campaign"><i data-feather="zap"></i> Send Test to Me</button>
           <div style="display:flex;gap:10px;">
             <button type="button" class="btn btn-secondary" onclick="window.NextBrightWACampaigns?.closeModal()">Cancel</button>
-            <button type="submit" class="btn btn-primary" style="background:#25d366;border-color:#25d366;"><i data-feather="send"></i> Launch Campaign</button>
+            <button type="button" class="btn btn-secondary" id="camp-save-draft-btn"><i data-feather="file-text"></i> Save Draft</button>
+            <button type="submit" class="btn btn-primary" id="camp-launch-btn" style="background:#25d366;border-color:#25d366;font-weight:600;"><i data-feather="send"></i> 🚀 Launch Campaign Now</button>
           </div>
         </div>
       </form>
