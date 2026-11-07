@@ -2476,19 +2476,71 @@ curl -X POST https://your-domain.com/api/leads \
           </select>
         </div>
         <div style="margin-bottom:12px;">
-          <label class="form-label" style="font-size:0.85rem;font-weight:600;">Approved WhatsApp Template</label>
+          <label class="form-label" style="font-size:0.85rem;font-weight:600;">Approved WhatsApp Template / Preset</label>
           <select id="camp-template-select" class="form-control" required>
             <option value="exclusive_festive_offer">exclusive_festive_offer (Marketing)</option>
             <option value="lead_welcome_v2">lead_welcome_v2 (Utility)</option>
             <option value="appointment_reminder">appointment_reminder (Utility)</option>
+            <option value="custom_campaign">custom_campaign (Custom Message & Media)</option>
           </select>
         </div>
-        <div id="camp-template-preview" style="margin-bottom:14px;">
-          <div style="background:var(--navy-50);padding:12px;border-radius:8px;font-size:0.85rem;border:1px solid var(--border-light);">
-            <span class="badge badge-info" style="margin-bottom:6px;">MARKETING</span>
-            <p style="margin:0;color:var(--text-dark);line-height:1.4;">Hi {{name}}, get {{discount}}% off on NextBright CRM enterprise plans this week only! Reply YES to claim.</p>
+
+        <!-- EDITABLE MESSAGE CONTENT -->
+        <div style="margin-bottom:12px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+            <label class="form-label" style="font-size:0.85rem;font-weight:600;margin:0;">Campaign Message Content (Editable)</label>
+            <div style="display:flex;gap:4px;">
+              <button type="button" class="btn btn-secondary btn-sm camp-var-btn" data-var="{{name}}" style="font-size:0.7rem;padding:2px 6px;">+ Name</button>
+              <button type="button" class="btn btn-secondary btn-sm camp-var-btn" data-var="{{company}}" style="font-size:0.7rem;padding:2px 6px;">+ Company</button>
+              <button type="button" class="btn btn-secondary btn-sm camp-var-btn" data-var="{{phone}}" style="font-size:0.7rem;padding:2px 6px;">+ Phone</button>
+            </div>
+          </div>
+          <textarea id="camp-message-body" class="form-control" rows="3" placeholder="Type or customize your campaign message here...">Hi {{name}}, get exclusive discounts on NextBright CRM enterprise plans this week only! Reply YES to claim.</textarea>
+          <small style="color:var(--text-muted);font-size:0.75rem;">Freely edit or personalize the message text sent to your recipients.</small>
+        </div>
+
+        <!-- ATTACH MEDIA: IMAGE, VIDEO, VOICE MESSAGE -->
+        <div style="background:#f8fafc;padding:12px;border-radius:8px;border:1px solid var(--border-light);margin-bottom:14px;">
+          <label class="form-label" style="font-size:0.85rem;font-weight:600;display:flex;align-items:center;gap:6px;margin-bottom:8px;">
+            <span>📎 Attach Media (Image, Video, or Voice Note)</span>
+          </label>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px;">
+            <div>
+              <label style="font-size:0.75rem;color:var(--text-muted);display:block;margin-bottom:2px;">Media Type</label>
+              <select id="camp-media-type" class="form-control" style="font-size:0.82rem;">
+                <option value="none">None (Text Only)</option>
+                <option value="image">🖼️ Image (JPG, PNG, WebP)</option>
+                <option value="video">🎬 Video (MP4)</option>
+                <option value="audio">🎤 Voice Message / Audio (MP3, OGG, M4A)</option>
+                <option value="document">📄 Document (PDF)</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:0.75rem;color:var(--text-muted);display:block;margin-bottom:2px;">Select File from Device</label>
+              <input type="file" id="camp-media-file" class="form-control" style="font-size:0.82rem;" accept="image/*,video/*,audio/*,application/pdf">
+            </div>
+          </div>
+          <div id="camp-media-url-wrap" style="margin-bottom:6px;">
+            <input type="url" id="camp-media-url" class="form-control" style="font-size:0.82rem;" placeholder="Or enter media URL (https://...)">
+          </div>
+          <div id="camp-media-preview-container" style="display:none;margin-top:8px;padding:8px;background:#fff;border-radius:6px;border:1px solid #e2e8f0;">
+            <div style="font-size:0.72rem;font-weight:600;color:var(--text-muted);margin-bottom:4px;">ATTACHMENT PREVIEW:</div>
+            <div id="camp-media-preview-content"></div>
           </div>
         </div>
+
+        <!-- LIVE WHATSAPP CHAT PREVIEW -->
+        <div style="margin-bottom:14px;">
+          <label class="form-label" style="font-size:0.8rem;font-weight:600;color:var(--text-muted);">Live Customer WhatsApp Preview</label>
+          <div style="background:#e5ddd5;padding:12px;border-radius:10px;display:flex;justify-content:flex-start;">
+            <div style="background:#dcf8c6;border-radius:8px 8px 8px 0;padding:8px 12px;max-width:88%;box-shadow:0 1px 1px rgba(0,0,0,0.1);font-size:0.85rem;color:#111;">
+              <div id="camp-chat-media-preview" style="display:none;margin-bottom:6px;"></div>
+              <div id="camp-chat-text-preview" style="white-space:pre-wrap;line-height:1.4;">Hi {{name}}, get exclusive discounts on NextBright CRM enterprise plans this week only! Reply YES to claim.</div>
+              <div style="text-align:right;font-size:0.65rem;color:rgba(0,0,0,0.45);margin-top:4px;">12:00 PM ✓✓</div>
+            </div>
+          </div>
+        </div>
+
         <div style="margin-bottom:16px;">
           <label class="form-label" style="font-size:0.85rem;font-weight:600;">Schedule Launch Time</label>
           <input type="datetime-local" id="camp-schedule-input" class="form-control">
@@ -2637,13 +2689,71 @@ curl -X POST https://your-domain.com/api/leads \
           </select>
         </div>
         <div style="margin-bottom:12px;">
-          <label class="form-label" style="font-size:0.85rem;font-weight:600;">Message Template</label>
+          <label class="form-label" style="font-size:0.85rem;font-weight:600;">Message Template / Preset</label>
           <select id="broadcast-template-select" class="form-control">
             <option value="exclusive_festive_offer">exclusive_festive_offer</option>
             <option value="lead_welcome_v2">lead_welcome_v2</option>
             <option value="appointment_reminder">appointment_reminder</option>
+            <option value="custom_broadcast">custom_broadcast (Custom Message & Media)</option>
           </select>
         </div>
+
+        <!-- EDITABLE BROADCAST MESSAGE -->
+        <div style="margin-bottom:12px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+            <label class="form-label" style="font-size:0.85rem;font-weight:600;margin:0;">Broadcast Message Content (Editable)</label>
+            <div style="display:flex;gap:4px;">
+              <button type="button" class="btn btn-secondary btn-sm bc-var-btn" data-var="{{name}}" style="font-size:0.7rem;padding:2px 6px;">+ Name</button>
+              <button type="button" class="btn btn-secondary btn-sm bc-var-btn" data-var="{{company}}" style="font-size:0.7rem;padding:2px 6px;">+ Company</button>
+              <button type="button" class="btn btn-secondary btn-sm bc-var-btn" data-var="{{phone}}" style="font-size:0.7rem;padding:2px 6px;">+ Phone</button>
+            </div>
+          </div>
+          <textarea id="broadcast-message-body" class="form-control" rows="3" placeholder="Type or customize your broadcast message here...">Hi {{name}}, get exclusive discounts on NextBright CRM enterprise plans this week only! Reply YES to claim.</textarea>
+          <small style="color:var(--text-muted);font-size:0.75rem;">Freely edit or personalize the message text sent to your recipients.</small>
+        </div>
+
+        <!-- ATTACH MEDIA: IMAGE, VIDEO, VOICE MESSAGE -->
+        <div style="background:#f8fafc;padding:12px;border-radius:8px;border:1px solid var(--border-light);margin-bottom:14px;">
+          <label class="form-label" style="font-size:0.85rem;font-weight:600;display:flex;align-items:center;gap:6px;margin-bottom:8px;">
+            <span>📎 Attach Media (Image, Video, or Voice Note)</span>
+          </label>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px;">
+            <div>
+              <label style="font-size:0.75rem;color:var(--text-muted);display:block;margin-bottom:2px;">Media Type</label>
+              <select id="broadcast-media-type" class="form-control" style="font-size:0.82rem;">
+                <option value="none">None (Text Only)</option>
+                <option value="image">🖼️ Image (JPG, PNG, WebP)</option>
+                <option value="video">🎬 Video (MP4)</option>
+                <option value="audio">🎤 Voice Message / Audio (MP3, OGG, M4A)</option>
+                <option value="document">📄 Document (PDF)</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:0.75rem;color:var(--text-muted);display:block;margin-bottom:2px;">Select File from Device</label>
+              <input type="file" id="broadcast-media-file" class="form-control" style="font-size:0.82rem;" accept="image/*,video/*,audio/*,application/pdf">
+            </div>
+          </div>
+          <div id="broadcast-media-url-wrap" style="margin-bottom:6px;">
+            <input type="url" id="broadcast-media-url" class="form-control" style="font-size:0.82rem;" placeholder="Or enter media URL (https://...)">
+          </div>
+          <div id="broadcast-media-preview-container" style="display:none;margin-top:8px;padding:8px;background:#fff;border-radius:6px;border:1px solid #e2e8f0;">
+            <div style="font-size:0.72rem;font-weight:600;color:var(--text-muted);margin-bottom:4px;">ATTACHMENT PREVIEW:</div>
+            <div id="broadcast-media-preview-content"></div>
+          </div>
+        </div>
+
+        <!-- LIVE WHATSAPP CHAT PREVIEW -->
+        <div style="margin-bottom:14px;">
+          <label class="form-label" style="font-size:0.8rem;font-weight:600;color:var(--text-muted);">Live Customer WhatsApp Preview</label>
+          <div style="background:#e5ddd5;padding:12px;border-radius:10px;display:flex;justify-content:flex-start;">
+            <div style="background:#dcf8c6;border-radius:8px 8px 8px 0;padding:8px 12px;max-width:88%;box-shadow:0 1px 1px rgba(0,0,0,0.1);font-size:0.85rem;color:#111;">
+              <div id="broadcast-chat-media-preview" style="display:none;margin-bottom:6px;"></div>
+              <div id="broadcast-chat-text-preview" style="white-space:pre-wrap;line-height:1.4;">Hi {{name}}, get exclusive discounts on NextBright CRM enterprise plans this week only! Reply YES to claim.</div>
+              <div style="text-align:right;font-size:0.65rem;color:rgba(0,0,0,0.45);margin-top:4px;">12:00 PM ✓✓</div>
+            </div>
+          </div>
+        </div>
+
         <div style="margin-bottom:16px;">
           <label class="form-label" style="font-size:0.85rem;font-weight:600;">Send Timing</label>
           <select id="broadcast-timing-select" class="form-control">

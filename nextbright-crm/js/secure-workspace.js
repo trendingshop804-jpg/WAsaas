@@ -284,14 +284,22 @@
     }
   };
 
+  let loadWorkspaceTimer = null;
+  function debounceLoadWorkspace(session, user) {
+    if (loadWorkspaceTimer) clearTimeout(loadWorkspaceTimer);
+    loadWorkspaceTimer = setTimeout(() => {
+      loadWorkspace(session, user);
+    }, 60);
+  }
+
   window.NB_AUTH.onAuthChange((session, user) => {
-    // Never call getSession (via apiFetch) while the auth SDK holds its lock.
-    setTimeout(() => { loadWorkspace(session, user); }, 0);
+    // Debounce to prevent race condition between requireSession and onAuthChange aborting in-flight requests
+    debounceLoadWorkspace(session, user);
   });
 
   document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('sb-signout-btn')?.addEventListener('click', () => window.NB_AUTH.signOut());
     const { session, user } = await window.NB_AUTH.requireSession();
-    await loadWorkspace(session, user);
+    debounceLoadWorkspace(session, user);
   });
 })();

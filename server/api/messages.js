@@ -16,6 +16,7 @@ import { decryptToken } from './_crypto.js';
 const SIGNED_URL_TTL = 60 * 60 * 24; // 24 hours
 const DEFAULT_LIMIT = 200;
 const GRAPH_VERSION = process.env.WHATSAPP_GRAPH_VERSION || 'v21.0';
+const signedUrlCache = new Map();
 const SERVICE_WINDOW_MS = 24 * 60 * 60 * 1000; // WhatsApp 24h customer service window
 const DUPLICATE_WINDOW_MS = 60 * 1000;           // duplicate-suppression window
 
@@ -607,6 +608,16 @@ export default async function handler(req, res) {
       return res.status(400).json({ success: false, error: 'Campaign name and approved template are required.' });
     }
 
+    // Serialize message content + media into description (schema-safe)
+    const messageText = cleanText(input.message_text, 2000) || '';
+    const mediaType = cleanText(input.media_type, 20) || 'none';
+    const mediaUrl = cleanText(input.media_url, 1000) || '';
+    const mediaName = cleanText(input.media_name, 260) || '';
+    let descriptionValue = cleanText(input.description, 1000) || null;
+    if (messageText || (mediaType && mediaType !== 'none' && mediaUrl)) {
+      descriptionValue = JSON.stringify({ text: messageText, media_type: mediaType, media_url: mediaUrl, media_name: mediaName });
+    }
+
     const campaign = {
       organization_id: organizationId,
       created_by: access.user?.id || null,
@@ -615,7 +626,7 @@ export default async function handler(req, res) {
       template_name: templateName,
       template_language: cleanText(input.template_language, 20) || 'en_US',
       audience_type: cleanText(input.audience_type, 40) || 'manual',
-      description: cleanText(input.description, 1000) || null,
+      description: descriptionValue,
       scheduled_at: status === 'scheduled' ? input.scheduled_at : null,
       total_recipients: 0,
       queued_count: 0,
@@ -633,7 +644,17 @@ export default async function handler(req, res) {
       console.error('[messages] could not save WhatsApp campaign:', error.message);
       return res.status(500).json({ success: false, error: 'Could not save WhatsApp campaign.' });
     }
-    return res.status(201).json({ success: true, campaign: savedCampaign });
+    // Attach parsed message/media fields to response so UI can render immediately
+    const responseCampaign = { ...savedCampaign };
+    if (descriptionValue && descriptionValue.startsWith('{')) {
+      try {
+        const parsed = JSON.parse(descriptionValue);
+        responseCampaign.message_text = parsed.text || '';
+        responseCampaign.media_type = parsed.media_type || 'none';
+        responseCampaign.media_url = parsed.media_url || '';
+      } catch (_) {}
+    }
+    return res.status(201).json({ success: true, campaign: responseCampaign });
   }
 
   // ---- POST action=create-lead -------------------------------------------
@@ -1234,6 +1255,12 @@ export default async function handler(req, res) {
         cleanPath = cleanPath.replace(/^whatsapp-media\//, '');
       }
 
+      const now = Date.now();
+      const cached = signedUrlCache.get(cleanPath);
+      if (cached && cached.expiresAt > now) {
+        return { ...msg, media_url: cached.url, mediaUrl: cached.url };
+      }
+
       const { data: urlData, error: urlError } = await supabase
         .storage
         .from('whatsapp-media')
@@ -1242,8 +1269,10 @@ export default async function handler(req, res) {
       if (urlError || !urlData?.signedUrl) {
         const publicUrl = supabase.storage.from('whatsapp-media').getPublicUrl(cleanPath).data?.publicUrl;
         const finalUrl = publicUrl || null;
+        if (finalUrl) signedUrlCache.set(cleanPath, { url: finalUrl, expiresAt: now + 3600 * 1000 });
         return { ...msg, media_url: finalUrl, mediaUrl: finalUrl };
       }
+      signedUrlCache.set(cleanPath, { url: urlData.signedUrl, expiresAt: now + 3600 * 1000 });
       return { ...msg, media_url: urlData.signedUrl, mediaUrl: urlData.signedUrl };
     }));
 

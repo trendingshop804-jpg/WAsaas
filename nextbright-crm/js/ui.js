@@ -557,16 +557,21 @@ async function refreshLiveInbox() {
     }
     clearInboxAuthNotice();
 
-    // If new conversation arrived or count increased, refresh CRM leads & board
+    // If new conversation arrived or count increased, refresh CRM leads & board smoothly without blanking workspace
     if (prevCount !== null && mapped.length > prevCount) {
-      if (typeof window.NB_WORKSPACE?.reload === 'function') {
-        window.NB_WORKSPACE.reload().catch(() => {});
-      } else if (typeof window.NB_AUTH?.apiFetch === 'function') {
+      if (typeof window.NB_AUTH?.apiFetch === 'function') {
         window.NB_AUTH.apiFetch('/api/leads?limit=200')
           .then(res => res.json())
           .then(data => {
             if (data?.leads && Array.isArray(data.leads)) {
-              window.NB.leads = data.leads;
+              window.NB.leads = data.leads.map(l => ({
+                ...l,
+                name: l.contact_name || l.name || 'Unnamed lead',
+                company: l.company_name || l.company || '',
+                assigned: l.assigned_agent_name || 'Unassigned',
+                lastActivity: l.updated_at ? new Date(l.updated_at).toLocaleString() : '',
+                date: l.created_at ? new Date(l.created_at).toLocaleDateString() : ''
+              }));
               window.renderRecentLeads?.();
               window.renderLeadsTable?.();
               window.renderKanban?.();

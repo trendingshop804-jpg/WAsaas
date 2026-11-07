@@ -50,6 +50,39 @@
     });
   }
 
+  const TEMPLATE_PRESETS = {
+    exclusive_festive_offer: 'Hi {{name}}, get exclusive discounts on NextBright CRM enterprise plans this week only! Reply YES to claim.',
+    lead_welcome_v2: 'Hello {{name}}, thank you for reaching out to NextBright CRM! How can our team assist your business today?',
+    appointment_reminder: 'Hi {{name}}, this is a quick reminder regarding your upcoming consultation with our sales team scheduled for {{time}}.',
+    custom_campaign: ''
+  };
+
+  let campaignMedia = {
+    type: 'none',
+    url: '',
+    name: ''
+  };
+
+  function parseCampaignDescription(description) {
+    if (!description) return { text: '', media_type: 'none', media_url: '', media_name: '' };
+    if (typeof description === 'object') return description;
+    const trimmed = String(description).trim();
+    if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (parsed && typeof parsed === 'object') {
+          return {
+            text: parsed.text || '',
+            media_type: parsed.media_type || 'none',
+            media_url: parsed.media_url || '',
+            media_name: parsed.media_name || ''
+          };
+        }
+      } catch (_) {}
+    }
+    return { text: description, media_type: 'none', media_url: '', media_name: '' };
+  }
+
   function renderCampaigns() {
     const container = document.getElementById('campaigns-list-container');
     if (!container) return;
@@ -63,17 +96,95 @@
       const read = Number(campaign.read_count || 0);
       const failed = Number(campaign.failed_count || 0);
       const scheduled = campaign.scheduled_at ? new Date(campaign.scheduled_at).toLocaleString() : 'Draft - not scheduled';
+
+      const descMeta = parseCampaignDescription(campaign.description);
+      const messagePreview = campaign.message_text || descMeta.text || '';
+      const mediaType = campaign.media_type || descMeta.media_type || 'none';
+
+      let mediaBadge = '';
+      if (mediaType === 'image') mediaBadge = '<span class="badge" style="background:#e0f2fe;color:#0284c7;font-size:0.75rem;margin-left:6px;">🖼️ Image</span>';
+      else if (mediaType === 'video') mediaBadge = '<span class="badge" style="background:#fef3c7;color:#d97706;font-size:0.75rem;margin-left:6px;">🎬 Video</span>';
+      else if (mediaType === 'audio') mediaBadge = '<span class="badge" style="background:#fce7f3;color:#db2777;font-size:0.75rem;margin-left:6px;">🎤 Voice Note</span>';
+      else if (mediaType === 'document') mediaBadge = '<span class="badge" style="background:#f3e8ff;color:#7e22ce;font-size:0.75rem;margin-left:6px;">📄 Document</span>';
+
       return `<div class="campaign-card" style="background:#fff;border:1px solid var(--border-light);border-radius:12px;padding:18px 20px;margin-bottom:12px;">
-        <div style="display:flex;justify-content:space-between;gap:12px;"><div><strong>${escapeHtml(campaign.name)}</strong><div style="font-size:.8rem;color:var(--text-muted);margin-top:4px;">Template: <code>${escapeHtml(campaign.template_name)}</code> - ${escapeHtml(campaign.audience_type || 'manual')}</div></div><span class="badge badge-secondary">${escapeHtml(campaign.status)}</span></div>
-        <div style="font-size:.8rem;color:var(--text-muted);margin:12px 0;">${scheduled}</div>
+        <div style="display:flex;justify-content:space-between;gap:12px;">
+          <div>
+            <strong>${escapeHtml(campaign.name)}</strong>${mediaBadge}
+            <div style="font-size:.8rem;color:var(--text-muted);margin-top:4px;">Template: <code>${escapeHtml(campaign.template_name)}</code> - ${escapeHtml(campaign.audience_type || 'manual')}</div>
+          </div>
+          <span class="badge badge-secondary">${escapeHtml(campaign.status)}</span>
+        </div>
+        ${messagePreview ? `<div style="font-size:0.82rem;color:#334155;background:#f8fafc;padding:8px 12px;border-radius:6px;margin:10px 0;border-left:3px solid #25d366;">${escapeHtml(messagePreview)}</div>` : ''}
+        <div style="font-size:.8rem;color:var(--text-muted);margin:10px 0;">${scheduled}</div>
         <div style="display:flex;gap:16px;font-size:.82rem;"><span>${sent} sent</span><span>${delivered} delivered</span><span>${read} read</span><span>${failed} failed</span></div>
         <div style="font-size:.75rem;color:var(--text-muted);margin-top:10px;">Metrics remain zero until Meta accepts sends and delivery webhooks update this campaign.</div>
       </div>`;
     }).join('');
   }
 
-  function openCreateCampaignModal() { const modal = document.getElementById('modal-create-wa-campaign'); if (modal) modal.style.display = 'flex'; }
-  function closeCreateCampaignModal() { const modal = document.getElementById('modal-create-wa-campaign'); if (modal) modal.style.display = 'none'; }
+  function updateCampaignPreview() {
+    const textPreview = document.getElementById('camp-chat-text-preview');
+    const mediaPreview = document.getElementById('camp-chat-media-preview');
+    const containerPreview = document.getElementById('camp-media-preview-container');
+    const contentPreview = document.getElementById('camp-media-preview-content');
+    const msgText = document.getElementById('camp-message-body')?.value || '';
+
+    if (textPreview) {
+      textPreview.textContent = msgText || '(Message body is empty)';
+    }
+
+    const type = document.getElementById('camp-media-type')?.value || 'none';
+    const url = campaignMedia.url || document.getElementById('camp-media-url')?.value.trim() || '';
+
+    if (type === 'none' || !url) {
+      if (mediaPreview) {
+        mediaPreview.style.display = 'none';
+        mediaPreview.innerHTML = '';
+      }
+      if (containerPreview) {
+        containerPreview.style.display = 'none';
+      }
+      return;
+    }
+
+    let previewHtml = '';
+    if (type === 'image') {
+      previewHtml = `<img src="${escapeHtml(url)}" style="max-width:100%;max-height:160px;border-radius:6px;display:block;object-fit:cover;">`;
+    } else if (type === 'video') {
+      previewHtml = `<video src="${escapeHtml(url)}" controls style="max-width:100%;max-height:160px;border-radius:6px;display:block;"></video>`;
+    } else if (type === 'audio') {
+      previewHtml = `<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:#e2e8f0;border-radius:6px;">
+        <span style="font-size:1.2rem;">🎤</span>
+        <audio src="${escapeHtml(url)}" controls style="height:32px;flex:1;"></audio>
+      </div>`;
+    } else if (type === 'document') {
+      previewHtml = `<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:#e2e8f0;border-radius:6px;">
+        <span style="font-size:1.2rem;">📄</span>
+        <span style="font-size:0.8rem;font-weight:600;word-break:break-all;">${escapeHtml(campaignMedia.name || 'Document')}</span>
+      </div>`;
+    }
+
+    if (mediaPreview) {
+      mediaPreview.style.display = 'block';
+      mediaPreview.innerHTML = previewHtml;
+    }
+    if (containerPreview && contentPreview) {
+      containerPreview.style.display = 'block';
+      contentPreview.innerHTML = previewHtml;
+    }
+  }
+
+  function openCreateCampaignModal() {
+    const modal = document.getElementById('modal-create-wa-campaign');
+    if (modal) modal.style.display = 'flex';
+    updateCampaignPreview();
+  }
+
+  function closeCreateCampaignModal() {
+    const modal = document.getElementById('modal-create-wa-campaign');
+    if (modal) modal.style.display = 'none';
+  }
 
   async function saveCampaign(event) {
     event.preventDefault();
@@ -81,12 +192,27 @@
     const templateName = document.getElementById('camp-template-select')?.value;
     const audienceType = document.getElementById('camp-audience-select')?.value || 'manual';
     const scheduleValue = document.getElementById('camp-schedule-input')?.value;
+    const messageText = document.getElementById('camp-message-body')?.value.trim() || '';
+    const mediaType = document.getElementById('camp-media-type')?.value || 'none';
+    const mediaUrl = campaignMedia.url || document.getElementById('camp-media-url')?.value.trim() || '';
+    const mediaName = campaignMedia.name || '';
+
     if (!name || !templateName) return showToast('Campaign name and an approved template are required.', 'error');
     try {
       const payload = await readJson(await request('/api/wa-campaigns', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, template_name: templateName, template_language: 'en_US', audience_type: audienceType, scheduled_at: scheduleValue ? new Date(scheduleValue).toISOString() : null })
+        body: JSON.stringify({
+          name,
+          template_name: templateName,
+          template_language: 'en_US',
+          audience_type: audienceType,
+          scheduled_at: scheduleValue ? new Date(scheduleValue).toISOString() : null,
+          message_text: messageText,
+          media_type: mediaType,
+          media_url: mediaUrl,
+          media_name: mediaName
+        })
       }));
       campaigns.unshift(payload.campaign);
       closeCreateCampaignModal();
@@ -318,6 +444,93 @@
     const form = document.getElementById('form-create-wa-campaign');
     if (form) form.onsubmit = saveCampaign;
     document.getElementById('btn-test-send-campaign')?.addEventListener('click', () => showToast('Test sending requires a verified test recipient and is not simulated.', 'info'));
+
+    // Template selection auto-populates message textarea
+    const templateSelect = document.getElementById('camp-template-select');
+    const msgBody = document.getElementById('camp-message-body');
+    if (templateSelect && msgBody) {
+      templateSelect.addEventListener('change', () => {
+        const val = templateSelect.value;
+        if (TEMPLATE_PRESETS[val] !== undefined) {
+          msgBody.value = TEMPLATE_PRESETS[val];
+        }
+        updateCampaignPreview();
+      });
+    }
+
+    // Message body real-time typing preview
+    if (msgBody) {
+      msgBody.addEventListener('input', updateCampaignPreview);
+    }
+
+    // Quick tag insertion buttons (+ Name, + Company, + Phone)
+    document.querySelectorAll('.camp-var-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const tag = btn.getAttribute('data-var');
+        if (!tag || !msgBody) return;
+        const start = msgBody.selectionStart || msgBody.value.length;
+        const end = msgBody.selectionEnd || msgBody.value.length;
+        msgBody.value = msgBody.value.substring(0, start) + tag + msgBody.value.substring(end);
+        msgBody.focus();
+        msgBody.selectionStart = msgBody.selectionEnd = start + tag.length;
+        updateCampaignPreview();
+      });
+    });
+
+    // Media type change
+    const mediaTypeSelect = document.getElementById('camp-media-type');
+    const mediaFileInput = document.getElementById('camp-media-file');
+    const mediaUrlInput = document.getElementById('camp-media-url');
+
+    if (mediaTypeSelect) {
+      mediaTypeSelect.addEventListener('change', () => {
+        const type = mediaTypeSelect.value;
+        campaignMedia.type = type;
+        if (mediaFileInput) {
+          if (type === 'image') mediaFileInput.accept = 'image/*';
+          else if (type === 'video') mediaFileInput.accept = 'video/*';
+          else if (type === 'audio') mediaFileInput.accept = 'audio/*';
+          else if (type === 'document') mediaFileInput.accept = 'application/pdf';
+          else mediaFileInput.accept = '*/*';
+        }
+        updateCampaignPreview();
+      });
+    }
+
+    // Local file picker for media (FileReader)
+    if (mediaFileInput) {
+      mediaFileInput.addEventListener('change', (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+
+        // Auto-select matching media type if set to 'none'
+        if (mediaTypeSelect && mediaTypeSelect.value === 'none') {
+          if (file.type.startsWith('image/')) mediaTypeSelect.value = 'image';
+          else if (file.type.startsWith('video/')) mediaTypeSelect.value = 'video';
+          else if (file.type.startsWith('audio/')) mediaTypeSelect.value = 'audio';
+          else if (file.type === 'application/pdf') mediaTypeSelect.value = 'document';
+        }
+
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          campaignMedia.url = ev.target.result;
+          campaignMedia.name = file.name;
+          campaignMedia.type = mediaTypeSelect?.value || 'image';
+          if (mediaUrlInput) mediaUrlInput.value = '';
+          updateCampaignPreview();
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    // Direct media URL input
+    if (mediaUrlInput) {
+      mediaUrlInput.addEventListener('input', () => {
+        campaignMedia.url = mediaUrlInput.value.trim();
+        campaignMedia.name = 'Remote File';
+        updateCampaignPreview();
+      });
+    }
 
     // Bind CSV Import button and file input
     const importCsvBtn = document.getElementById('campaign-import-csv-btn');
