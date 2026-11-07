@@ -177,15 +177,19 @@
   async function requestJson(path, epoch) {
     const controller = new AbortController();
     activeControllers.push(controller);
-    const response = await window.NB_AUTH.apiFetch(path, { cache: 'no-store', signal: controller.signal });
-    if (epoch !== loadEpoch) throw new DOMException('Stale request', 'AbortError');
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      const error = new Error(payload.message || payload.error || `Request failed (${response.status})`);
-      error.status = response.status;
-      throw error;
+    try {
+      const response = await window.NB_AUTH.apiFetch(path, { cache: 'no-store', signal: controller.signal });
+      if (epoch !== loadEpoch) throw new DOMException('Stale request', 'AbortError');
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const error = new Error(payload.message || payload.error || `Request failed (${response.status})`);
+        error.status = response.status;
+        throw error;
+      }
+      return payload;
+    } finally {
+      activeControllers = activeControllers.filter(c => c !== controller);
     }
-    return payload;
   }
 
   function removeSetupCard() {
@@ -222,17 +226,27 @@
     });
   }
 
-  async function loadWorkspace(session, authUser) {
-    emptyWorkspace();
-    removeSetupCard();
+  let inFlightWorkspacePromise = null;
+  let inFlightUserId = null;
+
+  async function loadWorkspace(session, authUser, force = false) {
     if (!session || !authUser) {
+      emptyWorkspace();
+      removeSetupCard();
       activeScope = null;
       updateIdentity({ setupRequired: false, user: null, role: 'Signed out' }, null);
       return;
     }
-    const epoch = loadEpoch;
-    try {
-      let context = await requestJson('/api/leads?route=workspace', epoch);
+    if (!force && inFlightWorkspacePromise && inFlightUserId === authUser.id) {
+      return inFlightWorkspacePromise;
+    }
+    emptyWorkspace();
+    removeSetupCard();
+    inFlightUserId = authUser.id;
+    inFlightWorkspacePromise = (async () => {
+      const epoch = loadEpoch;
+      try {
+        let context = await requestJson('/api/leads?route=workspace', epoch);
       if (context.setupRequired === true && !context.organization) {
         await ensureWorkspace(authUser);
         if (epoch !== loadEpoch) return;
@@ -274,6 +288,10 @@
       if (error.status === 401) window.NB_AUTH.showOverlay();
       else window.showToast?.(error.message || 'Could not load workspace data.', 'error');
     }
+  })().finally(() => {
+    inFlightWorkspacePromise = null;
+  });
+  return inFlightWorkspacePromise;
   }
 
   window.NB_WORKSPACE = {
