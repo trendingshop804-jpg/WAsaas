@@ -479,8 +479,8 @@ function renderConversation(conv) {
       }
 
       return `
-      <div style="margin-bottom: 8px;" data-msg-state="${state || 'received'}">
-        <div class="msg-bubble ${m.dir}" style="${isFailed ? 'border:1px solid var(--status-danger, #ef4444); background: rgba(239, 68, 68, 0.1);' : ''}">${bodyContent}${stateChip}</div>
+      <div style="display:flex; flex-direction:column; align-items:${isOut ? 'flex-end' : 'flex-start'}; margin-bottom: 8px;" data-msg-state="${state || 'received'}">
+        <div class="msg-bubble ${m.dir}" style="width:fit-content; max-width:75%; ${isFailed ? 'border:1px solid var(--status-danger, #ef4444); background: rgba(239, 68, 68, 0.1);' : ''}">${bodyContent}${stateChip}</div>
         <div class="msg-time" style="text-align:${isOut ? 'right' : 'left'}; padding: 2px 4px; font-size: 0.6875rem; color: var(--text-muted);">${formatMessageTime(m.time)}</div>
       </div>`;
     }).join('');
