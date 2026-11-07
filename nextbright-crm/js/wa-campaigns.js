@@ -17,7 +17,12 @@
 
   async function loadCampaigns() {
     try {
-      const payload = await readJson(await request('/api/wa-campaigns', { headers: { Accept: 'application/json' } }));
+      let payload;
+      try {
+        payload = await readJson(await request('/api/wa-campaigns', { headers: { Accept: 'application/json' } }));
+      } catch (_) {
+        payload = await readJson(await request('/api/messages?action=wa_campaigns', { headers: { Accept: 'application/json' } }));
+      }
       campaigns = payload.campaigns || [];
     } catch (error) {
       campaigns = [];
@@ -25,6 +30,27 @@
     }
     renderCampaigns();
     renderStats();
+  }
+
+  async function loadApprovedTemplates() {
+    const templateSelect = document.getElementById('camp-template-select');
+    if (!templateSelect) return;
+    try {
+      const res = await request('/api/messages?action=approved_templates');
+      const data = await readJson(res);
+      if (data.templates && Array.isArray(data.templates) && data.templates.length > 0) {
+        let options = '<option value="custom_campaign">custom_campaign (Custom Message & Media)</option>';
+        options += '<option value="hello_world" selected>hello_world (Meta Pre-approved Starter Template - 100% Delivery)</option>';
+        data.templates.forEach(t => {
+          if (t.name !== 'hello_world') {
+            options += `<option value="${escapeHtml(t.name)}">${escapeHtml(t.name)} (${escapeHtml(t.language || 'en')} - ${escapeHtml(t.category || 'MARKETING')})</option>`;
+          }
+        });
+        templateSelect.innerHTML = options;
+      }
+    } catch (err) {
+      console.warn('[WA Campaigns] Could not load approved templates:', err.message);
+    }
   }
 
   function showToast(message, type) {
@@ -196,6 +222,7 @@
   function openCreateCampaignModal() {
     const modal = document.getElementById('modal-create-wa-campaign');
     if (modal) modal.style.display = 'flex';
+    loadApprovedTemplates();
     updateCampaignPreview();
     updateRecipientsBadge();
   }

@@ -781,8 +781,69 @@ export default async function handler(req, res) {
         };
       }
 
+      // Lead and Conversation resolution so outbound campaign messages appear in CRM inbox
+      let leadId = null;
+      let convId = null;
       try {
-        const metaRes = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${creds.phoneNumberId}/messages`, {
+        const { data: existingLead } = await supabase
+          .from('leads')
+          .select('id')
+          .eq('organization_id', organizationId)
+          .or(`phone.eq.${digits},phone.eq.+${digits}`)
+          .limit(1)
+          .maybeSingle();
+
+        if (existingLead) {
+          leadId = existingLead.id;
+        } else {
+          const { data: newLead } = await supabase
+            .from('leads')
+            .insert({
+              organization_id: organizationId,
+              phone: '+' + digits,
+              name: recipientName && recipientName !== 'there' ? recipientName : `WhatsApp Contact (+${digits})`,
+              contact_name: recipientName && recipientName !== 'there' ? recipientName : `WhatsApp Contact (+${digits})`,
+              company: recipientCompany || 'Campaign Recipient',
+              company_name: recipientCompany || 'Campaign Recipient',
+              status: 'NEW',
+              source: 'WhatsApp Campaign'
+            })
+            .select('id')
+            .single();
+          if (newLead) leadId = newLead.id;
+        }
+
+        if (leadId) {
+          const { data: existingConv } = await supabase
+            .from('conversations')
+            .select('id')
+            .eq('organization_id', organizationId)
+            .eq('lead_id', leadId)
+            .maybeSingle();
+
+          if (existingConv) {
+            convId = existingConv.id;
+          } else {
+            const { data: newConv } = await supabase
+              .from('conversations')
+              .insert({
+                organization_id: organizationId,
+                lead_id: leadId,
+                channel: 'whatsapp',
+                mode: 'HUMAN',
+                unread_count: 0
+              })
+              .select('id')
+              .single();
+            if (newConv) convId = newConv.id;
+          }
+        }
+      } catch (e) {
+        console.warn('[launch_campaign] lead resolution warning:', e.message);
+      }
+
+      try {
+        let metaRes = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${creds.phoneNumberId}/messages`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -791,7 +852,34 @@ export default async function handler(req, res) {
           body: JSON.stringify(metaPayload)
         });
 
-        const metaData = await metaRes.json().catch(() => ({}));
+        let metaData = await metaRes.json().catch(() => ({}));
+
+        // If outside 24h customer service window (Meta error 131047), fall back to approved template
+        if (!metaRes.ok && metaData.error?.code === 131047) {
+          const fallbackTemplate = (templateName && templateName !== 'custom_campaign') ? templateName : 'hello_world';
+          const fallbackRes = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${creds.phoneNumberId}/messages`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${creds.accessToken}`
+            },
+            body: JSON.stringify({
+              messaging_product: 'whatsapp',
+              to: digits,
+              type: 'template',
+              template: {
+                name: fallbackTemplate,
+                language: { code: templateLanguage || 'en_US' }
+              }
+            })
+          });
+          const fbData = await fallbackRes.json().catch(() => ({}));
+          if (fallbackRes.ok && !fbData.error) {
+            metaRes = fallbackRes;
+            metaData = fbData;
+          }
+        }
+
         if (!metaRes.ok || metaData.error) {
           failedCount += 1;
           const errMessage = metaData.error?.message || `HTTP ${metaRes.status}`;
@@ -802,27 +890,31 @@ export default async function handler(req, res) {
           results.push({ phone: digits, success: true, wamid });
 
           // Record in messages table
+          const nowIso = new Date().toISOString();
+          const textValue = personalizedText || (mediaType && mediaType !== 'none' ? `[${mediaType}]` : (templateName || 'WhatsApp campaign message'));
           const msgRecord = {
             organization_id: organizationId,
-            sender_number: creds.phoneNumberId,
-            recipient_number: digits,
-            body: personalizedText || (mediaType ? `[${mediaType}]` : ''),
-            content: personalizedText || (mediaType ? `[${mediaType}]` : ''),
+            lead_id: leadId || null,
+            conversation_id: convId || null,
+            sender_number: digits,
+            body: textValue,
+            content: textValue,
+            message_body: textValue,
             direction: 'outbound',
             channel: 'whatsapp',
+            message_type: mediaType && mediaType !== 'none' ? mediaType : 'text',
             status: 'sent',
-            metadata: {
-              campaign_id: targetCampaignId,
-              campaign_name: campaignName,
-              meta_message_id: wamid,
-              recipient_name: recipientName
-            }
+            wa_message_id: wamid,
+            media_url: (mediaType && mediaType !== 'none' && mediaUrl) ? mediaUrl : null,
+            media_caption: (personalizedText && mediaType && mediaType !== 'none') ? personalizedText : null,
+            created_at: nowIso,
+            received_at: nowIso
           };
-          if (mediaType && mediaType !== 'none') {
-            msgRecord.media_type = mediaType;
-            msgRecord.media_url = mediaUrl;
+
+          const { error: insErr } = await supabase.from('messages').insert(msgRecord);
+          if (insErr) {
+            console.error('[launch_campaign] messages.insert error:', insErr.message);
           }
-          await supabase.from('messages').insert(msgRecord);
         }
       } catch (err) {
         failedCount += 1;

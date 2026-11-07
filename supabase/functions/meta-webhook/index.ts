@@ -143,7 +143,7 @@ export function readableContent(message: any): string {
   if (type === "text") {
     return typeof message.text?.body === "string" && message.text.body.trim()
       ? message.text.body.trim()
-      : "WhatsApp text message did not include readable content.";
+      : "📩 WhatsApp message received";
   }
   if (type === "interactive") {
     const br = message.interactive?.button_reply;
@@ -202,9 +202,9 @@ export function readableContent(message: any): string {
     return caption || `${type[0].toUpperCase()}${type.slice(1)} attachment.`;
   }
   if (type === "unsupported") {
-    return "📩 WhatsApp message (unsupported type: sticker, reaction, or poll).";
+    return "📩 WhatsApp message received";
   }
-  return `📩 WhatsApp ${type} message received.`;
+  return "📩 WhatsApp message received";
 }
 
 async function loadAutoReplyContext(supabaseAdmin: any, organizationId: string) {

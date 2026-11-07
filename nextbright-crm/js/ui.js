@@ -316,7 +316,7 @@ function renderConversationList(preferredKey) {
       <div class="conv-ava">${conv.initials}</div>
       <div class="conv-meta">
         <div class="conv-name">${conv.name}</div>
-        <div class="conv-preview">${conv.preview}</div>
+        <div class="conv-preview">${escapeHtml(String(conv.preview || '').replace(/^⚠️\s*/, '').replace(/unsupported.*?included\.?/i, 'Message received').replace(/unsupported type.*?\.?/i, 'Sticker or reaction').trim() || 'No messages yet')}</div>
       </div>
       <div class="conv-time">${formatMessageTime(conv.time)}</div>
     `;
@@ -408,20 +408,17 @@ function renderConversation(conv) {
 
       const msgType = String(m.messageType || m.message_type || 'text').toLowerCase();
       const mediaUrl = m.mediaUrl || m.media_url || '';
-      const rawText = String(m.text || m.content || m.body || m.message_body || '').trim();
-      const isHistoricalUnsupported = rawText.toLowerCase() === '[unsupported]' ||
-                                      rawText.toLowerCase().startsWith('[unsupported:');
-      const isExplicitUnsupported = (msgType === 'unsupported' || isHistoricalUnsupported) && !rawText;
+      let rawText = String(m.text || m.content || m.body || m.message_body || '').trim();
+
+      // Clean ugly historical webhook strings to user-friendly text
+      if (!rawText || rawText.toLowerCase() === '[unsupported]' || rawText.toLowerCase().startsWith('[unsupported:') ||
+          rawText.includes('unsupported event') || rawText.includes('unsupported format') || rawText.includes('unsupported type') ||
+          rawText === '📩 Inbound message') {
+        rawText = '📩 WhatsApp message received';
+      }
 
       let bodyContent = '';
-      if (isExplicitUnsupported) {
-        bodyContent = `<div class="msg-unsupported" style="display:inline-flex; align-items:center; gap:6px; color:var(--text-muted, #888); font-style:italic; font-size:0.8125rem;">
-          <span>⚠️</span>
-          <span>${escapeHtml(isHistoricalUnsupported
-            ? 'Historical message content is unavailable because the original webhook payload was not retained.'
-            : 'Meta message received (unsupported format).')}</span>
-        </div>`;
-      } else if (mediaUrl) {
+      if (mediaUrl) {
         if (msgType === 'image') {
           bodyContent = `<div style="margin-bottom:4px;"><a href="${escapeHtml(mediaUrl)}" target="_blank" rel="noopener"><img src="${escapeHtml(mediaUrl)}" alt="Image" style="max-width:240px; max-height:240px; border-radius:8px; display:block; object-fit:cover;" loading="lazy"></a></div>`;
           if (rawText && !rawText.startsWith('📎') && !rawText.startsWith('http')) {
@@ -459,8 +456,7 @@ function renderConversation(conv) {
       } else if (msgType === 'order') {
         bodyContent = `<div style="display:inline-flex; align-items:center; gap:6px; font-size:0.8125rem; font-weight:500;"><span>🛒</span><span>${escapeHtml(rawText || 'Catalog Order')}</span></div>`;
       } else if (msgType.startsWith('unknown_') || msgType === 'unsupported') {
-        const typeName = msgType.replace('unknown_', '');
-        bodyContent = `<div><div style="font-size:0.6875rem; opacity:0.8; font-style:italic; margin-bottom:2px;">📩 ${escapeHtml(typeName)}:</div><div>${escapeHtml(rawText || 'Message received')}</div></div>`;
+        bodyContent = `<div style="font-size:0.875rem;">${escapeHtml(rawText || '📩 WhatsApp message received')}</div>`;
       } else if (msgType !== 'text' && msgType !== '') {
         const iconMap = {
           image: '🖼️ Image',
